@@ -134,6 +134,7 @@ class DuckDB(Dialect):
 
     class Parser(parser.Parser):
         CONCAT_NULL_OUTPUTS_STRING = True
+        SUPPORTS_USER_DEFINED_TYPES = False
 
         BITWISE = {
             **parser.Parser.BITWISE,
@@ -183,18 +184,12 @@ class DuckDB(Dialect):
             ),
         }
 
-        TYPE_TOKENS = {
-            *parser.Parser.TYPE_TOKENS,
-            TokenType.UBIGINT,
-            TokenType.UINT,
-            TokenType.USMALLINT,
-            TokenType.UTINYINT,
-        }
-
         def _parse_types(
-            self, check_func: bool = False, schema: bool = False
+            self, check_func: bool = False, schema: bool = False, allow_identifiers: bool = True
         ) -> t.Optional[exp.Expression]:
-            this = super()._parse_types(check_func=check_func, schema=schema)
+            this = super()._parse_types(
+                check_func=check_func, schema=schema, allow_identifiers=allow_identifiers
+            )
 
             # DuckDB treats NUMERIC and DECIMAL without precision as DECIMAL(18, 3)
             # See: https://duckdb.org/docs/sql/data_types/numeric
@@ -206,6 +201,9 @@ class DuckDB(Dialect):
                 return exp.DataType.build("DECIMAL(18, 3)")
 
             return this
+
+        def _parse_struct_types(self) -> t.Optional[exp.Expression]:
+            return self._parse_field_def()
 
         def _pivot_column_names(self, aggregations: t.List[exp.Expression]) -> t.List[str]:
             if len(aggregations) == 1:

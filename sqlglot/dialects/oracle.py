@@ -22,7 +22,7 @@ def _parse_xml_table(self: parser.Parser) -> exp.XMLTable:
     by_ref = self._match_text_seq("RETURNING", "SEQUENCE", "BY", "REF")
 
     if self._match_text_seq("COLUMNS"):
-        columns = self._parse_csv(lambda: self._parse_column_def(self._parse_field(any_token=True)))
+        columns = self._parse_csv(self._parse_field_def)
 
     return self.expression(exp.XMLTable, this=this, passing=passing, columns=columns, by_ref=by_ref)
 
@@ -169,7 +169,7 @@ class Oracle(Dialect):
             return f"XMLTABLE({self.sep('')}{self.indent(this + passing + by_ref + columns)}{self.seg(')', sep='')}"
 
     class Tokenizer(tokens.Tokenizer):
-        VAR_SINGLE_TOKENS = {"@"}
+        VAR_SINGLE_TOKENS = {"@", "$", "#"}
 
         KEYWORDS = {
             **tokens.Tokenizer.KEYWORDS,

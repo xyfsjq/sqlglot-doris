@@ -220,7 +220,7 @@ class Hive(Dialect):
     class Parser(parser.Parser):
         LOG_DEFAULTS_TO_LN = True
         STRICT_CAST = False
-        PARTITION_BY_TOKENS = {*parser.Parser.PARTITION_BY_TOKENS, TokenType.DISTRIBUTE_BY}
+        SUPPORTS_USER_DEFINED_TYPES = False
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
@@ -319,7 +319,7 @@ class Hive(Dialect):
             )
 
         def _parse_types(
-            self, check_func: bool = False, schema: bool = False
+            self, check_func: bool = False, schema: bool = False, allow_identifiers: bool = True
         ) -> t.Optional[exp.Expression]:
             """
             Spark (and most likely Hive) treats casts to CHAR(length) and VARCHAR(length) as casts to
@@ -339,7 +339,9 @@ class Hive(Dialect):
 
             Reference: https://spark.apache.org/docs/latest/sql-ref-datatypes.html
             """
-            this = super()._parse_types(check_func=check_func, schema=schema)
+            this = super()._parse_types(
+                check_func=check_func, schema=schema, allow_identifiers=allow_identifiers
+            )
 
             if this and not schema:
                 return this.transform(
@@ -350,6 +352,16 @@ class Hive(Dialect):
                 )
 
             return this
+
+        def _parse_partition_and_order(
+            self,
+        ) -> t.Tuple[t.List[exp.Expression], t.Optional[exp.Expression]]:
+            return (
+                self._parse_csv(self._parse_conjunction)
+                if self._match_set({TokenType.PARTITION_BY, TokenType.DISTRIBUTE_BY})
+                else [],
+                super()._parse_order(skip_order_token=self._match(TokenType.SORT_BY)),
+            )
 
     class Generator(generator.Generator):
         LIMIT_FETCH = "LIMIT"
@@ -480,7 +492,7 @@ class Hive(Dialect):
             elif expression.this in exp.DataType.TEMPORAL_TYPES:
                 expression = exp.DataType.build(expression.this)
             elif expression.is_type("float"):
-                size_expression = expression.find(exp.DataTypeSize)
+                size_expression = expression.find(exp.DataTypeParam)
                 if size_expression:
                     size = int(size_expression.name)
                     expression = (

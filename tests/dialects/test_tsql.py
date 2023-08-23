@@ -6,6 +6,26 @@ class TestTSQL(Validator):
     dialect = "tsql"
 
     def test_tsql(self):
+        self.validate_identity(
+            """
+            CREATE TABLE x(
+                [zip_cd] [varchar](5) NULL NOT FOR REPLICATION
+                CONSTRAINT [pk_mytable] PRIMARY KEY CLUSTERED
+                ([zip_cd_mkey] ASC)
+                WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF) ON [PRIMARY]
+            ) ON [PRIMARY]
+            """,
+            'CREATE TABLE x ("zip_cd" VARCHAR(5) NULL NOT FOR REPLICATION CONSTRAINT "pk_mytable" PRIMARY KEY CLUSTERED ("zip_cd_mkey") WITH (PAD_INDEX=OFF, STATISTICS_NORECOMPUTE=OFF) ON "PRIMARY") ON "PRIMARY"',
+        )
+
+        self.validate_identity(
+            "CREATE TABLE tbl (a AS (x + 1) PERSISTED, b AS (y + 2), c AS (y / 3) PERSISTED NOT NULL)"
+        )
+
+        self.validate_identity(
+            "CREATE TABLE [db].[tbl]([a] [int])", 'CREATE TABLE "db"."tbl" ("a" INTEGER)'
+        )
+
         projection = parse_one("SELECT a = 1", read="tsql").selects[0]
         projection.assert_is(exp.Alias)
         projection.args["alias"].assert_is(exp.Identifier)
@@ -22,6 +42,7 @@ class TestTSQL(Validator):
             "MERGE INTO mytable WITH (HOLDLOCK) AS T USING mytable_merge AS S "
             "ON (T.user_id = S.user_id) WHEN NOT MATCHED THEN INSERT (c1, c2) VALUES (S.c1, S.c2)"
         )
+        self.validate_identity("UPDATE STATISTICS x")
         self.validate_identity("UPDATE x SET y = 1 OUTPUT x.a, x.b INTO @y FROM y")
         self.validate_identity("UPDATE x SET y = 1 OUTPUT x.a, x.b FROM y")
         self.validate_identity("INSERT INTO x (y) OUTPUT x.a, x.b INTO l SELECT * FROM z")
@@ -410,6 +431,12 @@ class TestTSQL(Validator):
         )
 
     def test_ddl(self):
+        self.validate_all(
+            "IF NOT EXISTS (SELECT * FROM information_schema.schemata WHERE SCHEMA_NAME = foo) EXEC('CREATE SCHEMA foo')",
+            read={
+                "": "CREATE SCHEMA IF NOT EXISTS foo",
+            },
+        )
         self.validate_all(
             "CREATE TABLE #mytemp (a INTEGER, b CHAR(2), c TIME(4), d FLOAT(24))",
             write={

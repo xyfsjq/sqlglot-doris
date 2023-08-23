@@ -6,6 +6,9 @@ class TestOracle(Validator):
     dialect = "oracle"
 
     def test_oracle(self):
+        self.validate_identity("SELECT * FROM TABLE(foo)")
+        self.validate_identity("SELECT a$x#b")
+        self.validate_identity("SELECT :OBJECT")
         self.validate_identity("SELECT * FROM t FOR UPDATE")
         self.validate_identity("SELECT * FROM t FOR UPDATE WAIT 5")
         self.validate_identity("SELECT * FROM t FOR UPDATE NOWAIT")
@@ -20,6 +23,9 @@ class TestOracle(Validator):
         self.validate_identity("SELECT * FROM table_name@dblink_name.database_link_domain")
         self.validate_identity("SELECT * FROM table_name SAMPLE (25) s")
         self.validate_identity("SELECT * FROM V$SESSION")
+        self.validate_identity(
+            "SELECT COUNT(1) INTO V_Temp FROM TABLE(CAST(somelist AS data_list)) WHERE col LIKE '%contact'"
+        )
         self.validate_identity(
             "SELECT MIN(column_name) KEEP (DENSE_RANK FIRST ORDER BY column_name DESC) FROM table_name"
         )

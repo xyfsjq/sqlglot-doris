@@ -164,6 +164,17 @@ def _datatype_sql(self: generator.Generator, expression: exp.DataType) -> str:
     return self.datatype_sql(expression)
 
 
+def _regexpilike_sql(self: generator.Generator, expression: exp.RegexpILike) -> str:
+    flag = expression.text("flag")
+
+    if "i" not in flag:
+        flag += "i"
+
+    return self.func(
+        "REGEXP_LIKE", expression.this, expression.expression, exp.Literal.string(flag)
+    )
+
+
 def _parse_convert_timezone(args: t.List) -> t.Union[exp.Anonymous, exp.AtTimeZone]:
     if len(args) == 3:
         return exp.Anonymous(this="CONVERT_TIMEZONE", expressions=args)
@@ -216,6 +227,7 @@ class Snowflake(Dialect):
 
     class Parser(parser.Parser):
         IDENTIFY_PIVOT_STRINGS = True
+        SUPPORTS_USER_DEFINED_TYPES = False
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
@@ -249,11 +261,6 @@ class Snowflake(Dialect):
             "DATE_PART": _parse_date_part,
         }
         FUNCTION_PARSERS.pop("TRIM")
-
-        FUNC_TOKENS = {
-            *parser.Parser.FUNC_TOKENS,
-            TokenType.TABLE,
-        }
 
         COLUMN_OPERATORS = {
             **parser.Parser.COLUMN_OPERATORS,
@@ -297,7 +304,6 @@ class Snowflake(Dialect):
             return super()._parse_id_var(any_token=any_token, tokens=tokens)
 
     class Tokenizer(tokens.Tokenizer):
-        QUOTES = ["'"]
         STRING_ESCAPES = ["\\", "'"]
         HEX_STRINGS = [("x'", "'"), ("X'", "'")]
         RAW_STRINGS = ["$$"]
@@ -362,6 +368,7 @@ class Snowflake(Dialect):
             exp.Max: max_or_greatest,
             exp.Min: min_or_least,
             exp.PartitionedByProperty: lambda self, e: f"PARTITION BY {self.sql(e, 'this')}",
+            exp.RegexpILike: _regexpilike_sql,
             exp.Select: transforms.preprocess([transforms.eliminate_distinct_on]),
             exp.StarMap: rename_func("OBJECT_CONSTRUCT"),
             exp.StartsWith: rename_func("STARTSWITH"),
@@ -373,6 +380,7 @@ class Snowflake(Dialect):
                 "OBJECT_CONSTRUCT",
                 *(arg for expression in e.expressions for arg in expression.flatten()),
             ),
+            exp.Stuff: rename_func("INSERT"),
             exp.TimestampTrunc: timestamptrunc_sql,
             exp.TimeStrToTime: timestrtotime_sql,
             exp.TimeToStr: lambda self, e: self.func(

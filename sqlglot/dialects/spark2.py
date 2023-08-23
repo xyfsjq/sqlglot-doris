@@ -114,6 +114,13 @@ def _unqualify_pivot_columns(expression: exp.Expression) -> exp.Expression:
     return expression
 
 
+def _insert_sql(self: Hive.Generator, expression: exp.Insert) -> str:
+    if expression.expression.args.get("with"):
+        expression = expression.copy()
+        expression.set("with", expression.expression.args.pop("with"))
+    return self.insert_sql(expression)
+
+
 class Spark2(Hive):
     class Parser(Hive.Parser):
         FUNCTIONS = {
@@ -175,10 +182,6 @@ class Spark2(Hive):
         QUERY_HINTS = True
         NVL2_SUPPORTED = True
 
-        TYPE_MAPPING = {
-            **Hive.Generator.TYPE_MAPPING,
-        }
-
         PROPERTIES_LOCATION = {
             **Hive.Generator.PROPERTIES_LOCATION,
             exp.EngineProperty: exp.Properties.Location.UNSUPPORTED,
@@ -202,6 +205,7 @@ class Spark2(Hive):
             exp.DayOfYear: rename_func("DAYOFYEAR"),
             exp.FileFormatProperty: lambda self, e: f"USING {e.name.upper()}",
             exp.From: transforms.preprocess([_unalias_pivot]),
+            exp.Insert: _insert_sql,
             exp.LogicalAnd: rename_func("BOOL_AND"),
             exp.LogicalOr: rename_func("BOOL_OR"),
             exp.Map: _map_sql,

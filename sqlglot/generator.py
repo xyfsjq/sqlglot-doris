@@ -8,7 +8,7 @@ from sqlglot import exp
 from sqlglot.errors import ErrorLevel, UnsupportedError, concat_messages
 from sqlglot.helper import apply_index_offset, csv, seq_get
 from sqlglot.time import format_time
-from sqlglot.tokens import TokenType
+from sqlglot.tokens import Tokenizer, TokenType
 
 logger = logging.getLogger("sqlglot")
 
@@ -61,6 +61,7 @@ class Generator:
         exp.CharacterSetColumnConstraint: lambda self, e: f"CHARACTER SET {self.sql(e, 'this')}",
         exp.CharacterSetProperty: lambda self, e: f"{'DEFAULT ' if e.args.get('default') else ''}CHARACTER SET={self.sql(e, 'this')}",
         exp.CheckColumnConstraint: lambda self, e: f"CHECK ({self.sql(e, 'this')})",
+        exp.ClusteredColumnConstraint: lambda self, e: f"CLUSTERED ({self.expressions(e, 'this', indent=False)})",
         exp.CollateColumnConstraint: lambda self, e: f"COLLATE {self.sql(e, 'this')}",
         exp.CopyGrantsProperty: lambda self, e: "COPY GRANTS",
         exp.CommentColumnConstraint: lambda self, e: f"COMMENT {self.sql(e, 'this')}",
@@ -78,7 +79,9 @@ class Generator:
         exp.LogProperty: lambda self, e: f"{'NO ' if e.args.get('no') else ''}LOG",
         exp.MaterializedProperty: lambda self, e: "MATERIALIZED",
         exp.NoPrimaryIndexProperty: lambda self, e: "NO PRIMARY INDEX",
+        exp.NotForReplicationColumnConstraint: lambda self, e: "NOT FOR REPLICATION",
         exp.OnCommitProperty: lambda self, e: f"ON COMMIT {'DELETE' if e.args.get('delete') else 'PRESERVE'} ROWS",
+        exp.OnProperty: lambda self, e: f"ON {self.sql(e, 'this')}",
         exp.OnUpdateColumnConstraint: lambda self, e: f"ON UPDATE {self.sql(e, 'this')}",
         exp.PathColumnConstraint: lambda self, e: f"PATH {self.sql(e, 'this')}",
         exp.ReturnsProperty: lambda self, e: self.naked_property(e),
@@ -248,6 +251,7 @@ class Generator:
         exp.MaterializedProperty: exp.Properties.Location.POST_CREATE,
         exp.MergeBlockRatioProperty: exp.Properties.Location.POST_NAME,
         exp.NoPrimaryIndexProperty: exp.Properties.Location.POST_EXPRESSION,
+        exp.OnProperty: exp.Properties.Location.POST_SCHEMA,
         exp.OnCommitProperty: exp.Properties.Location.POST_EXPRESSION,
         exp.Order: exp.Properties.Location.POST_SCHEMA,
         exp.PartitionedByProperty: exp.Properties.Location.POST_WITH,
@@ -320,8 +324,7 @@ class Generator:
     QUOTE_END = "'"
     IDENTIFIER_START = '"'
     IDENTIFIER_END = '"'
-    STRING_ESCAPE = "'"
-    IDENTIFIER_ESCAPE = '"'
+    TOKENIZER_CLASS = Tokenizer
 
     # Delimiters for bit, hex, byte and raw literals
     BIT_START: t.Optional[str] = None
@@ -382,8 +385,10 @@ class Generator:
         )
 
         self.unsupported_messages: t.List[str] = []
-        self._escaped_quote_end: str = self.STRING_ESCAPE + self.QUOTE_END
-        self._escaped_identifier_end: str = self.IDENTIFIER_ESCAPE + self.IDENTIFIER_END
+        self._escaped_quote_end: str = self.TOKENIZER_CLASS.STRING_ESCAPES[0] + self.QUOTE_END
+        self._escaped_identifier_end: str = (
+            self.TOKENIZER_CLASS.IDENTIFIER_ESCAPES[0] + self.IDENTIFIER_END
+        )
         self._cache: t.Optional[t.Dict[int, str]] = None
 
     def generate(
@@ -629,6 +634,16 @@ class Generator:
         kind_sql = self.sql(expression, "kind").strip()
         return f"CONSTRAINT {this} {kind_sql}" if this else kind_sql
 
+    def computedcolumnconstraint_sql(self, expression: exp.ComputedColumnConstraint) -> str:
+        this = self.sql(expression, "this")
+        if expression.args.get("not_null"):
+            persisted = " PERSISTED NOT NULL"
+        elif expression.args.get("persisted"):
+            persisted = " PERSISTED"
+        else:
+            persisted = ""
+        return f"AS {this}{persisted}"
+
     def autoincrementcolumnconstraint_sql(self, _) -> str:
         return self.token_sql(TokenType.AUTO_INCREMENT)
 
@@ -645,8 +660,8 @@ class Generator:
     ) -> str:
         this = ""
         if expression.this is not None:
-            on_null = "ON NULL " if expression.args.get("on_null") else ""
-            this = " ALWAYS " if expression.this else f" BY DEFAULT {on_null}"
+            on_null = " ON NULL" if expression.args.get("on_null") else ""
+            this = " ALWAYS" if expression.this else f" BY DEFAULT{on_null}"
 
         start = expression.args.get("start")
         start = f"START WITH {start}" if start else ""
@@ -671,7 +686,7 @@ class Generator:
         expr = self.sql(expression, "expression")
         expr = f"({expr})" if expr else "IDENTITY"
 
-        return f"GENERATED{this}AS {expr}{sequence_opts}"
+        return f"GENERATED{this} AS {expr}{sequence_opts}"
 
     def notnullcolumnconstraint_sql(self, expression: exp.NotNullColumnConstraint) -> str:
         return f"{'' if expression.args.get('allow_null') else 'NOT '}NULL"
@@ -833,7 +848,7 @@ class Generator:
         string = self.escape_str(expression.this.replace("\\", "\\\\"))
         return f"{self.QUOTE_START}{string}{self.QUOTE_END}"
 
-    def datatypesize_sql(self, expression: exp.DataTypeSize) -> str:
+    def datatypeparam_sql(self, expression: exp.DataTypeParam) -> str:
         this = self.sql(expression, "this")
         specifier = self.sql(expression, "expression")
         specifier = f" {specifier}" if specifier else ""
@@ -842,11 +857,14 @@ class Generator:
     def datatype_sql(self, expression: exp.DataType) -> str:
         type_value = expression.this
 
-        type_sql = (
-            self.TYPE_MAPPING.get(type_value, type_value.value)
-            if isinstance(type_value, exp.DataType.Type)
-            else type_value
-        )
+        if type_value == exp.DataType.Type.USERDEFINED and expression.args.get("kind"):
+            type_sql = self.sql(expression, "kind")
+        else:
+            type_sql = (
+                self.TYPE_MAPPING.get(type_value, type_value.value)
+                if isinstance(type_value, exp.DataType.Type)
+                else type_value
+            )
 
         nested = ""
         interior = self.expressions(expression, flat=True)

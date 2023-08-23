@@ -334,6 +334,7 @@ class TSQL(Dialect):
             "SQL_VARIANT": TokenType.VARIANT,
             "TOP": TokenType.TOP,
             "UNIQUEIDENTIFIER": TokenType.UNIQUEIDENTIFIER,
+            "UPDATE STATISTICS": TokenType.COMMAND,
             "VARCHAR(MAX)": TokenType.TEXT,
             "XML": TokenType.XML,
             "OUTPUT": TokenType.RETURNING,
@@ -397,7 +398,7 @@ class TSQL(Dialect):
 
         CONCAT_NULL_OUTPUTS_STRING = True
 
-        def _parse_projections(self) -> t.List[t.Optional[exp.Expression]]:
+        def _parse_projections(self) -> t.List[exp.Expression]:
             """
             T-SQL supports the syntax alias = expression in the SELECT's projection list,
             so we transform all parsed Selects to convert their EQ projections into Aliases.
@@ -665,6 +666,16 @@ class TSQL(Dialect):
                 sql = f"#{sql}"
 
             return sql
+
+        def create_sql(self, expression: exp.Create) -> str:
+            kind = self.sql(expression, "kind").upper()
+            exists = expression.args.get("exists")
+
+            if exists and kind == "SCHEMA":
+                schema_name = self.sql(expression, "this")
+                return f"IF NOT EXISTS (SELECT * FROM information_schema.schemata WHERE SCHEMA_NAME = {schema_name}) EXEC('CREATE SCHEMA {schema_name}')"
+
+            return super().create_sql(expression)
 
         def offset_sql(self, expression: exp.Offset) -> str:
             return f"{super().offset_sql(expression)} ROWS"

@@ -63,6 +63,8 @@ class ClickHouse(Dialect):
         }
 
     class Parser(parser.Parser):
+        SUPPORTS_USER_DEFINED_TYPES = False
+
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
             "ANY": exp.AnyValue.from_arg_list,
@@ -200,7 +202,7 @@ class ClickHouse(Dialect):
 
             this = self._parse_id_var()
             self._match(TokenType.COLON)
-            kind = self._parse_types(check_func=False) or (
+            kind = self._parse_types(check_func=False, allow_identifiers=False) or (
                 self._match_text_seq("IDENTIFIER") and "Identifier"
             )
 
@@ -302,7 +304,7 @@ class ClickHouse(Dialect):
 
         def _parse_func_params(
             self, this: t.Optional[exp.Func] = None
-        ) -> t.Optional[t.List[t.Optional[exp.Expression]]]:
+        ) -> t.Optional[t.List[exp.Expression]]:
             if self._match_pair(TokenType.R_PAREN, TokenType.L_PAREN):
                 return self._parse_csv(self._parse_lambda)
 
@@ -320,9 +322,7 @@ class ClickHouse(Dialect):
                 return self.expression(exp.Quantile, this=params[0], quantile=this)
             return self.expression(exp.Quantile, this=this, quantile=exp.Literal.number(0.5))
 
-        def _parse_wrapped_id_vars(
-            self, optional: bool = False
-        ) -> t.List[t.Optional[exp.Expression]]:
+        def _parse_wrapped_id_vars(self, optional: bool = False) -> t.List[exp.Expression]:
             return super()._parse_wrapped_id_vars(optional=True)
 
         def _parse_primary_key(
@@ -347,8 +347,20 @@ class ClickHouse(Dialect):
         STRUCT_DELIMITER = ("(", ")")
         NVL2_SUPPORTED = False
 
+        STRING_TYPE_MAPPING = {
+            exp.DataType.Type.CHAR: "String",
+            exp.DataType.Type.LONGBLOB: "String",
+            exp.DataType.Type.LONGTEXT: "String",
+            exp.DataType.Type.MEDIUMBLOB: "String",
+            exp.DataType.Type.MEDIUMTEXT: "String",
+            exp.DataType.Type.TEXT: "String",
+            exp.DataType.Type.VARBINARY: "String",
+            exp.DataType.Type.VARCHAR: "String",
+        }
+
         TYPE_MAPPING = {
             **generator.Generator.TYPE_MAPPING,
+            **STRING_TYPE_MAPPING,
             exp.DataType.Type.ARRAY: "Array",
             exp.DataType.Type.BIGINT: "Int64",
             exp.DataType.Type.DATETIME64: "DateTime64",
@@ -417,6 +429,16 @@ class ClickHouse(Dialect):
             "FUNCTION",
             "NAMED COLLECTION",
         }
+
+        def datatype_sql(self, expression: exp.DataType) -> str:
+            # String is the standard ClickHouse type, every other variant is just an alias.
+            # Additionally, any supplied length parameter will be ignored.
+            #
+            # https://clickhouse.com/docs/en/sql-reference/data-types/string
+            if expression.this in self.STRING_TYPE_MAPPING:
+                return "String"
+
+            return super().datatype_sql(expression)
 
         def safeconcat_sql(self, expression: exp.SafeConcat) -> str:
             # Clickhouse errors out if we try to cast a NULL value to TEXT

@@ -1,6 +1,13 @@
 import unittest
 
-from sqlglot import Dialect, Dialects, ErrorLevel, UnsupportedError, parse_one
+from sqlglot import (
+    Dialect,
+    Dialects,
+    ErrorLevel,
+    ParseError,
+    UnsupportedError,
+    parse_one,
+)
 from sqlglot.dialects import Hive
 
 
@@ -78,7 +85,7 @@ class TestDialect(Validator):
             "CAST(a AS TEXT)",
             write={
                 "bigquery": "CAST(a AS STRING)",
-                "clickhouse": "CAST(a AS TEXT)",
+                "clickhouse": "CAST(a AS String)",
                 "drill": "CAST(a AS VARCHAR)",
                 "duckdb": "CAST(a AS TEXT)",
                 "mysql": "CAST(a AS CHAR)",
@@ -116,7 +123,7 @@ class TestDialect(Validator):
             "CAST(a AS VARBINARY(4))",
             write={
                 "bigquery": "CAST(a AS BYTES)",
-                "clickhouse": "CAST(a AS VARBINARY(4))",
+                "clickhouse": "CAST(a AS String)",
                 "duckdb": "CAST(a AS BLOB(4))",
                 "mysql": "CAST(a AS VARBINARY(4))",
                 "hive": "CAST(a AS BINARY(4))",
@@ -133,7 +140,7 @@ class TestDialect(Validator):
         self.validate_all(
             "CAST(MAP('a', '1') AS MAP(TEXT, TEXT))",
             write={
-                "clickhouse": "CAST(map('a', '1') AS Map(TEXT, TEXT))",
+                "clickhouse": "CAST(map('a', '1') AS Map(String, String))",
             },
         )
         self.validate_all(
@@ -1764,3 +1771,19 @@ SELECT
                 "tsql": "SELECT COUNT_IF(col % 2 = 0) FILTER(WHERE col < 1000) FROM foo",
             },
         )
+
+    def test_cast_to_user_defined_type(self):
+        self.validate_all(
+            "CAST(x AS some_udt)",
+            write={
+                "": "CAST(x AS some_udt)",
+                "oracle": "CAST(x AS some_udt)",
+                "postgres": "CAST(x AS some_udt)",
+                "presto": "CAST(x AS some_udt)",
+                "teradata": "CAST(x AS some_udt)",
+                "tsql": "CAST(x AS some_udt)",
+            },
+        )
+
+        with self.assertRaises(ParseError):
+            parse_one("CAST(x AS some_udt)", read="bigquery")

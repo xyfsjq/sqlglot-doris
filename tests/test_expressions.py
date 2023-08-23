@@ -2,7 +2,7 @@ import datetime
 import math
 import unittest
 
-from sqlglot import alias, exp, parse_one
+from sqlglot import ParseError, alias, exp, parse_one
 
 
 class TestExpressions(unittest.TestCase):
@@ -846,6 +846,9 @@ FROM foo""",
         )
         self.assertEqual(exp.DataType.build("USER-DEFINED").sql(), "USER-DEFINED")
 
+        self.assertEqual(exp.DataType.build("ARRAY<UNKNOWN>").sql(), "ARRAY<UNKNOWN>")
+        self.assertEqual(exp.DataType.build("ARRAY<NULL>").sql(), "ARRAY<NULL>")
+
     def test_rename_table(self):
         self.assertEqual(
             exp.rename_table("t1", "t2").sql(),
@@ -884,3 +887,51 @@ FROM foo""",
 
         ast.meta["some_other_meta_key"] = "some_other_meta_value"
         self.assertEqual(ast.meta.get("some_other_meta_key"), "some_other_meta_value")
+
+    def test_unnest(self):
+        ast = parse_one("SELECT (((1)))")
+        self.assertIs(ast.selects[0].unnest(), ast.find(exp.Literal))
+
+        ast = parse_one("SELECT * FROM (((SELECT * FROM t)))")
+        self.assertIs(ast.args["from"].this.unnest(), list(ast.find_all(exp.Select))[1])
+
+        ast = parse_one("SELECT * FROM ((((SELECT * FROM t))) AS foo)")
+        second_subquery = ast.args["from"].this.this
+        innermost_subquery = list(ast.find_all(exp.Select))[1].parent
+        self.assertIs(second_subquery, innermost_subquery.unwrap())
+
+    def test_is_type(self):
+        ast = parse_one("CAST(x AS VARCHAR)")
+        assert ast.is_type("VARCHAR")
+        assert not ast.is_type("VARCHAR(5)")
+        assert not ast.is_type("FLOAT")
+
+        ast = parse_one("CAST(x AS VARCHAR(5))")
+        assert ast.is_type("VARCHAR")
+        assert ast.is_type("VARCHAR(5)")
+        assert not ast.is_type("VARCHAR(4)")
+        assert not ast.is_type("FLOAT")
+
+        ast = parse_one("CAST(x AS ARRAY<INT>)")
+        assert ast.is_type("ARRAY")
+        assert ast.is_type("ARRAY<INT>")
+        assert not ast.is_type("ARRAY<FLOAT>")
+        assert not ast.is_type("INT")
+
+        ast = parse_one("CAST(x AS ARRAY)")
+        assert ast.is_type("ARRAY")
+        assert not ast.is_type("ARRAY<INT>")
+        assert not ast.is_type("ARRAY<FLOAT>")
+        assert not ast.is_type("INT")
+
+        ast = parse_one("CAST(x AS STRUCT<a INT, b FLOAT>)")
+        assert ast.is_type("STRUCT")
+        assert ast.is_type("STRUCT<a INT, b FLOAT>")
+        assert not ast.is_type("STRUCT<a VARCHAR, b INT>")
+
+        dtype = exp.DataType.build("foo", udt=True)
+        assert dtype.is_type("foo")
+        assert not dtype.is_type("bar")
+
+        with self.assertRaises(ParseError):
+            exp.DataType.build("foo")
