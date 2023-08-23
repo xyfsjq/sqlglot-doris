@@ -979,7 +979,7 @@ class TestDialect(Validator):
                 "postgres": "x -> 'y'",
                 "presto": "JSON_EXTRACT(x, 'y')",
                 "starrocks": "x -> 'y'",
-                "doris": "x -> 'y'",
+                "doris": "GET_JSON_STRING(x, 'y')",
             },
         )
         self.validate_all(
