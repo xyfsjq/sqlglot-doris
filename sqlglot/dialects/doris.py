@@ -84,6 +84,14 @@ def _str_to_unix_sql(self: generator.Generator, expression: exp.StrToUnix) -> st
     return self.func("UNIX_TIMESTAMP", expression.this, time_format("doris")(self, expression))
 
 
+def handle_array_concat(self, expression: exp.ArrayStringConcat) -> str:
+    this = self.sql(expression, "this")
+    expr = self.sql(expression, "expressions")
+    if expr == '':
+        return f"concat_ws('',{this})"
+    return f"concat_ws({expr}, {this})"
+
+
 class Doris(MySQL):
     DATE_FORMAT = "'yyyy-MM-dd'"
     DATEINT_FORMAT = "'yyyyMMdd'"
@@ -111,13 +119,21 @@ class Doris(MySQL):
             **MySQL.Generator.TRANSFORMS,
             exp.ApproxDistinct: approx_count_distinct_sql,
             exp.ArrayAgg: rename_func("COLLECT_LIST"),
+            exp.ArraySize: rename_func("SIZE"),
+            exp.ArrayStringConcat: handle_array_concat,
             exp.CurrentTimestamp: lambda *_: "NOW()",
             exp.DateTrunc: handle_date_trunc,
+            exp.GroupBitmap: lambda self, e: f"BITMAP_COUNT(BITMAP_AGG({self.sql(e, 'this')}))",
+            exp.GroupBitmapAnd: lambda self, e: f"BITMAP_COUNT(BITMAP_INTERSECT({self.sql(e, 'this')}))",
+            exp.GroupBitmapOr: lambda self, e: f"BITMAP_COUNT(BITMAP_UNION({self.sql(e, 'this')}))",
             exp.JSONExtractScalar: rename_func("GET_JSON_STRING"),
             exp.JSONExtract: rename_func("GET_JSON_STRING"),
+            exp.Range: rename_func("ARRAY_RANGE"),
+            exp.RegexpExtract: lambda self, e: f"REGEXP_EXTRACT_ALL({self.sql(e, 'this')}, '({self.sql(e, 'expression')[1:-1]})')",
             exp.RegexpLike: rename_func("REGEXP"),
             exp.RegexpSplit: rename_func("SPLIT_BY_STRING"),
             exp.SetAgg: rename_func("COLLECT_SET"),
+            exp.SortArray: rename_func("ARRAY_SORT"),
             exp.StrToUnix: _str_to_unix_sql,
             exp.Split: rename_func("SPLIT_BY_STRING"),
             exp.TimeStrToDate: rename_func("TO_DATE"),

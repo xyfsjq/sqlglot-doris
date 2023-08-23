@@ -4071,6 +4071,162 @@ class GenerateSeries(Func):
     arg_types = {"start": True, "end": True, "step": False}
 
 
+class BitmapAnd(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
+class BitmapAndCount(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
+class BitmapOr(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
+class BitmapOrCount(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
+class BitmapXor(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
+class BitmapXOrCount(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
+class BitmapAndNot(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
+class BitmapAndNotCount(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
+class BitmapCount(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class BitmapContains(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
+class BitmapHasAny(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
+class BitmapToArray(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class GroupBitmap(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class GroupBitmapAnd(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class GroupBitmapOr(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class GroupBitmapXor(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class GroupBitAnd(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class GroupBitOr(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class GroupBitXor(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class CharLength(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class AppendTrailingCharIfAbsent(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class EndsWith(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
+class NullOrEmpty(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class Ltrim(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class Rtrim(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class VarPop(AggFunc):
+    pass
+
+
+class VarSamp(AggFunc):
+    pass
+
+
+class Replace(Func):
+    arg_types = {"this": True, "old": True, "new": True}
+
+
+class RegexpReplaceOne(Func):
+    arg_types = {"this": True, "expression": True, "replacement": True}
+
+
+class MultiSearchAllPositions(Func):
+    arg_types = {"this": True, "expression": True}
+
+
+class ArrayStringConcat(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class MultiMatchAny(Func):
+    arg_types = {"this": True, "expression": True}
+
+
+class NotNullOrEmpty(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class Range(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class ArrayPopback(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class ArrayPopfront(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class ArrayPushback(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class ArrayPushfront(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class ArraySlice(Func):
+    arg_types = {"this": True, "off": False, "len": False}
+
+
 class ArrayAgg(AggFunc):
     pass
 
