@@ -65,6 +65,9 @@ class Oracle(Dialect):
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
             "SQUARE": lambda args: exp.Pow(this=seq_get(args, 0), expression=exp.Literal.number(2)),
+            "TRUNC": exp.DateTrunc.from_arg_list,
+            "SUBSTR": exp.Substring.from_arg_list,
+            "TO_DATE": exp.TsOrDsToDate.from_arg_list,
         }
 
         FUNCTION_PARSERS: t.Dict[str, t.Callable] = {
@@ -181,4 +184,5 @@ class Oracle(Dialect):
             "START": TokenType.BEGIN,
             "TOP": TokenType.TOP,
             "VARCHAR2": TokenType.VARCHAR,
+            "SYSDATE": TokenType.CURRENT_TIMESTAMP,
         }

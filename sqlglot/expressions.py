@@ -4177,7 +4177,7 @@ class DateDiff(Func, TimeUnit):
 
 
 class DateTrunc(Func):
-    arg_types = {"unit": True, "this": True, "zone": False}
+    arg_types = {"unit": True, "this": False, "zone": False}
 
 
 class DatetimeAdd(Func, TimeUnit):
@@ -4197,15 +4197,15 @@ class DatetimeTrunc(Func, TimeUnit):
 
 
 class DayOfWeek(Func):
-    _sql_names = ["DAY_OF_WEEK", "DAYOFWEEK"]
+    _sql_names = ["DAY_OF_WEEK", "DAYOFWEEK", "TODAYOFWEEK"]
 
 
 class DayOfMonth(Func):
-    _sql_names = ["DAY_OF_MONTH", "DAYOFMONTH"]
+    _sql_names = ["DAY_OF_MONTH", "DAYOFMONTH", "TODAYOFMONTH"]
 
 
 class DayOfYear(Func):
-    _sql_names = ["DAY_OF_YEAR", "DAYOFYEAR"]
+    _sql_names = ["DAY_OF_YEAR", "DAYOFYEAR", "TODAYOFYEAR"]
 
 
 class WeekOfYear(Func):
@@ -6111,6 +6111,199 @@ def null() -> Null:
     Returns a Null expression.
     """
     return Null()
+
+
+class ToDecimal(Func):  # clickhouse
+    arg_types = {"this": True, "expressions": True}
+
+
+# 添加的数组函数
+class ArrayProduct(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayCumSum(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayAvg(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayMax(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayMin(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayLastIndex(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayFirstIndex(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayFirst(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayLast(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayExists(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+# class ArrayFilter(Func):
+#     arg_types = {"this": True, "expression": False}
+
+
+class ArrayMap(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayZip(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayCompact(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayIntersect(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayDistinct(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayDifference(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayUniq(Func):  # doris:size(array_distinct())
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayReverseSort(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class Quarter(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class Hour(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class Minute(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class Second(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class MonthsAdd(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class YearsAdd(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class WeeksAdd(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class DaysAdd(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class HoursAdd(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class MinutesAdd(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class SecondsAdd(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class QuartersAdd(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class YearsSub(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class MonthsSub(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class SecondsSub(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class QuartersSub(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ToDatetime(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class Today(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class ToYyyymm(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class ToYyyymmdd(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class ToYyyymmddhhmmss(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class ToStartOfQuarter(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class ToStartOfMonth(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class ToStartOfWeek(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class ToStartOfDay(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class ToStartOfHour(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class ToStartOfMinute(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class ToStartOfSecond(Func):
+    arg_types = {"this": False, "expression": False}
 
 
 # TODO: deprecate this

@@ -1,20 +1,94 @@
 from __future__ import annotations
 
-from sqlglot import exp
+from sqlglot import exp, generator
 from sqlglot.dialects.dialect import (
     approx_count_distinct_sql,
-    arrow_json_extract_sql,
     parse_timestamp_trunc,
     rename_func,
     time_format,
 )
 from sqlglot.dialects.mysql import MySQL
+from sqlglot.dialects.tsql import DATE_DELTA_INTERVAL
+
+
+def _to_date_sql(self: generator.Generator, expression: exp.TsOrDsToDate) -> str:
+    if isinstance(expression, exp.Anonymous):
+        expressions = expression.args.get("expressions")
+        if expressions is None or len(expressions) == 0:
+            raise ValueError("Missing expressions for TO_DATE")
+        expr = expressions[0]
+        time_format = expressions[1] if len(expressions) > 1 else None
+        expr_TIMESTAMP = self.sql(expression, "this")
+        if expr_TIMESTAMP == "TIMESTAMP":
+            return f"TIMESTAMP({expr})"
+    elif isinstance(expression, exp.TsOrDsToDate):
+        expr = expression.args.get("this")
+        time_format = expression.args.get("format")
+    else:
+        raise ValueError("Invalid expression type")
+
+    if time_format is not None:
+        return f"STR_TO_DATE({expr}, {time_format})"
+    else:
+        return f"TO_DATE({expr})"
+
+
+def handle_date_trunc(self, expression: exp.DateTrunc) -> str:
+    this = self.sql(expression, "unit")
+    unit = self.sql(expression, "this").lower()
+    if unit.isalpha():
+        mapped_unit = (
+            DATE_DELTA_INTERVAL.get(unit[1:-1])
+            if DATE_DELTA_INTERVAL.get(unit[1:-1]) != None
+            else unit
+        )
+        return f"DATE_TRUNC({mapped_unit}, {this})"
+    elif unit.isdigit():
+        return f"TRUNCATE({this},{unit})"
+    return f"DATE({this})"
+
+
+def handle_to_char(self, expression: exp.ToChar) -> str:
+    self.sql(expression, "this")
+    decimal_places, has_decimal = parse_format_string(self.sql(expression, "format"))
+    if has_decimal:
+        return f"Round({self.sql(expression, 'this')},{decimal_places})"
+    else:
+        return f"DATE_FORMAT({self.sql(expression, 'this')}, {self.format_time(expression)})"
+
+
+def parse_format_string(format_string):
+    decimal_places = None
+    if "." in format_string:
+        decimal_places = len(format_string) - format_string.index(".") - 2
+    has_decimal = decimal_places is not None
+    return decimal_places, has_decimal
+
+
+def handle_todecimal(self, expression: exp.ToDecimal) -> str:
+    func_name = expression.meta["name"].lower()
+    args = expression.args
+    if func_name == "todecimal64":
+        z = self.sql(args["this"])
+        precision = self.sql(args["expressions"])
+        return f"CAST({z} AS DECIMAL(38, {precision}))"
+
+    # Handle other functions if needed
+    # ...
+
+    # Return the original function expression if not matched
+    return self.sql(expression)
+
+
+def _str_to_unix_sql(self: generator.Generator, expression: exp.StrToUnix) -> str:
+    return self.func("UNIX_TIMESTAMP", expression.this, time_format("doris")(self, expression))
 
 
 class Doris(MySQL):
     DATE_FORMAT = "'yyyy-MM-dd'"
     DATEINT_FORMAT = "'yyyyMMdd'"
-    TIME_FORMAT = "'yyyy-MM-dd HH:mm:ss'"
+    # 后面考虑改成doris的默认格式，暂时doris的2.0.0由于str_to_date对yyyy-MM-dd这些格式有点问题，已修复https://github.com/apache/doris/pull/22981
+    # TIME_FORMAT = "'%Y-%m-%d %H:%i-%s'"
 
     class Parser(MySQL.Parser):
         FUNCTIONS = {
@@ -38,20 +112,19 @@ class Doris(MySQL):
             exp.ApproxDistinct: approx_count_distinct_sql,
             exp.ArrayAgg: rename_func("COLLECT_LIST"),
             exp.CurrentTimestamp: lambda *_: "NOW()",
-            exp.DateTrunc: lambda self, e: self.func(
-                "DATE_TRUNC", e.this, "'" + e.text("unit") + "'"
-            ),
-            exp.JSONExtractScalar: arrow_json_extract_sql,
-            exp.JSONExtract: arrow_json_extract_sql,
+            exp.DateTrunc: handle_date_trunc,
+            exp.JSONExtractScalar: rename_func("GET_JSON_STRING"),
+            exp.JSONExtract: rename_func("GET_JSON_STRING"),
             exp.RegexpLike: rename_func("REGEXP"),
             exp.RegexpSplit: rename_func("SPLIT_BY_STRING"),
             exp.SetAgg: rename_func("COLLECT_SET"),
-            exp.StrToUnix: lambda self, e: f"UNIX_TIMESTAMP({self.sql(e, 'this')}, {self.format_time(e)})",
+            exp.StrToUnix: _str_to_unix_sql,
             exp.Split: rename_func("SPLIT_BY_STRING"),
             exp.TimeStrToDate: rename_func("TO_DATE"),
-            exp.ToChar: lambda self, e: f"DATE_FORMAT({self.sql(e, 'this')}, {self.format_time(e)})",
+            exp.ToChar: handle_to_char,
             exp.TsOrDsAdd: lambda self, e: f"DATE_ADD({self.sql(e, 'this')}, {self.sql(e, 'expression')})",  # Only for day level
-            exp.TsOrDsToDate: lambda self, e: self.func("TO_DATE", e.this),
+            exp.TsOrDsToDate: _to_date_sql,
+            exp.TimeStrToUnix: rename_func("UNIX_TIMESTAMP"),
             exp.TimeToUnix: rename_func("UNIX_TIMESTAMP"),
             exp.TimestampTrunc: lambda self, e: self.func(
                 "DATE_TRUNC", e.this, "'" + e.text("unit") + "'"
@@ -60,5 +133,21 @@ class Doris(MySQL):
                 "FROM_UNIXTIME", e.this, time_format("doris")(self, e)
             ),
             exp.UnixToTime: rename_func("FROM_UNIXTIME"),
-            exp.Map: rename_func("ARRAY_MAP"),
+            exp.SafeDPipe: rename_func("CONCAT"),
+            exp.ToDecimal: handle_todecimal,  # ck的强转TODECIMAL64
+            exp.ArrayUniq: lambda self, e: f"SIZE(ARRAY_DISTINCT({self.sql(e,'this')}))",
+            exp.QuartersAdd: lambda self, e: f"MONTHS_ADD({self.sql(e, 'this')},{3 * int(self.sql(e,'expression'))})",
+            exp.QuartersSub: lambda self, e: f"MONTHS_SUB({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
+            exp.ToDatetime: lambda self, e: f"CAST({self.sql(e, 'this')} AS DATETIME)",
+            exp.Today: lambda self, e: f"TO_DATE(NOW())",
+            exp.ToYyyymm: lambda self, e: f"DATE_FORMAT({self.sql(e, 'this')}, '%Y%m')",
+            exp.ToYyyymmdd: lambda self, e: f"DATE_FORMAT({self.sql(e, 'this')}, '%Y%m%d')",
+            exp.ToYyyymmddhhmmss: lambda self, e: f"DATE_FORMAT({self.sql(e, 'this')}, '%Y%m%d%H%i%s')",
+            exp.ToStartOfQuarter: lambda self, e: f"DATE_TRUNC({self.sql(e, 'this')}, 'Quarter')",
+            exp.ToStartOfMonth: lambda self, e: f"DATE_TRUNC({self.sql(e, 'this')}, 'Month')",
+            exp.ToStartOfWeek: lambda self, e: f"DATE_TRUNC({self.sql(e, 'this')}, 'Week')",
+            exp.ToStartOfDay: lambda self, e: f"DATE_TRUNC({self.sql(e, 'this')}, 'Day')",
+            exp.ToStartOfHour: lambda self, e: f"DATE_TRUNC({self.sql(e, 'this')}, 'Hour')",
+            exp.ToStartOfMinute: lambda self, e: f"DATE_TRUNC({self.sql(e, 'this')}, 'Minute')",
+            exp.ToStartOfSecond: lambda self, e: f"DATE_TRUNC({self.sql(e, 'this')}, 'Second')",
         }
