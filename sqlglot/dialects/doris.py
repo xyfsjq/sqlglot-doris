@@ -35,14 +35,14 @@ def _to_date_sql(self: generator.Generator, expression: exp.TsOrDsToDate) -> str
 
 def handle_date_trunc(self, expression: exp.DateTrunc) -> str:
     this = self.sql(expression, "unit")
-    unit = self.sql(expression, "this").lower()
+    unit = expression.text("this").lower()
     if unit.isalpha():
         mapped_unit = (
-            DATE_DELTA_INTERVAL.get(unit[1:-1])
-            if DATE_DELTA_INTERVAL.get(unit[1:-1]) != None
+            DATE_DELTA_INTERVAL.get(unit)
+            if DATE_DELTA_INTERVAL.get(unit) != None
             else unit
         )
-        return f"DATE_TRUNC({mapped_unit}, {this})"
+        return f"DATE_TRUNC({this}, '{mapped_unit}')"
     elif unit.isdigit():
         return f"TRUNCATE({this},{unit})"
     return f"DATE({this})"
@@ -145,6 +145,7 @@ class Doris(MySQL):
             exp.TimestampTrunc: lambda self, e: self.func(
                 "DATE_TRUNC", e.this, "'" + e.text("unit") + "'"
             ),
+
             exp.UnixToStr: lambda self, e: self.func(
                 "FROM_UNIXTIME", e.this, time_format("doris")(self, e)
             ),
