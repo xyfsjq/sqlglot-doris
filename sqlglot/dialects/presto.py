@@ -180,6 +180,8 @@ class Presto(Dialect):
     RESOLVES_IDENTIFIERS_AS_UPPERCASE = None
 
     class Tokenizer(tokens.Tokenizer):
+        QUOTES = ["'", '"']
+        IDENTIFIERS = ['`']
         KEYWORDS = {
             **tokens.Tokenizer.KEYWORDS,
             "START": TokenType.BEGIN,
@@ -236,6 +238,10 @@ class Presto(Dialect):
             "TO_UTF8": lambda args: exp.Encode(
                 this=seq_get(args, 0), charset=exp.Literal.string("utf-8")
             ),
+            "DOW": exp.DayOfWeek.from_arg_list,
+            "DOY": exp.DayOfYear.from_arg_list,
+            "SHUFFLE": exp.Shuffle.from_arg_list,
+            "SLICE": exp.ArraySlice.from_arg_list,
         }
         FUNCTION_PARSERS = parser.Parser.FUNCTION_PARSERS.copy()
         FUNCTION_PARSERS.pop("TRIM")

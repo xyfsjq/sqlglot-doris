@@ -206,6 +206,7 @@ class Hive(Dialect):
             "MSCK REPAIR": TokenType.COMMAND,
             "REFRESH": TokenType.COMMAND,
             "WITH SERDEPROPERTIES": TokenType.SERDE_PROPERTIES,
+            "SYSDATE": TokenType.CURRENT_TIMESTAMP,
         }
 
         NUMERIC_LITERALS = {
@@ -219,7 +220,7 @@ class Hive(Dialect):
 
     class Parser(parser.Parser):
         LOG_DEFAULTS_TO_LN = True
-        STRICT_CAST = False
+        STRICT_CAST = False  # 解决Try_cast问题
         SUPPORTS_USER_DEFINED_TYPES = False
 
         FUNCTIONS = {

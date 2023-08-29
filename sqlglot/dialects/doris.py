@@ -35,14 +35,13 @@ def _to_date_sql(self: generator.Generator, expression: exp.TsOrDsToDate) -> str
 
 def handle_date_trunc(self, expression: exp.DateTrunc) -> str:
     this = self.sql(expression, "unit")
-    unit = expression.text("this").lower()
+    unit = self.sql(expression, "this").strip("\"'").lower()
+    # unit = expression.text("this").lower()
     if unit.isalpha():
         mapped_unit = (
-            DATE_DELTA_INTERVAL.get(unit)
-            if DATE_DELTA_INTERVAL.get(unit) != None
-            else unit
+            DATE_DELTA_INTERVAL.get(unit) if DATE_DELTA_INTERVAL.get(unit) != None else unit
         )
-        return f"DATE_TRUNC({this}, '{mapped_unit}')"
+        return f"DATE_TRUNC({mapped_unit}, {this})"
     elif unit.isdigit():
         return f"TRUNCATE({this},{unit})"
     return f"DATE({this})"
@@ -87,9 +86,18 @@ def _str_to_unix_sql(self: generator.Generator, expression: exp.StrToUnix) -> st
 def handle_array_concat(self, expression: exp.ArrayStringConcat) -> str:
     this = self.sql(expression, "this")
     expr = self.sql(expression, "expressions")
-    if expr == '':
+    if expr == "":
         return f"concat_ws('',{this})"
     return f"concat_ws({expr}, {this})"
+
+
+def handle_replace(self, expression: exp.Replace) -> str:
+    this = self.sql(expression, "this")
+    old = self.sql(expression, "old")
+    new = self.sql(expression, "new")
+    if new == "":
+        return f"REPLACE({this},{old},'')"
+    return f"REPLACE({this},{old},{new})"
 
 
 class Doris(MySQL):
@@ -121,6 +129,12 @@ class Doris(MySQL):
             exp.ArrayAgg: rename_func("COLLECT_LIST"),
             exp.ArraySize: rename_func("SIZE"),
             exp.ArrayStringConcat: handle_array_concat,
+            exp.ArrayFilter: lambda self, e: f"ARRAY_FILTER({self.sql(e, 'expression')},{self.sql(e, 'this')})",
+            exp.ArrayUniq: lambda self, e: f"SIZE(ARRAY_DISTINCT({self.sql(e, 'this')}))",
+            exp.BitwiseNot: rename_func("BITNOT"),
+            exp.BitwiseAnd: rename_func("BITAND"),
+            exp.BitwiseOr: rename_func("BITOR"),
+            exp.BitwiseXor: rename_func("BITXOR"),
             exp.CurrentTimestamp: lambda *_: "NOW()",
             exp.DateTrunc: handle_date_trunc,
             exp.GroupBitmap: lambda self, e: f"BITMAP_COUNT(BITMAP_AGG({self.sql(e, 'this')}))",
@@ -128,14 +142,21 @@ class Doris(MySQL):
             exp.GroupBitmapOr: lambda self, e: f"BITMAP_COUNT(BITMAP_UNION({self.sql(e, 'this')}))",
             exp.JSONExtractScalar: rename_func("GET_JSON_STRING"),
             exp.JSONExtract: rename_func("GET_JSON_STRING"),
+            exp.LTrim: rename_func("LTRIM"),
+            exp.RTrim: rename_func("RTRIM"),
             exp.Range: rename_func("ARRAY_RANGE"),
             exp.RegexpExtract: lambda self, e: f"REGEXP_EXTRACT_ALL({self.sql(e, 'this')}, '({self.sql(e, 'expression')[1:-1]})')",
             exp.RegexpLike: rename_func("REGEXP"),
             exp.RegexpSplit: rename_func("SPLIT_BY_STRING"),
+            exp.Replace: handle_replace,
+            exp.Repeat: rename_func("COUNTEQUAL"),
             exp.SetAgg: rename_func("COLLECT_SET"),
             exp.SortArray: rename_func("ARRAY_SORT"),
             exp.StrToUnix: _str_to_unix_sql,
             exp.Split: rename_func("SPLIT_BY_STRING"),
+            exp.SafeDPipe: rename_func("CONCAT"),
+            exp.Shuffle: rename_func("ARRAY_SHUFFLE"),
+            exp.Slice: rename_func("ARRAY_SLICE"),
             exp.TimeStrToDate: rename_func("TO_DATE"),
             exp.ToChar: handle_to_char,
             exp.TsOrDsAdd: lambda self, e: f"DATE_ADD({self.sql(e, 'this')}, {self.sql(e, 'expression')})",  # Only for day level
@@ -145,16 +166,7 @@ class Doris(MySQL):
             exp.TimestampTrunc: lambda self, e: self.func(
                 "DATE_TRUNC", e.this, "'" + e.text("unit") + "'"
             ),
-
-            exp.UnixToStr: lambda self, e: self.func(
-                "FROM_UNIXTIME", e.this, time_format("doris")(self, e)
-            ),
-            exp.UnixToTime: rename_func("FROM_UNIXTIME"),
-            exp.SafeDPipe: rename_func("CONCAT"),
             exp.ToDecimal: handle_todecimal,  # ck的强转TODECIMAL64
-            exp.ArrayUniq: lambda self, e: f"SIZE(ARRAY_DISTINCT({self.sql(e,'this')}))",
-            exp.QuartersAdd: lambda self, e: f"MONTHS_ADD({self.sql(e, 'this')},{3 * int(self.sql(e,'expression'))})",
-            exp.QuartersSub: lambda self, e: f"MONTHS_SUB({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
             exp.ToDatetime: lambda self, e: f"CAST({self.sql(e, 'this')} AS DATETIME)",
             exp.Today: lambda self, e: f"TO_DATE(NOW())",
             exp.ToYyyymm: lambda self, e: f"DATE_FORMAT({self.sql(e, 'this')}, '%Y%m')",
@@ -167,4 +179,10 @@ class Doris(MySQL):
             exp.ToStartOfHour: lambda self, e: f"DATE_TRUNC({self.sql(e, 'this')}, 'Hour')",
             exp.ToStartOfMinute: lambda self, e: f"DATE_TRUNC({self.sql(e, 'this')}, 'Minute')",
             exp.ToStartOfSecond: lambda self, e: f"DATE_TRUNC({self.sql(e, 'this')}, 'Second')",
+            exp.UnixToStr: lambda self, e: self.func(
+                "FROM_UNIXTIME", e.this, time_format("doris")(self, e)
+            ),
+            exp.UnixToTime: rename_func("FROM_UNIXTIME"),
+            exp.QuartersAdd: lambda self, e: f"MONTHS_ADD({self.sql(e, 'this')},{3 * int(self.sql(e,'expression'))})",
+            exp.QuartersSub: lambda self, e: f"MONTHS_SUB({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
         }

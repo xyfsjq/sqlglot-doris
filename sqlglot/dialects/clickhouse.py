@@ -147,7 +147,6 @@ class ClickHouse(Dialect):
             "GROUPBITXOR": exp.GroupBitXor.from_arg_list,
             "HAS": exp.ArrayContains.from_arg_list,
             "RANGE": exp.Range.from_arg_list,
-            "LENGTH": exp.ArraySize.from_arg_list,
             "ARRAYPOPBACK": exp.ArrayPopback.from_arg_list,
             "ARRAYPOPFRONT": exp.ArrayPopfront.from_arg_list,
             "ARRAYPUSHBACK": exp.ArrayPushback.from_arg_list,
@@ -167,8 +166,8 @@ class ClickHouse(Dialect):
             "BASE64DECODE": exp.FromBase64.from_arg_list,
             "ENDSWITH": exp.EndsWith.from_arg_list,
             "STARTSWITH": exp.StartsWith.from_arg_list,
-            "TRIMLEFT": exp.Ltrim.from_arg_list,
-            "TRIMRIGHT": exp.Rtrim.from_arg_list,
+            "TRIMLEFT": exp.LTrim.from_arg_list,
+            "TRIMRIGHT": exp.RTrim.from_arg_list,
             "SPLITBYCHAR": lambda args: exp.Split(
                 this=seq_get(args, 1),
                 expression=seq_get(args, 0),
@@ -190,11 +189,11 @@ class ClickHouse(Dialect):
             "VARPOP": exp.VarPop.from_arg_list,
             "VARSAMP": exp.VarSamp.from_arg_list,
             "EXP2": lambda args: exp.Pow(
-                this='2',
+                this="2",
                 expression=seq_get(args, 0),
             ),
             "EXP10": lambda args: exp.Pow(
-                this='10',
+                this="10",
                 expression=seq_get(args, 0),
             ),
         }

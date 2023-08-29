@@ -4163,11 +4163,11 @@ class NullOrEmpty(Func):
     arg_types = {"this": True, "expressions": False}
 
 
-class Ltrim(Func):
+class LTrim(Func):
     arg_types = {"this": True, "expressions": False}
 
 
-class Rtrim(Func):
+class RTrim(Func):
     arg_types = {"this": True, "expressions": False}
 
 
@@ -4180,7 +4180,7 @@ class VarSamp(AggFunc):
 
 
 class Replace(Func):
-    arg_types = {"this": True, "old": True, "new": True}
+    arg_types = {"this": True, "old": False, "new": False}
 
 
 class RegexpReplaceOne(Func):
@@ -6556,6 +6556,10 @@ class ToStartOfMinute(Func):
 
 
 class ToStartOfSecond(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class Shuffle(Func):
     arg_types = {"this": False, "expression": False}
 
 
