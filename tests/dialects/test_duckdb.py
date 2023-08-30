@@ -6,6 +6,9 @@ class TestDuckDB(Validator):
     dialect = "duckdb"
 
     def test_duckdb(self):
+        self.validate_identity("[x.STRING_SPLIT(' ')[1] FOR x IN ['1', '2', 3] IF x.CONTAINS('1')]")
+        self.validate_identity("INSERT INTO x BY NAME SELECT 1 AS y")
+        self.validate_identity("SELECT 1 AS x UNION ALL BY NAME SELECT 2 AS x")
         self.validate_identity("SELECT SUM(x) FILTER (x = 1)", "SELECT SUM(x) FILTER(WHERE x = 1)")
 
         # https://github.com/duckdb/duckdb/releases/tag/v0.8.0
@@ -50,6 +53,7 @@ class TestDuckDB(Validator):
             "SELECT * FROM (PIVOT Cities ON Year USING SUM(Population) GROUP BY Country) AS pivot_alias"
         )
 
+        self.validate_identity("FROM  x SELECT x UNION SELECT 1", "SELECT x FROM x UNION SELECT 1")
         self.validate_all("FROM (FROM tbl)", write={"duckdb": "SELECT * FROM (SELECT * FROM tbl)"})
         self.validate_all("FROM tbl", write={"duckdb": "SELECT * FROM tbl"})
         self.validate_all("0b1010", write={"": "0 AS b1010"})
@@ -123,20 +127,20 @@ class TestDuckDB(Validator):
             },
         )
         self.validate_all(
-            "LIST_VALUE(0, 1, 2)",
+            "[0, 1, 2]",
             read={
                 "spark": "ARRAY(0, 1, 2)",
             },
             write={
                 "bigquery": "[0, 1, 2]",
-                "duckdb": "LIST_VALUE(0, 1, 2)",
+                "duckdb": "[0, 1, 2]",
                 "presto": "ARRAY[0, 1, 2]",
                 "spark": "ARRAY(0, 1, 2)",
             },
         )
         self.validate_all(
             "SELECT ARRAY_LENGTH([0], 1) AS x",
-            write={"duckdb": "SELECT ARRAY_LENGTH(LIST_VALUE(0), 1) AS x"},
+            write={"duckdb": "SELECT ARRAY_LENGTH([0], 1) AS x"},
         )
         self.validate_all(
             "REGEXP_MATCHES(x, y)",
@@ -226,7 +230,7 @@ class TestDuckDB(Validator):
             },
         )
         self.validate_all(
-            "LIST_SUM(LIST_VALUE(1, 2))",
+            "LIST_SUM([1, 2])",
             read={
                 "spark": "ARRAY_SUM(ARRAY(1, 2))",
             },
@@ -304,7 +308,7 @@ class TestDuckDB(Validator):
             },
         )
         self.validate_all(
-            "ARRAY_CONCAT(LIST_VALUE(1, 2), LIST_VALUE(3, 4))",
+            "ARRAY_CONCAT([1, 2], [3, 4])",
             read={
                 "bigquery": "ARRAY_CONCAT([1, 2], [3, 4])",
                 "postgres": "ARRAY_CAT(ARRAY[1, 2], ARRAY[3, 4])",
@@ -312,7 +316,7 @@ class TestDuckDB(Validator):
             },
             write={
                 "bigquery": "ARRAY_CONCAT([1, 2], [3, 4])",
-                "duckdb": "ARRAY_CONCAT(LIST_VALUE(1, 2), LIST_VALUE(3, 4))",
+                "duckdb": "ARRAY_CONCAT([1, 2], [3, 4])",
                 "hive": "CONCAT(ARRAY(1, 2), ARRAY(3, 4))",
                 "postgres": "ARRAY_CAT(ARRAY[1, 2], ARRAY[3, 4])",
                 "presto": "CONCAT(ARRAY[1, 2], ARRAY[3, 4])",
@@ -562,7 +566,7 @@ class TestDuckDB(Validator):
         self.validate_all(
             "cast([[1]] as int[][])",
             write={
-                "duckdb": "CAST(LIST_VALUE(LIST_VALUE(1)) AS INT[][])",
+                "duckdb": "CAST([[1]] AS INT[][])",
                 "spark": "CAST(ARRAY(ARRAY(1)) AS ARRAY<ARRAY<INT>>)",
             },
         )
@@ -597,13 +601,13 @@ class TestDuckDB(Validator):
         self.validate_all(
             "CAST([STRUCT_PACK(a := 1)] AS STRUCT(a BIGINT)[])",
             write={
-                "duckdb": "CAST(LIST_VALUE({'a': 1}) AS STRUCT(a BIGINT)[])",
+                "duckdb": "CAST([{'a': 1}] AS STRUCT(a BIGINT)[])",
             },
         )
         self.validate_all(
             "CAST([[STRUCT_PACK(a := 1)]] AS STRUCT(a BIGINT)[][])",
             write={
-                "duckdb": "CAST(LIST_VALUE(LIST_VALUE({'a': 1})) AS STRUCT(a BIGINT)[][])",
+                "duckdb": "CAST([[{'a': 1}]] AS STRUCT(a BIGINT)[][])",
             },
         )
 

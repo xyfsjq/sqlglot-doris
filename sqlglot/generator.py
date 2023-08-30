@@ -79,6 +79,7 @@ class Generator:
         exp.LogProperty: lambda self, e: f"{'NO ' if e.args.get('no') else ''}LOG",
         exp.MaterializedProperty: lambda self, e: "MATERIALIZED",
         exp.NoPrimaryIndexProperty: lambda self, e: "NO PRIMARY INDEX",
+        exp.NonClusteredColumnConstraint: lambda self, e: f"NONCLUSTERED ({self.expressions(e, 'this', indent=False)})",
         exp.NotForReplicationColumnConstraint: lambda self, e: "NOT FOR REPLICATION",
         exp.OnCommitProperty: lambda self, e: f"ON COMMIT {'DELETE' if e.args.get('delete') else 'PRESERVE'} ROWS",
         exp.OnProperty: lambda self, e: f"ON {self.sql(e, 'this')}",
@@ -964,9 +965,9 @@ class Generator:
         name = self.sql(expression, "this")
         name = f"{name} " if name else ""
         table = self.sql(expression, "table")
-        table = f"{self.INDEX_ON} {table} " if table else ""
+        table = f"{self.INDEX_ON} {table}" if table else ""
         using = self.sql(expression, "using")
-        using = f"USING {using} " if using else ""
+        using = f" USING {using} " if using else ""
         index = "INDEX " if not table else ""
         columns = self.expressions(expression, key="columns", flat=True)
         columns = f"({columns})" if columns else ""
@@ -1192,6 +1193,7 @@ class Generator:
         where = f"{self.sep()}REPLACE WHERE {where}" if where else ""
         expression_sql = f"{self.sep()}{self.sql(expression, 'expression')}"
         conflict = self.sql(expression, "conflict")
+        by_name = " BY NAME" if expression.args.get("by_name") else ""
         returning = self.sql(expression, "returning")
 
         if self.RETURNING_END:
@@ -1199,7 +1201,7 @@ class Generator:
         else:
             expression_sql = f"{returning}{expression_sql}{conflict}"
 
-        sql = f"INSERT{alternative}{ignore}{this}{exists}{partition_sql}{where}{expression_sql}"
+        sql = f"INSERT{alternative}{ignore}{this}{by_name}{exists}{partition_sql}{where}{expression_sql}"
         return self.prepend_ctes(expression, sql)
 
     def intersect_sql(self, expression: exp.Intersect) -> str:
@@ -1446,6 +1448,16 @@ class Generator:
         this = self.indent(self.sql(expression, "this"))
         return f"{self.seg('HAVING')}{self.sep()}{this}"
 
+    def connect_sql(self, expression: exp.Connect) -> str:
+        start = self.sql(expression, "start")
+        start = self.seg(f"START WITH {start}") if start else ""
+        connect = self.sql(expression, "connect")
+        connect = self.seg(f"CONNECT BY {connect}")
+        return start + connect
+
+    def prior_sql(self, expression: exp.Prior) -> str:
+        return f"PRIOR {self.sql(expression, 'this')}"
+
     def join_sql(self, expression: exp.Join) -> str:
         op_sql = " ".join(
             op
@@ -1688,6 +1700,7 @@ class Generator:
         return csv(
             *sqls,
             *[self.sql(join) for join in expression.args.get("joins") or []],
+            self.sql(expression, "connect"),
             self.sql(expression, "match"),
             *[self.sql(lateral) for lateral in expression.args.get("laterals") or []],
             self.sql(expression, "where"),
@@ -1822,7 +1835,8 @@ class Generator:
     def union_op(self, expression: exp.Union) -> str:
         kind = " DISTINCT" if self.EXPLICIT_UNION else ""
         kind = kind if expression.args.get("distinct") else " ALL"
-        return f"UNION{kind}"
+        by_name = " BY NAME" if expression.args.get("by_name") else ""
+        return f"UNION{kind}{by_name}"
 
     def unnest_sql(self, expression: exp.Unnest) -> str:
         args = self.expressions(expression, flat=True)
@@ -2677,6 +2691,14 @@ class Generator:
             case.else_(else_cond.copy(), copy=False)
 
         return self.sql(case)
+
+    def comprehension_sql(self, expression: exp.Comprehension) -> str:
+        this = self.sql(expression, "this")
+        expr = self.sql(expression, "expression")
+        iterator = self.sql(expression, "iterator")
+        condition = self.sql(expression, "condition")
+        condition = f" IF {condition}" if condition else ""
+        return f"{this} FOR {expr} IN {iterator}{condition}"
 
 
 def cached_generator(

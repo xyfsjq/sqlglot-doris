@@ -6,16 +6,28 @@ class TestTSQL(Validator):
     dialect = "tsql"
 
     def test_tsql(self):
+        self.validate_all(
+            "CREATE TABLE x ( A INTEGER NOT NULL, B INTEGER NULL )",
+            write={
+                "tsql": "CREATE TABLE x (A INTEGER NOT NULL, B INTEGER NULL)",
+                "hive": "CREATE TABLE x (A INT NOT NULL, B INT)",
+            },
+        )
+
+        self.validate_identity(
+            'CREATE TABLE x (CONSTRAINT "pk_mytable" UNIQUE NONCLUSTERED (a DESC)) ON b (c)'
+        )
+
         self.validate_identity(
             """
             CREATE TABLE x(
                 [zip_cd] [varchar](5) NULL NOT FOR REPLICATION
                 CONSTRAINT [pk_mytable] PRIMARY KEY CLUSTERED
                 ([zip_cd_mkey] ASC)
-                WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF) ON [PRIMARY]
+                WITH (PAD_INDEX = ON, STATISTICS_NORECOMPUTE = OFF) ON [PRIMARY]
             ) ON [PRIMARY]
             """,
-            'CREATE TABLE x ("zip_cd" VARCHAR(5) NULL NOT FOR REPLICATION CONSTRAINT "pk_mytable" PRIMARY KEY CLUSTERED ("zip_cd_mkey") WITH (PAD_INDEX=OFF, STATISTICS_NORECOMPUTE=OFF) ON "PRIMARY") ON "PRIMARY"',
+            'CREATE TABLE x ("zip_cd" VARCHAR(5) NULL NOT FOR REPLICATION CONSTRAINT "pk_mytable" PRIMARY KEY CLUSTERED ("zip_cd_mkey") WITH (PAD_INDEX=ON, STATISTICS_NORECOMPUTE=OFF) ON "PRIMARY") ON "PRIMARY"',
         )
 
         self.validate_identity(
@@ -432,11 +444,35 @@ class TestTSQL(Validator):
 
     def test_ddl(self):
         self.validate_all(
-            "IF NOT EXISTS (SELECT * FROM information_schema.schemata WHERE SCHEMA_NAME = foo) EXEC('CREATE SCHEMA foo')",
+            "IF NOT EXISTS (SELECT * FROM sys.indexes WHERE object_id = object_id('db.tbl') AND name = 'idx') EXEC('CREATE INDEX idx ON db.tbl')",
+            read={
+                "": "CREATE INDEX IF NOT EXISTS idx ON db.tbl",
+            },
+        )
+
+        self.validate_all(
+            "IF NOT EXISTS (SELECT * FROM information_schema.schemata WHERE schema_name = 'foo') EXEC('CREATE SCHEMA foo')",
             read={
                 "": "CREATE SCHEMA IF NOT EXISTS foo",
             },
         )
+        self.validate_all(
+            "IF NOT EXISTS (SELECT * FROM information_schema.tables WHERE table_name = 'foo') EXEC('CREATE TABLE foo (a INTEGER)')",
+            read={
+                "": "CREATE TABLE IF NOT EXISTS foo (a INTEGER)",
+            },
+        )
+
+        self.validate_all(
+            "CREATE OR ALTER VIEW a.b AS SELECT 1",
+            read={
+                "": "CREATE OR REPLACE VIEW a.b AS SELECT 1",
+            },
+            write={
+                "tsql": "CREATE OR ALTER VIEW a.b AS SELECT 1",
+            },
+        )
+
         self.validate_all(
             "CREATE TABLE #mytemp (a INTEGER, b CHAR(2), c TIME(4), d FLOAT(24))",
             write={

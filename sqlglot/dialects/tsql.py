@@ -603,6 +603,14 @@ class TSQL(Dialect):
 
             return super()._parse_if()
 
+        def _parse_unique(self) -> exp.UniqueColumnConstraint:
+            return self.expression(
+                exp.UniqueColumnConstraint,
+                this=None
+                if self._curr and self._curr.text.upper() in {"CLUSTERED", "NONCLUSTERED"}
+                else self._parse_schema(self._parse_id_var(any_token=False)),
+            )
+
     class Generator(generator.Generator):
         LOCKING_READS_SUPPORTED = True
         LIMIT_IS_TOP = True
@@ -668,14 +676,25 @@ class TSQL(Dialect):
             return sql
 
         def create_sql(self, expression: exp.Create) -> str:
+            expression = expression.copy()
             kind = self.sql(expression, "kind").upper()
-            exists = expression.args.get("exists")
+            exists = expression.args.pop("exists", None)
+            sql = super().create_sql(expression)
 
-            if exists and kind == "SCHEMA":
-                schema_name = self.sql(expression, "this")
-                return f"IF NOT EXISTS (SELECT * FROM information_schema.schemata WHERE SCHEMA_NAME = {schema_name}) EXEC('CREATE SCHEMA {schema_name}')"
+            if exists:
+                table = expression.find(exp.Table)
+                identifier = self.sql(exp.Literal.string(exp.table_name(table) if table else ""))
+                if kind == "SCHEMA":
+                    sql = f"""IF NOT EXISTS (SELECT * FROM information_schema.schemata WHERE schema_name = {identifier}) EXEC('{sql}')"""
+                elif kind == "TABLE":
+                    sql = f"""IF NOT EXISTS (SELECT * FROM information_schema.tables WHERE table_name = {identifier}) EXEC('{sql}')"""
+                elif kind == "INDEX":
+                    index = self.sql(exp.Literal.string(expression.this.text("this")))
+                    sql = f"""IF NOT EXISTS (SELECT * FROM sys.indexes WHERE object_id = object_id({identifier}) AND name = {index}) EXEC('{sql}')"""
+            elif expression.args.get("replace"):
+                sql = sql.replace("CREATE OR REPLACE ", "CREATE OR ALTER ", 1)
 
-            return super().create_sql(expression)
+            return sql
 
         def offset_sql(self, expression: exp.Offset) -> str:
             return f"{super().offset_sql(expression)} ROWS"
@@ -739,3 +758,8 @@ class TSQL(Dialect):
                 identifier = f"#{identifier}"
 
             return identifier
+
+        def constraint_sql(self, expression: exp.Constraint) -> str:
+            this = self.sql(expression, "this")
+            expressions = self.expressions(expression, flat=True, sep=" ")
+            return f"CONSTRAINT {this} {expressions}"

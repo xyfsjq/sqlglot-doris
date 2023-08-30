@@ -1207,6 +1207,10 @@ class Comment(Expression):
     arg_types = {"this": True, "kind": True, "expression": True, "exists": False}
 
 
+class Comprehension(Expression):
+    arg_types = {"this": True, "expression": True, "iterator": True, "condition": False}
+
+
 # https://clickhouse.com/docs/en/engines/table-engines/mergetree-family/mergetree#mergetree-table-ttl
 class MergeTreeTTLAction(Expression):
     arg_types = {
@@ -1317,6 +1321,10 @@ class IndexColumnConstraint(ColumnConstraintKind):
 
 
 class InlineLengthColumnConstraint(ColumnConstraintKind):
+    pass
+
+
+class NonClusteredColumnConstraint(ColumnConstraintKind):
     pass
 
 
@@ -1503,6 +1511,15 @@ class Check(Expression):
     pass
 
 
+# https://docs.snowflake.com/en/sql-reference/constructs/connect-by
+class Connect(Expression):
+    arg_types = {"start": False, "connect": True}
+
+
+class Prior(Expression):
+    pass
+
+
 class Directory(Expression):
     # https://spark.apache.org/docs/3.0.0-preview/sql-ref-syntax-dml-insert-overwrite-directory-hive.html
     arg_types = {"this": True, "local": False, "row_format": False}
@@ -1592,6 +1609,7 @@ class Insert(DDL):
         "alternative": False,
         "where": False,
         "ignore": False,
+        "by_name": False,
     }
 
     def with_(
@@ -2300,6 +2318,16 @@ class Subqueryable(Unionable):
     def named_selects(self) -> t.List[str]:
         raise NotImplementedError("Subqueryable objects must implement `named_selects`")
 
+    def select(
+        self,
+        *expressions: t.Optional[ExpOrStr],
+        append: bool = True,
+        dialect: DialectType = None,
+        copy: bool = True,
+        **opts,
+    ) -> Subqueryable:
+        raise NotImplementedError("Subqueryable objects must implement `select`")
+
     def with_(
         self,
         alias: ExpOrStr,
@@ -2341,6 +2369,7 @@ QUERY_MODIFIERS = {
     "match": False,
     "laterals": False,
     "joins": False,
+    "connect": False,
     "pivots": False,
     "where": False,
     "group": False,
@@ -2436,6 +2465,7 @@ class Union(Subqueryable):
         "this": True,
         "expression": True,
         "distinct": False,
+        "by_name": False,
         **QUERY_MODIFIERS,
     }
 
@@ -3468,6 +3498,7 @@ class DataType(Expression):
         LOWCARDINALITY = auto()
         MAP = auto()
         MEDIUMBLOB = auto()
+        MEDIUMINT = auto()
         MEDIUMTEXT = auto()
         MONEY = auto()
         NCHAR = auto()
@@ -3511,6 +3542,7 @@ class DataType(Expression):
         VARCHAR = auto()
         VARIANT = auto()
         XML = auto()
+        YEAR = auto()
 
     TEXT_TYPES = {
         Type.CHAR,
@@ -6001,9 +6033,9 @@ def table_(
         The new Table instance.
     """
     return Table(
-        this=to_identifier(table, quoted=quoted),
-        db=to_identifier(db, quoted=quoted),
-        catalog=to_identifier(catalog, quoted=quoted),
+        this=to_identifier(table, quoted=quoted) if table else None,
+        db=to_identifier(db, quoted=quoted) if db else None,
+        catalog=to_identifier(catalog, quoted=quoted) if catalog else None,
         alias=TableAlias(this=to_identifier(alias)) if alias else None,
     )
 

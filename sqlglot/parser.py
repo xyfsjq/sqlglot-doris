@@ -136,6 +136,7 @@ class Parser(metaclass=_Parser):
         TokenType.UINT128,
         TokenType.INT256,
         TokenType.UINT256,
+        TokenType.MEDIUMINT,
         TokenType.FIXEDSTRING,
         TokenType.FLOAT,
         TokenType.DOUBLE,
@@ -186,6 +187,7 @@ class Parser(metaclass=_Parser):
         TokenType.SMALLSERIAL,
         TokenType.BIGSERIAL,
         TokenType.XML,
+        TokenType.YEAR,
         TokenType.UNIQUEIDENTIFIER,
         TokenType.USERDEFINED,
         TokenType.MONEY,
@@ -526,9 +528,6 @@ class Parser(metaclass=_Parser):
         TokenType.DESC: lambda self: self._parse_describe(),
         TokenType.DESCRIBE: lambda self: self._parse_describe(),
         TokenType.DROP: lambda self: self._parse_drop(),
-        TokenType.FROM: lambda self: exp.select("*").from_(
-            t.cast(exp.From, self._parse_from(skip_from_token=True))
-        ),
         TokenType.INSERT: lambda self: self._parse_insert(),
         TokenType.LOAD: lambda self: self._parse_load(),
         TokenType.MERGE: lambda self: self._parse_merge(),
@@ -596,6 +595,7 @@ class Parser(metaclass=_Parser):
         TokenType.OVERLAPS: binary_range_parser(exp.Overlaps),
         TokenType.RLIKE: binary_range_parser(exp.RegexpLike),
         TokenType.SIMILAR_TO: binary_range_parser(exp.SimilarTo),
+        TokenType.FOR: lambda self, this: self._parse_comprehension(this),
     }
 
     PROPERTY_PARSERS: t.Dict[str, t.Callable] = {
@@ -689,6 +689,9 @@ class Parser(metaclass=_Parser):
         "COMPRESS": lambda self: self._parse_compress(),
         "CLUSTERED": lambda self: self.expression(
             exp.ClusteredColumnConstraint, this=self._parse_wrapped_csv(self._parse_ordered)
+        ),
+        "NONCLUSTERED": lambda self: self.expression(
+            exp.NonClusteredColumnConstraint, this=self._parse_wrapped_csv(self._parse_ordered)
         ),
         "DEFAULT": lambda self: self.expression(
             exp.DefaultColumnConstraint, this=self._parse_bitwise()
@@ -791,6 +794,8 @@ class Parser(metaclass=_Parser):
             self._parse_sort(exp.Distribute, TokenType.DISTRIBUTE_BY),
         ),
         TokenType.SORT_BY: lambda self: ("sort", self._parse_sort(exp.Sort, TokenType.SORT_BY)),
+        TokenType.CONNECT_BY: lambda self: ("connect", self._parse_connect(skip_start_token=True)),
+        TokenType.START_WITH: lambda self: ("connect", self._parse_connect()),
     }
 
     SET_PARSERS = {
@@ -1373,7 +1378,11 @@ class Parser(metaclass=_Parser):
         if assignment:
             key = self._parse_var_or_string()
             self._match(TokenType.EQ)
-            return self.expression(exp.Property, this=key, value=self._parse_column())
+            return self.expression(
+                exp.Property,
+                this=key,
+                value=self._parse_column() or self._parse_var(any_token=True),
+            )
 
         return None
 
@@ -1678,7 +1687,7 @@ class Parser(metaclass=_Parser):
             return exp.OnCommitProperty()
         if self._match_text_seq("COMMIT", "DELETE", "ROWS"):
             return exp.OnCommitProperty(delete=True)
-        return self.expression(exp.OnProperty, this=self._parse_id_var())
+        return self.expression(exp.OnProperty, this=self._parse_schema(self._parse_id_var()))
 
     def _parse_distkey(self) -> exp.DistKeyProperty:
         return self.expression(exp.DistKeyProperty, this=self._parse_wrapped(self._parse_id_var))
@@ -1765,6 +1774,7 @@ class Parser(metaclass=_Parser):
             exp.Insert,
             comments=comments,
             this=this,
+            by_name=self._match_text_seq("BY", "NAME"),
             exists=self._parse_exists(),
             partition=self._parse_partition(),
             where=self._match_pair(TokenType.REPLACE, TokenType.WHERE)
@@ -1979,6 +1989,7 @@ class Parser(metaclass=_Parser):
         self, nested: bool = False, table: bool = False, parse_subquery_alias: bool = True
     ) -> t.Optional[exp.Expression]:
         cte = self._parse_with()
+
         if cte:
             this = self._parse_statement()
 
@@ -1991,7 +2002,13 @@ class Parser(metaclass=_Parser):
             else:
                 self.raise_error(f"{this.key} does not support CTE")
                 this = cte
-        elif self._match(TokenType.SELECT):
+
+            return this
+
+        # duckdb supports leading with FROM x
+        from_ = self._parse_from() if self._match(TokenType.FROM, advance=False) else None
+
+        if self._match(TokenType.SELECT):
             comments = self._prev_comments
 
             hint = self._parse_hint()
@@ -2030,7 +2047,9 @@ class Parser(metaclass=_Parser):
             if into:
                 this.set("into", into)
 
-            from_ = self._parse_from()
+            if not from_:
+                from_ = self._parse_from()
+
             if from_:
                 this.set("from", from_)
 
@@ -2057,6 +2076,8 @@ class Parser(metaclass=_Parser):
                 expressions=self._parse_csv(self._parse_value),
                 alias=self._parse_table_alias(),
             )
+        elif from_:
+            this = exp.select("*").from_(from_.this, copy=False)
         else:
             this = None
 
@@ -2808,6 +2829,22 @@ class Parser(metaclass=_Parser):
             return None
         return self.expression(exp.Qualify, this=self._parse_conjunction())
 
+    def _parse_connect(self, skip_start_token: bool = False) -> t.Optional[exp.Connect]:
+        if skip_start_token:
+            start = None
+        elif self._match(TokenType.START_WITH):
+            start = self._parse_conjunction()
+        else:
+            return None
+
+        self._match(TokenType.CONNECT_BY)
+        self.NO_PAREN_FUNCTION_PARSERS["PRIOR"] = lambda self: self.expression(
+            exp.Prior, this=self._parse_bitwise()
+        )
+        connect = self._parse_conjunction()
+        self.NO_PAREN_FUNCTION_PARSERS.pop("PRIOR")
+        return self.expression(exp.Connect, start=start, connect=connect)
+
     def _parse_order(
         self, this: t.Optional[exp.Expression] = None, skip_order_token: bool = False
     ) -> t.Optional[exp.Expression]:
@@ -2953,6 +2990,7 @@ class Parser(metaclass=_Parser):
             expression,
             this=this,
             distinct=self._match(TokenType.DISTINCT) or not self._match(TokenType.ALL),
+            by_name=self._match_text_seq("BY", "NAME"),
             expression=self._parse_set_operations(self._parse_select(nested=True)),
         )
 
@@ -3055,7 +3093,7 @@ class Parser(metaclass=_Parser):
             self._retreat(index)
             return None
 
-        unit = self._parse_function() or self._parse_var()
+        unit = self._parse_function() or self._parse_var(any_token=True)
 
         # Most dialects support, e.g., the form INTERVAL '5' day, thus we try to parse
         # each INTERVAL expression into this canonical form so it's easy to transpile
@@ -3617,7 +3655,7 @@ class Parser(metaclass=_Parser):
         identity = self._match_text_seq("IDENTITY")
 
         if self._match(TokenType.L_PAREN):
-            if self._match_text_seq("START", "WITH"):
+            if self._match(TokenType.START_WITH):
                 this.set("start", self._parse_bitwise())
             if self._match_text_seq("INCREMENT", "BY"):
                 this.set("increment", self._parse_bitwise())
@@ -4858,6 +4896,19 @@ class Parser(metaclass=_Parser):
             min = exp.Literal.number(0)
         self._match_r_paren()
         return self.expression(exp.DictRange, this=this, min=min, max=max)
+
+    def _parse_comprehension(self, this: exp.Expression) -> exp.Comprehension:
+        expression = self._parse_column()
+        self._match(TokenType.IN)
+        iterator = self._parse_column()
+        condition = self._parse_conjunction() if self._match_text_seq("IF") else None
+        return self.expression(
+            exp.Comprehension,
+            this=this,
+            expression=expression,
+            iterator=iterator,
+            condition=condition,
+        )
 
     def _find_parser(
         self, parsers: t.Dict[str, t.Callable], trie: t.Dict

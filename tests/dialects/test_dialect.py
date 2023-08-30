@@ -30,9 +30,10 @@ class Validator(unittest.TestCase):
 
         Args:
             sql (str): Main SQL expression
-            dialect (str): dialect of `sql`
             read (dict): Mapping of dialect -> SQL
             write (dict): Mapping of dialect -> SQL
+            pretty (bool): prettify both read and write
+            identify (bool): quote identifiers in both read and write
         """
         expression = self.parse_one(sql)
 
@@ -921,7 +922,7 @@ class TestDialect(Validator):
             "ARRAY(0, 1, 2)",
             write={
                 "bigquery": "[0, 1, 2]",
-                "duckdb": "LIST_VALUE(0, 1, 2)",
+                "duckdb": "[0, 1, 2]",
                 "presto": "ARRAY[0, 1, 2]",
                 "spark": "ARRAY(0, 1, 2)",
             },
@@ -940,7 +941,7 @@ class TestDialect(Validator):
             "ARRAY_SUM(ARRAY(1, 2))",
             write={
                 "trino": "REDUCE(ARRAY[1, 2], 0, (acc, x) -> acc + x, acc -> acc)",
-                "duckdb": "LIST_SUM(LIST_VALUE(1, 2))",
+                "duckdb": "LIST_SUM([1, 2])",
                 "hive": "ARRAY_SUM(ARRAY(1, 2))",
                 "presto": "ARRAY_SUM(ARRAY[1, 2])",
                 "spark": "AGGREGATE(ARRAY(1, 2), 0, (acc, x) -> acc + x, acc -> acc)",
@@ -1464,27 +1465,27 @@ class TestDialect(Validator):
             },
         )
         self.validate_all(
-            "CREATE INDEX my_idx ON tbl (a, b)",
+            "CREATE INDEX my_idx ON tbl(a, b)",
             read={
-                "hive": "CREATE INDEX my_idx ON TABLE tbl (a, b)",
-                "sqlite": "CREATE INDEX my_idx ON tbl (a, b)",
+                "hive": "CREATE INDEX my_idx ON TABLE tbl(a, b)",
+                "sqlite": "CREATE INDEX my_idx ON tbl(a, b)",
             },
             write={
-                "hive": "CREATE INDEX my_idx ON TABLE tbl (a, b)",
-                "postgres": "CREATE INDEX my_idx ON tbl (a NULLS FIRST, b NULLS FIRST)",
-                "sqlite": "CREATE INDEX my_idx ON tbl (a, b)",
+                "hive": "CREATE INDEX my_idx ON TABLE tbl(a, b)",
+                "postgres": "CREATE INDEX my_idx ON tbl(a NULLS FIRST, b NULLS FIRST)",
+                "sqlite": "CREATE INDEX my_idx ON tbl(a, b)",
             },
         )
         self.validate_all(
-            "CREATE UNIQUE INDEX my_idx ON tbl (a, b)",
+            "CREATE UNIQUE INDEX my_idx ON tbl(a, b)",
             read={
-                "hive": "CREATE UNIQUE INDEX my_idx ON TABLE tbl (a, b)",
-                "sqlite": "CREATE UNIQUE INDEX my_idx ON tbl (a, b)",
+                "hive": "CREATE UNIQUE INDEX my_idx ON TABLE tbl(a, b)",
+                "sqlite": "CREATE UNIQUE INDEX my_idx ON tbl(a, b)",
             },
             write={
-                "hive": "CREATE UNIQUE INDEX my_idx ON TABLE tbl (a, b)",
-                "postgres": "CREATE UNIQUE INDEX my_idx ON tbl (a NULLS FIRST, b NULLS FIRST)",
-                "sqlite": "CREATE UNIQUE INDEX my_idx ON tbl (a, b)",
+                "hive": "CREATE UNIQUE INDEX my_idx ON TABLE tbl(a, b)",
+                "postgres": "CREATE UNIQUE INDEX my_idx ON tbl(a NULLS FIRST, b NULLS FIRST)",
+                "sqlite": "CREATE UNIQUE INDEX my_idx ON tbl(a, b)",
             },
         )
         self.validate_all(

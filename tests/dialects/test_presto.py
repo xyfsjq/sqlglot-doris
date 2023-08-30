@@ -88,7 +88,7 @@ class TestPresto(Validator):
             "CAST(ARRAY[1, 2] AS ARRAY(BIGINT))",
             write={
                 "bigquery": "CAST([1, 2] AS ARRAY<INT64>)",
-                "duckdb": "CAST(LIST_VALUE(1, 2) AS BIGINT[])",
+                "duckdb": "CAST([1, 2] AS BIGINT[])",
                 "presto": "CAST(ARRAY[1, 2] AS ARRAY(BIGINT))",
                 "spark": "CAST(ARRAY(1, 2) AS ARRAY<BIGINT>)",
                 "snowflake": "CAST([1, 2] AS ARRAY)",
@@ -98,7 +98,7 @@ class TestPresto(Validator):
             "CAST(MAP(ARRAY[1], ARRAY[1]) AS MAP(INT,INT))",
             write={
                 "bigquery": "CAST(MAP([1], [1]) AS MAP<INT64, INT64>)",
-                "duckdb": "CAST(MAP(LIST_VALUE(1), LIST_VALUE(1)) AS MAP(INT, INT))",
+                "duckdb": "CAST(MAP([1], [1]) AS MAP(INT, INT))",
                 "presto": "CAST(MAP(ARRAY[1], ARRAY[1]) AS MAP(INTEGER, INTEGER))",
                 "hive": "CAST(MAP(1, 1) AS MAP<INT, INT>)",
                 "spark": "CAST(MAP_FROM_ARRAYS(ARRAY(1), ARRAY(1)) AS MAP<INT, INT>)",
@@ -109,7 +109,7 @@ class TestPresto(Validator):
             "CAST(MAP(ARRAY['a','b','c'], ARRAY[ARRAY[1], ARRAY[2], ARRAY[3]]) AS MAP(VARCHAR, ARRAY(INT)))",
             write={
                 "bigquery": "CAST(MAP(['a', 'b', 'c'], [[1], [2], [3]]) AS MAP<STRING, ARRAY<INT64>>)",
-                "duckdb": "CAST(MAP(LIST_VALUE('a', 'b', 'c'), LIST_VALUE(LIST_VALUE(1), LIST_VALUE(2), LIST_VALUE(3))) AS MAP(TEXT, INT[]))",
+                "duckdb": "CAST(MAP(['a', 'b', 'c'], [[1], [2], [3]]) AS MAP(TEXT, INT[]))",
                 "presto": "CAST(MAP(ARRAY['a', 'b', 'c'], ARRAY[ARRAY[1], ARRAY[2], ARRAY[3]]) AS MAP(VARCHAR, ARRAY(INTEGER)))",
                 "hive": "CAST(MAP('a', ARRAY(1), 'b', ARRAY(2), 'c', ARRAY(3)) AS MAP<STRING, ARRAY<INT>>)",
                 "spark": "CAST(MAP_FROM_ARRAYS(ARRAY('a', 'b', 'c'), ARRAY(ARRAY(1), ARRAY(2), ARRAY(3))) AS MAP<STRING, ARRAY<INT>>)",
@@ -296,6 +296,13 @@ class TestPresto(Validator):
             },
         )
         self.validate_all(
+            "DATE_ADD('DAY', 1 * -1, x)",
+            write={
+                "presto": "DATE_ADD('DAY', 1 * -1, x)",
+            },
+            read={"mysql": "DATE_SUB(x, INTERVAL 1 DAY)"},
+        )
+        self.validate_all(
             "NOW()",
             write={
                 "presto": "CURRENT_TIMESTAMP",
@@ -345,6 +352,11 @@ class TestPresto(Validator):
                 "spark": "SELECT FROM_UTC_TIMESTAMP(CAST('2012-10-31 00:00' AS TIMESTAMP), 'America/Sao_Paulo')",
                 "presto": "SELECT CAST('2012-10-31 00:00' AS TIMESTAMP) AT TIME ZONE 'America/Sao_Paulo'",
             },
+        )
+        self.validate_all(
+            "CAST(x AS TIMESTAMP)",
+            write={"presto": "CAST(x AS TIMESTAMP)"},
+            read={"mysql": "CAST(x AS DATETIME)", "clickhouse": "CAST(x AS DATETIME64)"},
         )
 
     def test_ddl(self):
@@ -653,7 +665,7 @@ class TestPresto(Validator):
             "SELECT ARRAY[1, 2]",
             write={
                 "bigquery": "SELECT [1, 2]",
-                "duckdb": "SELECT LIST_VALUE(1, 2)",
+                "duckdb": "SELECT [1, 2]",
                 "presto": "SELECT ARRAY[1, 2]",
                 "spark": "SELECT ARRAY(1, 2)",
             },
