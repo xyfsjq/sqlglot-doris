@@ -4227,6 +4227,10 @@ class ArraySlice(Func):
     arg_types = {"this": True, "off": False, "len": False}
 
 
+class ParseUrl(Func):
+    arg_types = {"this": True, "expression": True}
+
+
 class ArrayAgg(AggFunc):
     pass
 
