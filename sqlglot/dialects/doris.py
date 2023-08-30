@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import re
 from sqlglot import exp, generator
 from sqlglot.dialects.dialect import (
     approx_count_distinct_sql,
@@ -28,9 +28,9 @@ def _to_date_sql(self: generator.Generator, expression: exp.TsOrDsToDate) -> str
         raise ValueError("Invalid expression type")
 
     if time_format is not None:
-        return f"STR_TO_DATE({expr}, {time_format})"
+        return f"CAST({expr} AS DATE)"
     else:
-        return f"TO_DATE({expr})"
+        return f"CAST({expr} AS DATE)"
 
 
 def handle_date_trunc(self, expression: exp.DateTrunc) -> str:
@@ -186,3 +186,27 @@ class Doris(MySQL):
             exp.QuartersAdd: lambda self, e: f"MONTHS_ADD({self.sql(e, 'this')},{3 * int(self.sql(e,'expression'))})",
             exp.QuartersSub: lambda self, e: f"MONTHS_SUB({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
         }
+
+        def sub_sql(self, expression: exp.Sub) -> str:
+            if re.search(r'date', self.sql(expression, 'this'), re.IGNORECASE):
+                this = self.sql(expression, 'this')
+                expr = self.sql(expression, 'expression')
+                return f"{this} - INTERVAL {expr} DAY"
+            return self.binary(expression, "-")
+
+        def add_sql(self, expression: exp.Add) -> str:
+            if re.search(r'date', self.sql(expression, 'this'), re.IGNORECASE):
+                this = self.sql(expression, 'this')
+                expr = self.sql(expression,'expression')
+                # letters = re.findall(r'[a-zA-Z]+', expr)
+                # unit = letters[0] if letters else 'day'
+                return f"{this} + INTERVAL {expr} DAY"
+            return self.binary(expression, "+")
+
+        def where_sql(self, expression: exp.Where) -> str:
+            this = self.indent(self.sql(expression, "this"))
+            numbers = re.findall(r'\d+', this)
+            letters = re.findall(r'[a-zA-Z]+', this)
+            if letters[0] == "rownum":
+                return f"{self.seg('LIMIT')} {numbers[0]}"
+            return f"{self.seg('WHERE')}{self.sep()}{this}"
