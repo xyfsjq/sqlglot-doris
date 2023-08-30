@@ -242,6 +242,21 @@ class Presto(Dialect):
             "DOY": exp.DayOfYear.from_arg_list,
             "SHUFFLE": exp.Shuffle.from_arg_list,
             "SLICE": exp.ArraySlice.from_arg_list,
+            "URL_EXTRACT_HOST": lambda args: exp.ParseUrl(
+                this=seq_get(args, 0), expression="'HOST'"
+            ),
+            "URL_EXTRACT_PATH": lambda args: exp.ParseUrl(
+                this=seq_get(args, 0), expression="'PATH'"
+            ),
+            "URL_EXTRACT_PORT": lambda args: exp.ParseUrl(
+                this=seq_get(args, 0), expression="'PORT'"
+            ),
+            "URL_EXTRACT_PROTOCOL": lambda args: exp.ParseUrl(
+                this=seq_get(args, 0), expression="'PROTOCOL'"
+            ),
+            "URL_EXTRACT_QUERY": lambda args: exp.ParseUrl(
+                this=seq_get(args, 0), expression="'QUERY'"
+            ),
         }
         FUNCTION_PARSERS = parser.Parser.FUNCTION_PARSERS.copy()
         FUNCTION_PARSERS.pop("TRIM")
