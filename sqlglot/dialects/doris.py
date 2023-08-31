@@ -11,32 +11,10 @@ from sqlglot.dialects.mysql import MySQL
 from sqlglot.dialects.tsql import DATE_DELTA_INTERVAL
 
 
-def _to_date_sql(self: generator.Generator, expression: exp.TsOrDsToDate) -> str:
-    if isinstance(expression, exp.Anonymous):
-        expressions = expression.args.get("expressions")
-        if expressions is None or len(expressions) == 0:
-            raise ValueError("Missing expressions for TO_DATE")
-        expr = expressions[0]
-        time_format = expressions[1] if len(expressions) > 1 else None
-        expr_TIMESTAMP = self.sql(expression, "this")
-        if expr_TIMESTAMP == "TIMESTAMP":
-            return f"TIMESTAMP({expr})"
-    elif isinstance(expression, exp.TsOrDsToDate):
-        expr = expression.args.get("this")
-        time_format = expression.args.get("format")
-    else:
-        raise ValueError("Invalid expression type")
-
-    if time_format is not None:
-        return f"CAST({expr} AS DATE)"
-    else:
-        return f"CAST({expr} AS DATE)"
-
 
 def handle_date_trunc(self, expression: exp.DateTrunc) -> str:
     this = self.sql(expression, "unit")
     unit = self.sql(expression, "this").strip("\"'").lower()
-    # unit = expression.text("this").lower()
     if unit.isalpha():
         mapped_unit = (
             DATE_DELTA_INTERVAL.get(unit) if DATE_DELTA_INTERVAL.get(unit) != None else unit
@@ -71,11 +49,6 @@ def handle_todecimal(self, expression: exp.ToDecimal) -> str:
         z = self.sql(args["this"])
         precision = self.sql(args["expressions"])
         return f"CAST({z} AS DECIMAL(38, {precision}))"
-
-    # Handle other functions if needed
-    # ...
-
-    # Return the original function expression if not matched
     return self.sql(expression)
 
 
@@ -160,7 +133,7 @@ class Doris(MySQL):
             exp.TimeStrToDate: rename_func("TO_DATE"),
             exp.ToChar: handle_to_char,
             exp.TsOrDsAdd: lambda self, e: f"DATE_ADD({self.sql(e, 'this')}, {self.sql(e, 'expression')})",  # Only for day level
-            exp.TsOrDsToDate: _to_date_sql,
+            exp.TsOrDsToDate: lambda self, e: f"CAST({self.sql(e,'this')} AS DATE)",
             exp.TimeStrToUnix: rename_func("UNIX_TIMESTAMP"),
             exp.TimeToUnix: rename_func("UNIX_TIMESTAMP"),
             exp.TimestampTrunc: lambda self, e: self.func(
