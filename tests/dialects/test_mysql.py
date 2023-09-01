@@ -13,6 +13,9 @@ class TestMySQL(Validator):
         self.validate_identity("CREATE TABLE foo (a BIGINT, FULLTEXT INDEX (b))")
         self.validate_identity("CREATE TABLE foo (a BIGINT, SPATIAL INDEX (b))")
         self.validate_identity(
+            "UPDATE items SET items.price = 0 WHERE items.id >= 5 ORDER BY items.id LIMIT 10"
+        )
+        self.validate_identity(
             "CREATE TABLE foo (a BIGINT, INDEX b USING HASH (c) COMMENT 'd' VISIBLE ENGINE_ATTRIBUTE = 'e' WITH PARSER foo)"
         )
         self.validate_identity(
@@ -81,6 +84,9 @@ class TestMySQL(Validator):
         )
 
     def test_identity(self):
+        self.validate_identity(
+            "SELECT * FROM x ORDER BY BINARY a", "SELECT * FROM x ORDER BY CAST(a AS BINARY)"
+        )
         self.validate_identity("SELECT 1 XOR 0")
         self.validate_identity("SELECT 1 && 0", "SELECT 1 AND 0")
         self.validate_identity("SELECT /*+ BKA(t1) NO_BKA(t2) */ * FROM t1 INNER JOIN t2")
@@ -823,3 +829,6 @@ COMMENT='客户账户表'"""
 
         cmd = self.parse_one("SET x = 1, y = 2")
         self.assertEqual(len(cmd.expressions), 2)
+
+    def test_json_object(self):
+        self.validate_identity("SELECT JSON_OBJECT('id', 87, 'name', 'carrot')")

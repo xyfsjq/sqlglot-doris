@@ -8,6 +8,7 @@ from sqlglot.dialects.dialect import (
     arrow_json_extract_scalar_sql,
     datestrtodate_sql,
     format_time_lambda,
+    json_keyvalue_comma_sql,
     locate_to_strposition,
     max_or_greatest,
     min_or_least,
@@ -496,6 +497,17 @@ class MySQL(Dialect):
 
             return self.expression(exp.SetItem, this=charset, collate=collate, kind="NAMES")
 
+        def _parse_type(self) -> t.Optional[exp.Expression]:
+            # mysql binary is special and can work anywhere, even in order by operations
+            # it operates like a no paren func
+            if self._match(TokenType.BINARY, advance=False):
+                data_type = self._parse_types(check_func=True, allow_identifiers=False)
+
+                if isinstance(data_type, exp.DataType):
+                    return self.expression(exp.Cast, this=self._parse_column(), to=data_type)
+
+            return super()._parse_type()
+
     class Generator(generator.Generator):
         LOCKING_READS_SUPPORTED = True
         NULL_ORDERING_SUPPORTED = False
@@ -520,6 +532,7 @@ class MySQL(Dialect):
             exp.GroupConcat: lambda self, e: f"""GROUP_CONCAT({self.sql(e, "this")} SEPARATOR {self.sql(e, "separator") or "','"})""",
             exp.ILike: no_ilike_sql,
             exp.JSONExtractScalar: arrow_json_extract_scalar_sql,
+            exp.JSONKeyValue: json_keyvalue_comma_sql,
             exp.Max: max_or_greatest,
             exp.Min: min_or_least,
             exp.NullSafeEQ: lambda self, e: self.binary(e, "<=>"),

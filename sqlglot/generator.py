@@ -186,6 +186,9 @@ class Generator:
     # SELECT * VALUES into SELECT UNION
     VALUES_AS_TABLE = True
 
+    # Whether or not the word COLUMN is included when adding a column with ALTER TABLE
+    ALTER_TABLE_ADD_COLUMN_KEYWORD = True
+
     TYPE_MAPPING = {
         exp.DataType.Type.NCHAR: "CHAR",
         exp.DataType.Type.NVARCHAR: "VARCHAR",
@@ -793,14 +796,16 @@ class Generator:
 
     def clone_sql(self, expression: exp.Clone) -> str:
         this = self.sql(expression, "this")
+        shallow = "SHALLOW " if expression.args.get("shallow") else ""
+        this = f"{shallow}CLONE {this}"
         when = self.sql(expression, "when")
 
         if when:
             kind = self.sql(expression, "kind")
             expr = self.sql(expression, "expression")
-            return f"CLONE {this} {when} ({kind} => {expr})"
+            return f"{this} {when} ({kind} => {expr})"
 
-        return f"CLONE {this}"
+        return this
 
     def describe_sql(self, expression: exp.Describe) -> str:
         return f"DESCRIBE {self.sql(expression, 'this')}"
@@ -1271,6 +1276,8 @@ class Generator:
             if part
         )
 
+        version = self.sql(expression, "version")
+        version = f" {version}" if version else ""
         alias = self.sql(expression, "alias")
         alias = f"{sep}{alias}" if alias else ""
         hints = self.expressions(expression, key="hints", sep=" ")
@@ -1279,10 +1286,8 @@ class Generator:
         pivots = f" {pivots}" if pivots else ""
         joins = self.expressions(expression, key="joins", sep="", skip_first=True)
         laterals = self.expressions(expression, key="laterals", sep="")
-        system_time = expression.args.get("system_time")
-        system_time = f" {self.sql(expression, 'system_time')}" if system_time else ""
 
-        return f"{table}{system_time}{alias}{hints}{pivots}{joins}{laterals}"
+        return f"{table}{version}{alias}{hints}{pivots}{joins}{laterals}"
 
     def tablesample_sql(
         self, expression: exp.TableSample, seed_prefix: str = "SEED", sep=" AS "
@@ -1337,6 +1342,12 @@ class Generator:
             nulls = ""
         return f"{direction}{nulls}({expressions} FOR {field}){alias}"
 
+    def version_sql(self, expression: exp.Version) -> str:
+        this = f"FOR {expression.name}"
+        kind = expression.text("kind")
+        expr = self.sql(expression, "expression")
+        return f"{this} {kind} {expr}"
+
     def tuple_sql(self, expression: exp.Tuple) -> str:
         return f"({self.expressions(expression, flat=True)})"
 
@@ -1346,12 +1357,13 @@ class Generator:
         from_sql = self.sql(expression, "from")
         where_sql = self.sql(expression, "where")
         returning = self.sql(expression, "returning")
+        order = self.sql(expression, "order")
         limit = self.sql(expression, "limit")
         if self.RETURNING_END:
-            expression_sql = f"{from_sql}{where_sql}{returning}{limit}"
+            expression_sql = f"{from_sql}{where_sql}{returning}"
         else:
-            expression_sql = f"{returning}{from_sql}{where_sql}{limit}"
-        sql = f"UPDATE {this} SET {set_sql}{expression_sql}"
+            expression_sql = f"{returning}{from_sql}{where_sql}"
+        sql = f"UPDATE {this} SET {set_sql}{expression_sql}{order}{limit}"
         return self.prepend_ctes(expression, sql)
 
     def values_sql(self, expression: exp.Values) -> str:
@@ -2259,7 +2271,14 @@ class Generator:
         actions = expression.args["actions"]
 
         if isinstance(actions[0], exp.ColumnDef):
-            actions = self.expressions(expression, key="actions", prefix="ADD COLUMN ")
+            if self.ALTER_TABLE_ADD_COLUMN_KEYWORD:
+                actions = self.expressions(
+                    expression,
+                    key="actions",
+                    prefix="ADD COLUMN ",
+                )
+            else:
+                actions = f"ADD {self.expressions(expression, key='actions')}"
         elif isinstance(actions[0], exp.Schema):
             actions = self.expressions(expression, key="actions", prefix="ADD COLUMNS ")
         elif isinstance(actions[0], exp.Delete):

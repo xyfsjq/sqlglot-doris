@@ -414,9 +414,9 @@ def str_position_sql(self: Generator, expression: exp.StrPosition) -> str:
 
 
 def struct_extract_sql(self: Generator, expression: exp.StructExtract) -> str:
-    this = self.sql(expression, "this")
-    struct_key = self.sql(exp.Identifier(this=expression.expression.copy(), quoted=True))
-    return f"{this}.{struct_key}"
+    return (
+        f"{self.sql(expression, 'this')}.{self.sql(exp.to_identifier(expression.expression.name))}"
+    )
 
 
 def var_map_sql(
@@ -725,3 +725,8 @@ def parse_timestamp_trunc(args: t.List) -> exp.TimestampTrunc:
 
 def any_value_to_max_sql(self: Generator, expression: exp.AnyValue) -> str:
     return self.func("MAX", expression.this)
+
+
+# Used to generate JSON_OBJECT with a comma in BigQuery and MySQL instead of colon
+def json_keyvalue_comma_sql(self, expression: exp.JSONKeyValue) -> str:
+    return f"{self.sql(expression, 'this')}, {self.sql(expression, 'expression')}"

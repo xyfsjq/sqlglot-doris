@@ -852,6 +852,9 @@ class Parser(metaclass=_Parser):
 
     SUPPORTS_USER_DEFINED_TYPES = True
 
+    # Whether or not ADD is present for each column added by ALTER TABLE
+    ALTER_TABLE_ADD_COLUMN_KEYWORD = True
+
     __slots__ = (
         "error_level",
         "error_message_context",
@@ -1303,6 +1306,8 @@ class Parser(metaclass=_Parser):
                 if self._match_text_seq("WITH", "NO", "SCHEMA", "BINDING"):
                     no_schema_binding = True
 
+            shallow = self._match_text_seq("SHALLOW")
+
             if self._match_text_seq("CLONE"):
                 clone = self._parse_table(schema=True)
                 when = self._match_texts({"AT", "BEFORE"}) and self._prev.text.upper()
@@ -1314,7 +1319,12 @@ class Parser(metaclass=_Parser):
                 clone_expression = self._match(TokenType.FARROW) and self._parse_bitwise()
                 self._match(TokenType.R_PAREN)
                 clone = self.expression(
-                    exp.Clone, this=clone, when=when, kind=clone_kind, expression=clone_expression
+                    exp.Clone,
+                    this=clone,
+                    when=when,
+                    kind=clone_kind,
+                    shallow=shallow,
+                    expression=clone_expression,
                 )
 
         return self.expression(
@@ -1929,6 +1939,7 @@ class Parser(metaclass=_Parser):
                 "from": self._parse_from(joins=True),
                 "where": self._parse_where(),
                 "returning": returning or self._parse_returning(),
+                "order": self._parse_order(),
                 "limit": self._parse_limit(),
             },
         )
@@ -2536,6 +2547,11 @@ class Parser(metaclass=_Parser):
         if schema:
             return self._parse_schema(this=this)
 
+        version = self._parse_version()
+
+        if version:
+            this.set("version", version)
+
         if self.ALIAS_POST_TABLESAMPLE:
             table_sample = self._parse_table_sample()
 
@@ -2543,10 +2559,10 @@ class Parser(metaclass=_Parser):
         if alias:
             this.set("alias", alias)
 
+        this.set("hints", self._parse_table_hints())
+
         if not this.args.get("pivots"):
             this.set("pivots", self._parse_pivots())
-
-        this.set("hints", self._parse_table_hints())
 
         if not self.ALIAS_POST_TABLESAMPLE:
             table_sample = self._parse_table_sample()
@@ -2560,6 +2576,37 @@ class Parser(metaclass=_Parser):
                 this.append("joins", join)
 
         return this
+
+    def _parse_version(self) -> t.Optional[exp.Version]:
+        if self._match(TokenType.TIMESTAMP_SNAPSHOT):
+            this = "TIMESTAMP"
+        elif self._match(TokenType.VERSION_SNAPSHOT):
+            this = "VERSION"
+        else:
+            return None
+
+        if self._match_set((TokenType.FROM, TokenType.BETWEEN)):
+            kind = self._prev.text.upper()
+            start = self._parse_bitwise()
+            self._match_texts(("TO", "AND"))
+            end = self._parse_bitwise()
+            expression: t.Optional[exp.Expression] = self.expression(
+                exp.Tuple, expressions=[start, end]
+            )
+        elif self._match_text_seq("CONTAINED", "IN"):
+            kind = "CONTAINED IN"
+            expression = self.expression(
+                exp.Tuple, expressions=self._parse_wrapped_csv(self._parse_bitwise)
+            )
+        elif self._match(TokenType.ALL):
+            kind = "ALL"
+            expression = None
+        else:
+            self._match_text_seq("AS", "OF")
+            kind = "AS OF"
+            expression = self._parse_type()
+
+        return self.expression(exp.Version, this=this, expression=expression, kind=kind)
 
     def _parse_unnest(self, with_alias: bool = True) -> t.Optional[exp.Unnest]:
         if not self._match(TokenType.UNNEST):
@@ -4096,9 +4143,9 @@ class Parser(metaclass=_Parser):
     def _parse_json_key_value(self) -> t.Optional[exp.JSONKeyValue]:
         self._match_text_seq("KEY")
         key = self._parse_field()
-        self._match(TokenType.COLON)
+        self._match_set((TokenType.COLON, TokenType.COMMA))
         self._match_text_seq("VALUE")
-        value = self._parse_field()
+        value = self._parse_column()
 
         if not key and not value:
             return None
@@ -4664,6 +4711,9 @@ class Parser(metaclass=_Parser):
             return self._parse_csv(self._parse_add_constraint)
 
         self._retreat(index)
+        if not self.ALTER_TABLE_ADD_COLUMN_KEYWORD and self._match_text_seq("ADD"):
+            return self._parse_csv(self._parse_field_def)
+
         return self._parse_csv(self._parse_add_column)
 
     def _parse_alter_table_alter(self) -> exp.AlterColumn:

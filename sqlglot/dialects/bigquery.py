@@ -12,6 +12,7 @@ from sqlglot.dialects.dialect import (
     datestrtodate_sql,
     format_time_lambda,
     inline_array_sql,
+    json_keyvalue_comma_sql,
     max_or_greatest,
     min_or_least,
     no_ilike_sql,
@@ -94,14 +95,20 @@ def _unqualify_unnest(expression: exp.Expression) -> exp.Expression:
 
     These are added by the optimizer's qualify_column step.
     """
-    from sqlglot.optimizer.scope import Scope
+    from sqlglot.optimizer.scope import find_all_in_scope
 
     if isinstance(expression, exp.Select):
-        for unnest in expression.find_all(exp.Unnest):
-            if isinstance(unnest.parent, (exp.From, exp.Join)) and unnest.alias:
-                for column in Scope(expression).find_all(exp.Column):
-                    if column.table == unnest.alias:
-                        column.set("table", None)
+        unnest_aliases = {
+            unnest.alias
+            for unnest in find_all_in_scope(expression, exp.Unnest)
+            if isinstance(unnest.parent, (exp.From, exp.Join))
+        }
+        if unnest_aliases:
+            for column in expression.find_all(exp.Column):
+                if column.table in unnest_aliases:
+                    column.set("table", None)
+                elif column.db in unnest_aliases:
+                    column.set("db", None)
 
     return expression
 
@@ -261,6 +268,7 @@ class BigQuery(Dialect):
             "TIMESTAMP": TokenType.TIMESTAMPTZ,
             "NOT DETERMINISTIC": TokenType.VOLATILE,
             "UNKNOWN": TokenType.NULL,
+            "FOR SYSTEM_TIME": TokenType.TIMESTAMP_SNAPSHOT,
         }
         KEYWORDS.pop("DIV")
 
@@ -410,6 +418,7 @@ class BigQuery(Dialect):
             exp.ILike: no_ilike_sql,
             exp.IntDiv: rename_func("DIV"),
             exp.JSONFormat: rename_func("TO_JSON_STRING"),
+            exp.JSONKeyValue: json_keyvalue_comma_sql,
             exp.Max: max_or_greatest,
             exp.MD5: lambda self, e: self.func("TO_HEX", self.func("MD5", e.this)),
             exp.MD5Digest: rename_func("MD5"),
@@ -638,3 +647,9 @@ class BigQuery(Dialect):
 
         def with_properties(self, properties: exp.Properties) -> str:
             return self.properties(properties, prefix=self.seg("OPTIONS"))
+
+        def version_sql(self, expression: exp.Version) -> str:
+            if expression.name == "TIMESTAMP":
+                expression = expression.copy()
+                expression.set("this", "SYSTEM_TIME")
+            return super().version_sql(expression)
