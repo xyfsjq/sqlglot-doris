@@ -208,6 +208,7 @@ class Hive(Dialect):
             "WITH SERDEPROPERTIES": TokenType.SERDE_PROPERTIES,
             "TIMESTAMP AS OF": TokenType.TIMESTAMP_SNAPSHOT,
             "VERSION AS OF": TokenType.VERSION_SNAPSHOT,
+            "SYSDATE": TokenType.CURRENT_TIMESTAMP,
         }
 
         NUMERIC_LITERALS = {
