@@ -72,6 +72,11 @@ def handle_replace(self, expression: exp.Replace) -> str:
         return f"REPLACE({this},{old},'')"
     return f"REPLACE({this},{old},{new})"
 
+def arrow_json_extract_sql(self, expression: exp.JSONExtract | exp.JSONBExtract) -> str:
+    expr = self.sql(expression, 'expression').strip("\"'")
+    if expr.isdigit():
+        return f"{self.sql(expression, 'this')} -> '$.[{expr}]'"
+    return f"{self.sql(expression, 'this')} -> '$.{expr}'"
 
 class Doris(MySQL):
     DATE_FORMAT = "'yyyy-MM-dd'"
@@ -113,8 +118,8 @@ class Doris(MySQL):
             exp.GroupBitmap: lambda self, e: f"BITMAP_COUNT(BITMAP_AGG({self.sql(e, 'this')}))",
             exp.GroupBitmapAnd: lambda self, e: f"BITMAP_COUNT(BITMAP_INTERSECT({self.sql(e, 'this')}))",
             exp.GroupBitmapOr: lambda self, e: f"BITMAP_COUNT(BITMAP_UNION({self.sql(e, 'this')}))",
-            exp.JSONExtractScalar: rename_func("GET_JSON_STRING"),
-            exp.JSONExtract: rename_func("GET_JSON_STRING"),
+            # exp.JSONExtractScalar: rename_func("GET_JSON_STRING"),
+            exp.JSONExtract: arrow_json_extract_sql,
             exp.LTrim: rename_func("LTRIM"),
             exp.RTrim: rename_func("RTRIM"),
             exp.Range: rename_func("ARRAY_RANGE"),
