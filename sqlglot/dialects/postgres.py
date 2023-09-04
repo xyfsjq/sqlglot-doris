@@ -295,6 +295,8 @@ class Postgres(Dialect):
             "TO_CHAR": format_time_lambda(exp.TimeToStr, "postgres"),
             "TO_TIMESTAMP": _to_timestamp,
             "UNNEST": exp.Explode.from_arg_list,
+            "LOG": exp.Log10.from_arg_list,
+            "TRUNC": exp.Truncate.from_arg_list,
         }
 
         FUNCTION_PARSERS = {

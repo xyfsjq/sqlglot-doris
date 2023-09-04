@@ -4271,6 +4271,10 @@ class ParseUrl(Func):
     arg_types = {"this": True, "expression": True}
 
 
+class Truncate(Func):
+    arg_types = {"this": True, "expression": False}
+
+
 class ArrayAgg(AggFunc):
     pass
 
