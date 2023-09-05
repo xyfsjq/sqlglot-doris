@@ -90,7 +90,7 @@ def _parse_datediff(args: t.List) -> exp.DateDiff:
     return exp.DateDiff(this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0))
 
 
-def _unix_to_time_sql(self: generator.Generator, expression: exp.UnixToTime) -> str:
+def _unix_to_time_sql(self: Snowflake.Generator, expression: exp.UnixToTime) -> str:
     scale = expression.args.get("scale")
     timestamp = self.sql(expression, "this")
     if scale in [None, exp.UnixToTime.SECONDS]:
@@ -105,7 +105,7 @@ def _unix_to_time_sql(self: generator.Generator, expression: exp.UnixToTime) -> 
 
 # https://docs.snowflake.com/en/sql-reference/functions/date_part.html
 # https://docs.snowflake.com/en/sql-reference/functions-date-time.html#label-supported-date-time-parts
-def _parse_date_part(self: parser.Parser) -> t.Optional[exp.Expression]:
+def _parse_date_part(self: Snowflake.Parser) -> t.Optional[exp.Expression]:
     this = self._parse_var() or self._parse_type()
 
     if not this:
@@ -156,7 +156,7 @@ def _nullifzero_to_if(args: t.List) -> exp.If:
     return exp.If(this=cond, true=exp.Null(), false=seq_get(args, 0))
 
 
-def _datatype_sql(self: generator.Generator, expression: exp.DataType) -> str:
+def _datatype_sql(self: Snowflake.Generator, expression: exp.DataType) -> str:
     if expression.is_type("array"):
         return "ARRAY"
     elif expression.is_type("map"):
@@ -164,7 +164,7 @@ def _datatype_sql(self: generator.Generator, expression: exp.DataType) -> str:
     return self.datatype_sql(expression)
 
 
-def _regexpilike_sql(self: generator.Generator, expression: exp.RegexpILike) -> str:
+def _regexpilike_sql(self: Snowflake.Generator, expression: exp.RegexpILike) -> str:
     flag = expression.text("flag")
 
     if "i" not in flag:
@@ -242,6 +242,7 @@ class Snowflake(Dialect):
             "DATEDIFF": _parse_datediff,
             "DIV0": _div0_to_if,
             "IFF": exp.If.from_arg_list,
+            "LISTAGG": exp.GroupConcat.from_arg_list,
             "NULLIFZERO": _nullifzero_to_if,
             "OBJECT_CONSTRUCT": _parse_object_construct,
             "REGEXP_REPLACE": _parse_regexp_replace,
@@ -361,6 +362,7 @@ class Snowflake(Dialect):
             exp.DataType: _datatype_sql,
             exp.DayOfWeek: rename_func("DAYOFWEEK"),
             exp.Extract: rename_func("DATE_PART"),
+            exp.GroupConcat: rename_func("LISTAGG"),
             exp.If: rename_func("IFF"),
             exp.LogicalAnd: rename_func("BOOLAND_AGG"),
             exp.LogicalOr: rename_func("BOOLOR_AGG"),
@@ -444,7 +446,9 @@ class Snowflake(Dialect):
             kind_value = expression.args.get("kind") or "TABLE"
             kind = f" {kind_value}" if kind_value else ""
             this = f" {self.sql(expression, 'this')}"
-            return f"DESCRIBE{kind}{this}"
+            expressions = self.expressions(expression, flat=True)
+            expressions = f" {expressions}" if expressions else ""
+            return f"DESCRIBE{kind}{this}{expressions}"
 
         def generatedasidentitycolumnconstraint_sql(
             self, expression: exp.GeneratedAsIdentityColumnConstraint

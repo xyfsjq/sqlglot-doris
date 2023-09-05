@@ -196,6 +196,7 @@ class Parser(metaclass=_Parser):
         TokenType.IMAGE,
         TokenType.VARIANT,
         TokenType.OBJECT,
+        TokenType.OBJECT_IDENTIFIER,
         TokenType.INET,
         TokenType.IPADDRESS,
         TokenType.IPPREFIX,
@@ -1752,8 +1753,10 @@ class Parser(metaclass=_Parser):
 
     def _parse_describe(self) -> exp.Describe:
         kind = self._match_set(self.CREATABLES) and self._prev.text
-        this = self._parse_table()
-        return self.expression(exp.Describe, this=this, kind=kind)
+        this = self._parse_table(schema=True)
+        properties = self._parse_properties()
+        expressions = properties.expressions if properties else None
+        return self.expression(exp.Describe, this=this, kind=kind, expressions=expressions)
 
     def _parse_insert(self) -> exp.Insert:
         comments = ensure_list(self._prev_comments)
@@ -3259,6 +3262,9 @@ class Parser(metaclass=_Parser):
         if type_token == TokenType.PSEUDO_TYPE:
             return self.expression(exp.PseudoType, this=self._prev.text)
 
+        if type_token == TokenType.OBJECT_IDENTIFIER:
+            return self.expression(exp.ObjectIdentifier, this=self._prev.text)
+
         nested = type_token in self.NESTED_TYPE_TOKENS
         is_struct = type_token in self.STRUCT_TYPE_TOKENS
         expressions = None
@@ -4142,7 +4148,7 @@ class Parser(metaclass=_Parser):
 
     def _parse_json_key_value(self) -> t.Optional[exp.JSONKeyValue]:
         self._match_text_seq("KEY")
-        key = self._parse_field()
+        key = self._parse_column()
         self._match_set((TokenType.COLON, TokenType.COMMA))
         self._match_text_seq("VALUE")
         value = self._parse_column()

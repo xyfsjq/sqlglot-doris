@@ -9,6 +9,7 @@ class TestBigQuery(Validator):
     maxDiff = None
 
     def test_bigquery(self):
+        self.validate_identity("""SELECT JSON '"foo"' AS json_data""")
         self.validate_identity("SELECT * FROM tbl FOR SYSTEM_TIME AS OF z")
 
         self.validate_all(
@@ -84,6 +85,10 @@ WHERE
         self.validate_identity("SELECT * FROM my-table")
         self.validate_identity("SELECT * FROM my-project.mydataset.mytable")
         self.validate_identity("SELECT * FROM pro-ject_id.c.d CROSS JOIN foo-bar")
+        self.validate_identity("SELECT * FROM foo.bar.25", "SELECT * FROM foo.bar.`25`")
+        self.validate_identity("SELECT * FROM foo.bar.25_", "SELECT * FROM foo.bar.`25_`")
+        self.validate_identity("SELECT * FROM foo.bar.25x a", "SELECT * FROM foo.bar.`25x` AS a")
+        self.validate_identity("SELECT * FROM foo.bar.25ab c", "SELECT * FROM foo.bar.`25ab` AS c")
         self.validate_identity("x <> ''")
         self.validate_identity("DATE_TRUNC(col, WEEK(MONDAY))")
         self.validate_identity("SELECT b'abc'")
@@ -132,6 +137,34 @@ WHERE
         self.validate_all('x <> """"""', write={"bigquery": "x <> ''"})
         self.validate_all("x <> ''''''", write={"bigquery": "x <> ''"})
         self.validate_all("CAST(x AS DATETIME)", read={"": "x::timestamp"})
+        self.validate_all(
+            "SELECT DATETIME_DIFF('2023-01-01T00:00:00', '2023-01-01T05:00:00', MILLISECOND)",
+            write={
+                "bigquery": "SELECT DATETIME_DIFF('2023-01-01T00:00:00', '2023-01-01T05:00:00', MILLISECOND)",
+                "databricks": "SELECT TIMESTAMPDIFF(MILLISECOND, '2023-01-01T05:00:00', '2023-01-01T00:00:00')",
+            },
+        ),
+        self.validate_all(
+            "SELECT DATETIME_ADD('2023-01-01T00:00:00', INTERVAL 1 MILLISECOND)",
+            write={
+                "bigquery": "SELECT DATETIME_ADD('2023-01-01T00:00:00', INTERVAL 1 MILLISECOND)",
+                "databricks": "SELECT TIMESTAMPADD(MILLISECOND, 1, '2023-01-01T00:00:00')",
+            },
+        ),
+        self.validate_all(
+            "SELECT DATETIME_SUB('2023-01-01T00:00:00', INTERVAL 1 MILLISECOND)",
+            write={
+                "bigquery": "SELECT DATETIME_SUB('2023-01-01T00:00:00', INTERVAL 1 MILLISECOND)",
+                "databricks": "SELECT TIMESTAMPADD(MILLISECOND, 1 * -1, '2023-01-01T00:00:00')",
+            },
+        ),
+        self.validate_all(
+            "SELECT DATETIME_TRUNC('2023-01-01T01:01:01', HOUR)",
+            write={
+                "bigquery": "SELECT DATETIME_TRUNC('2023-01-01T01:01:01', HOUR)",
+                "databricks": "SELECT DATE_TRUNC('HOUR', '2023-01-01T01:01:01')",
+            },
+        ),
         self.validate_all("LEAST(x, y)", read={"sqlite": "MIN(x, y)"})
         self.validate_all("CAST(x AS CHAR)", write={"bigquery": "CAST(x AS STRING)"})
         self.validate_all("CAST(x AS NCHAR)", write={"bigquery": "CAST(x AS STRING)"})
@@ -757,5 +790,22 @@ WHERE
         self.validate_identity("SELECT JSON_OBJECT('foo', 10, 'bar', TRUE) AS json_data")
         self.validate_identity("SELECT JSON_OBJECT('foo', 10, 'bar', ['a', 'b']) AS json_data")
         self.validate_identity("SELECT JSON_OBJECT('a', 10, 'a', 'foo') AS json_data")
+        self.validate_identity(
+            "SELECT JSON_OBJECT(['a', 'b'], [10, NULL]) AS json_data",
+            "SELECT JSON_OBJECT('a', 10, 'b', NULL) AS json_data",
+        )
+        self.validate_identity(
+            """SELECT JSON_OBJECT(['a', 'b'], [JSON '10', JSON '"foo"']) AS json_data""",
+            """SELECT JSON_OBJECT('a', JSON '10', 'b', JSON '"foo"') AS json_data""",
+        )
+        self.validate_identity(
+            "SELECT JSON_OBJECT(['a', 'b'], [STRUCT(10 AS id, 'Red' AS color), STRUCT(20 AS id, 'Blue' AS color)]) AS json_data",
+            "SELECT JSON_OBJECT('a', STRUCT(10 AS id, 'Red' AS color), 'b', STRUCT(20 AS id, 'Blue' AS color)) AS json_data",
+        )
+        self.validate_identity(
+            "SELECT JSON_OBJECT(['a', 'b'], [TO_JSON(10), TO_JSON(['foo', 'bar'])]) AS json_data",
+            "SELECT JSON_OBJECT('a', TO_JSON(10), 'b', TO_JSON(['foo', 'bar'])) AS json_data",
+        )
+
         with self.assertRaises(ParseError):
             transpile("SELECT JSON_OBJECT('a', 1, 'b') AS json_data", read="bigquery")

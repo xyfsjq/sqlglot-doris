@@ -1041,7 +1041,7 @@ class Clone(Expression):
 
 
 class Describe(Expression):
-    arg_types = {"this": True, "kind": False}
+    arg_types = {"this": True, "kind": False, "expressions": False}
 
 
 class Pragma(Expression):
@@ -3665,6 +3665,11 @@ class PseudoType(Expression):
     pass
 
 
+# https://www.postgresql.org/docs/15/datatype-oid.html
+class ObjectIdentifier(Expression):
+    pass
+
+
 # WHERE x <OP> EXISTS|ALL|ANY|SOME(SELECT ...)
 class SubqueryPredicate(Predicate):
     pass
@@ -4617,7 +4622,7 @@ class Greatest(Func):
     is_var_len_args = True
 
 
-class GroupConcat(Func):
+class GroupConcat(AggFunc):
     arg_types = {"this": True, "separator": False}
 
 

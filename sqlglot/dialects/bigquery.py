@@ -30,8 +30,8 @@ logger = logging.getLogger("sqlglot")
 
 def _date_add_sql(
     data_type: str, kind: str
-) -> t.Callable[[generator.Generator, exp.Expression], str]:
-    def func(self, expression):
+) -> t.Callable[[BigQuery.Generator, exp.Expression], str]:
+    def func(self: BigQuery.Generator, expression: exp.Expression) -> str:
         this = self.sql(expression, "this")
         unit = expression.args.get("unit")
         unit = exp.var(unit.name.upper() if unit else "DAY")
@@ -41,7 +41,7 @@ def _date_add_sql(
     return func
 
 
-def _derived_table_values_to_unnest(self: generator.Generator, expression: exp.Values) -> str:
+def _derived_table_values_to_unnest(self: BigQuery.Generator, expression: exp.Values) -> str:
     if not expression.find_ancestor(exp.From, exp.Join):
         return self.values_sql(expression)
 
@@ -65,7 +65,7 @@ def _derived_table_values_to_unnest(self: generator.Generator, expression: exp.V
     return self.unnest_sql(exp.Unnest(expressions=[exp.Array(expressions=structs)]))
 
 
-def _returnsproperty_sql(self: generator.Generator, expression: exp.ReturnsProperty) -> str:
+def _returnsproperty_sql(self: BigQuery.Generator, expression: exp.ReturnsProperty) -> str:
     this = expression.this
     if isinstance(this, exp.Schema):
         this = f"{this.this} <{self.expressions(this)}>"
@@ -74,7 +74,7 @@ def _returnsproperty_sql(self: generator.Generator, expression: exp.ReturnsPrope
     return f"RETURNS {this}"
 
 
-def _create_sql(self: generator.Generator, expression: exp.Create) -> str:
+def _create_sql(self: BigQuery.Generator, expression: exp.Create) -> str:
     kind = expression.args["kind"]
     returns = expression.find(exp.ReturnsProperty)
 
@@ -358,7 +358,7 @@ class BigQuery(Dialect):
         }
 
         def _parse_table_part(self, schema: bool = False) -> t.Optional[exp.Expression]:
-            this = super()._parse_table_part(schema=schema)
+            this = super()._parse_table_part(schema=schema) or self._parse_number()
 
             # https://cloud.google.com/bigquery/docs/reference/standard-sql/lexical#table_names
             if isinstance(this, exp.Identifier):
@@ -368,6 +368,17 @@ class BigQuery(Dialect):
                     table_name += f"-{self._prev.text}"
 
                 this = exp.Identifier(this=table_name, quoted=this.args.get("quoted"))
+            elif isinstance(this, exp.Literal):
+                table_name = this.name
+
+                if (
+                    self._curr
+                    and self._prev.end == self._curr.start - 1
+                    and self._parse_var(any_token=True)
+                ):
+                    table_name += self._prev.text
+
+                this = exp.Identifier(this=table_name, quoted=True)
 
             return this
 
@@ -385,6 +396,27 @@ class BigQuery(Dialect):
                 table = exp.Table(this=this, db=db, catalog=catalog)
 
             return table
+
+        def _parse_json_object(self) -> exp.JSONObject:
+            json_object = super()._parse_json_object()
+            array_kv_pair = seq_get(json_object.expressions, 0)
+
+            # Converts BQ's "signature 2" of JSON_OBJECT into SQLGlot's canonical representation
+            # https://cloud.google.com/bigquery/docs/reference/standard-sql/json_functions#json_object_signature2
+            if (
+                array_kv_pair
+                and isinstance(array_kv_pair.this, exp.Array)
+                and isinstance(array_kv_pair.expression, exp.Array)
+            ):
+                keys = array_kv_pair.this.expressions
+                values = array_kv_pair.expression.expressions
+
+                json_object.set(
+                    "expressions",
+                    [exp.JSONKeyValue(this=k, expression=v) for k, v in zip(keys, values)],
+                )
+
+            return json_object
 
     class Generator(generator.Generator):
         EXPLICIT_UNION = True
@@ -607,6 +639,13 @@ class BigQuery(Dialect):
                 )
 
             return super().attimezone_sql(expression)
+
+        def cast_sql(self, expression: exp.Cast, safe_prefix: t.Optional[str] = None) -> str:
+            # https://cloud.google.com/bigquery/docs/reference/standard-sql/lexical#json_literals
+            if expression.is_type("json"):
+                return f"JSON {self.sql(expression, 'this')}"
+
+            return super().cast_sql(expression, safe_prefix=safe_prefix)
 
         def trycast_sql(self, expression: exp.TryCast) -> str:
             return self.cast_sql(expression, safe_prefix="SAFE_")
