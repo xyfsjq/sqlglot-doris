@@ -181,6 +181,7 @@ class Presto(Dialect):
 
     class Tokenizer(tokens.Tokenizer):
         QUOTES = ["'", '"']
+        # 有冲突待解决
         # IDENTIFIERS = ["`"]
         KEYWORDS = {
             **tokens.Tokenizer.KEYWORDS,
