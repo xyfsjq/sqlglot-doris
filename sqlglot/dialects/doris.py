@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 import re
+
 from sqlglot import exp, generator
 from sqlglot.dialects.dialect import (
     approx_count_distinct_sql,
@@ -9,7 +11,6 @@ from sqlglot.dialects.dialect import (
 )
 from sqlglot.dialects.mysql import MySQL
 from sqlglot.dialects.tsql import DATE_DELTA_INTERVAL
-
 
 
 def handle_date_trunc(self, expression: exp.DateTrunc) -> str:
@@ -64,15 +65,6 @@ def handle_array_concat(self, expression: exp.ArrayStringConcat) -> str:
     return f"concat_ws({expr}, {this})"
 
 
-def handle_regexp_extract(self, expr: exp.RegexpExtract) -> str:
-    this = self.sql(expr, "this")
-    expression = self.sql(expr, "expression")
-    position = self.sql(expr, "position")
-    if position == '':
-        return f"REGEXP_EXTRACT_ALL({this}, '({expression[1:-1]})')"
-    return f"REGEXP_EXTRACT({this}, '({expression[1:-1]})', {position})"
-
-
 def handle_replace(self, expression: exp.Replace) -> str:
     this = self.sql(expression, "this")
     old = self.sql(expression, "old")
@@ -81,11 +73,51 @@ def handle_replace(self, expression: exp.Replace) -> str:
         return f"REPLACE({this},{old},'')"
     return f"REPLACE({this},{old},{new})"
 
-def arrow_json_extract_sql(self, expression: exp.JSONExtract | exp.JSONBExtract) -> str:
-    expr = self.sql(expression, 'expression').strip("\"'")
+
+def arrow_json_extract_sql(self, expression: exp.JSONExtract) -> str:
+    expr = self.sql(expression, "expression").strip("\"'")
     if expr.isdigit():
-        return f"{self.sql(expression, 'this')} -> '$.[{expr}]'"
-    return f"{self.sql(expression, 'this')} -> '$.{expr}'"
+        return f"jsonb_extract({self.sql(expression, 'this')},'$[{expr}]')"
+    return f"jsonb_extract({self.sql(expression, 'this')},'$.{expr}')"
+
+
+def arrow_jsonb_extract_sql(self, expression: exp.JSONBExtract) -> str:
+    expr = self.sql(expression, "expression").strip("\"'")
+    values = [key.strip() for key in expr[1:-1].split(",")]
+    json_path = []
+    for value in values:
+        if value.isdigit():
+            json_path.append(f"[{value}]")
+        else:
+            json_path.append(value)
+    path = ".".join(json_path)
+    return f"jsonb_extract({self.sql(expression, 'this')},'$.{path}')"
+
+
+def arrow_json_extract_scalar_sql(self, expression: exp.JSONExtractScalar) -> str:
+    expr = self.sql(expression, "expression").strip("\"'")
+    if expr.isdigit():
+        return f"json_extract({self.sql(expression, 'this')},'$.[{expr}]')"
+    return f"json_extract({self.sql(expression, 'this')},'$.{expr}')"
+
+
+def arrow_jsonb_extract_scalar_sql(self, expression: exp.JSONBExtractScalar) -> str:
+    expr = self.sql(expression, "expression").strip("\"'")
+    values = [key.strip() for key in expr[1:-1].split(",")]
+    json_path = []
+    for value in values:
+        if value.isdigit():
+            json_path.append(f"[{value}]")
+        else:
+            json_path.append(value)
+    path = ".".join(json_path)
+    return f"json_extract({self.sql(expression, 'this')},'$.{path}')"
+
+
+def no_paren_current_date_sql(self, expression: exp.CurrentDate) -> str:
+    zone = self.sql(expression, "this")
+    return f"CURRENT_DATE() AT TIME ZONE {zone}" if zone else "CURRENT_DATE()"
+
 
 class Doris(MySQL):
     DATE_FORMAT = "'yyyy-MM-dd'"
@@ -102,7 +134,7 @@ class Doris(MySQL):
 
     class Generator(MySQL.Generator):
         CAST_MAPPING = {}
-
+        INTERVAL_ALLOWS_PLURAL_FORM = False
         TYPE_MAPPING = {
             **MySQL.Generator.TYPE_MAPPING,
             exp.DataType.Type.TEXT: "STRING",
@@ -123,23 +155,25 @@ class Doris(MySQL):
             exp.BitwiseOr: rename_func("BITOR"),
             exp.BitwiseXor: rename_func("BITXOR"),
             exp.CurrentTimestamp: lambda *_: "NOW()",
+            exp.CurrentDate: no_paren_current_date_sql,
             exp.DateTrunc: handle_date_trunc,
             exp.GroupBitmap: lambda self, e: f"BITMAP_COUNT(BITMAP_AGG({self.sql(e, 'this')}))",
             exp.GroupBitmapAnd: lambda self, e: f"BITMAP_COUNT(BITMAP_INTERSECT({self.sql(e, 'this')}))",
             exp.GroupBitmapOr: lambda self, e: f"BITMAP_COUNT(BITMAP_UNION({self.sql(e, 'this')}))",
-            # exp.JSONExtractScalar: rename_func("GET_JSON_STRING"),
+            exp.JSONExtractScalar: arrow_json_extract_scalar_sql,
             exp.JSONExtract: arrow_json_extract_sql,
+            exp.JSONBExtract: arrow_jsonb_extract_sql,
+            exp.JSONBExtractScalar: arrow_jsonb_extract_scalar_sql,
             exp.LTrim: rename_func("LTRIM"),
             exp.RTrim: rename_func("RTRIM"),
             exp.Range: rename_func("ARRAY_RANGE"),
-            exp.RegexpExtract: handle_regexp_extract,
+            exp.RegexpExtract: lambda self, e: f"REGEXP_EXTRACT_ALL({self.sql(e, 'this')}, '({self.sql(e, 'expression')[1:-1]})')",
             exp.RegexpLike: rename_func("REGEXP"),
             exp.RegexpSplit: rename_func("SPLIT_BY_STRING"),
             exp.Replace: handle_replace,
             exp.Repeat: rename_func("COUNTEQUAL"),
             exp.SetAgg: rename_func("COLLECT_SET"),
             exp.SortArray: rename_func("ARRAY_SORT"),
-            exp.StrPosition: lambda self, e: f"LOCATE({self.sql(e, 'substr')}, {self.sql(e, 'this')})",
             exp.StrToUnix: _str_to_unix_sql,
             exp.Split: rename_func("SPLIT_BY_STRING"),
             exp.SafeDPipe: rename_func("CONCAT"),
@@ -175,26 +209,30 @@ class Doris(MySQL):
             exp.QuartersSub: lambda self, e: f"MONTHS_SUB({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
         }
 
-        def sub_sql(self, expression: exp.Sub) -> str:
-            if re.search(r'date', self.sql(expression, 'this'), re.IGNORECASE):
-                this = self.sql(expression, 'this')
-                expr = self.sql(expression, 'expression')
-                return f"{this} - INTERVAL {expr} DAY"
-            return self.binary(expression, "-")
-
-        def add_sql(self, expression: exp.Add) -> str:
-            if re.search(r'date', self.sql(expression, 'this'), re.IGNORECASE):
-                this = self.sql(expression, 'this')
-                expr = self.sql(expression,'expression')
-                # letters = re.findall(r'[a-zA-Z]+', expr)
-                # unit = letters[0] if letters else 'day'
-                return f"{this} + INTERVAL {expr} DAY"
-            return self.binary(expression, "+")
+        # def sub_sql(self, expression: exp.Sub) -> str:
+        #     if re.search(r'date', self.sql(expression, 'this'), re.IGNORECASE):
+        #         this = self.sql(expression, 'this')
+        #         expr = self.sql(expression, 'expression')
+        #         return f"{this} - INTERVAL {expr} DAY"
+        #     return self.binary(expression, "-")
+        #
+        # def add_sql(self, expression: exp.Add) -> str:
+        #     if re.search(r'date', self.sql(expression, 'this'), re.IGNORECASE):
+        #         this = self.sql(expression, 'this')
+        #         expr = self.sql(expression,'expression')
+        #         # letters = re.findall(r'[a-zA-Z]+', expr)
+        #         # unit = letters[0] if letters else 'day'
+        #         return f"{this} + INTERVAL {expr} DAY"
+        #     return self.binary(expression, "+")
 
         def where_sql(self, expression: exp.Where) -> str:
             this = self.indent(self.sql(expression, "this"))
-            numbers = re.findall(r'\d+', this)
-            letters = re.findall(r'[a-zA-Z]+', this)
+            numbers = re.findall(r"\d+", this)
+            letters = re.findall(r"[a-zA-Z]+", this)
             if letters[0] == "rownum":
                 return f"{self.seg('LIMIT')} {numbers[0]}"
             return f"{self.seg('WHERE')}{self.sep()}{this}"
+
+        def currentdate_sql(self, expression: exp.CurrentDate) -> str:
+            zone = self.sql(expression, "this")
+            return f"CURRENT_DATE({zone})" if zone else "CURRENT_DATE()"

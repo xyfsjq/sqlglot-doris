@@ -565,7 +565,7 @@ class TestDialect(Validator):
                 "postgres": "CAST(x AS DATE)",
                 "presto": "CAST(CAST(x AS TIMESTAMP) AS DATE)",
                 "snowflake": "CAST(x AS DATE)",
-                "doris": "TO_DATE(x)",
+                "doris": "CAST(x AS DATE)",
             },
         )
         self.validate_all(
@@ -987,7 +987,7 @@ class TestDialect(Validator):
                 "postgres": "x -> 'y'",
                 "presto": "JSON_EXTRACT(x, 'y')",
                 "starrocks": "x -> 'y'",
-                "doris": "GET_JSON_STRING(x, 'y')",
+                "doris": "jsonb_extract(x,'$.y')",
             },
         )
         self.validate_all(
