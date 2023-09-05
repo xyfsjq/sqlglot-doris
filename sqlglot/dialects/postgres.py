@@ -297,7 +297,22 @@ class Postgres(Dialect):
             "UNNEST": exp.Explode.from_arg_list,
             "LOG": exp.Log10.from_arg_list,
             "TRUNC": exp.Truncate.from_arg_list,
+            "OCTET_LENGTH": exp.Length.from_arg_list,
+            "CHR": exp.Char.from_arg_list,
+            "REGEXP_MATCH": lambda args: exp.RegexpExtract(
+                this=seq_get(args, 0), expression=seq_get(args, 1), position='1',
+            ),
+            "REGEXP_MATCHES": exp.RegexpExtract.from_arg_list,
+            "STRPOS": exp.StrPosition.from_arg_list,
+            "TO_HEX": exp.Hex.from_arg_list,
+            "ARRAY_APPEND": exp.ArrayPushback.from_arg_list,
+            "ARRAY_PREPEND": lambda args: exp.ArrayPushfront(
+                this=seq_get(args, 1), expressions=seq_get(args, 0),
+            ),
+            "BIT_AND": exp.GroupBitAnd.from_arg_list,
+            "BIT_OR": exp.GroupBitOr.from_arg_list,
         }
+
 
         FUNCTION_PARSERS = {
             **parser.Parser.FUNCTION_PARSERS,

@@ -64,6 +64,15 @@ def handle_array_concat(self, expression: exp.ArrayStringConcat) -> str:
     return f"concat_ws({expr}, {this})"
 
 
+def handle_regexp_extract(self, expr: exp.RegexpExtract) -> str:
+    this = self.sql(expr, "this")
+    expression = self.sql(expr, "expression")
+    position = self.sql(expr, "position")
+    if position == '':
+        return f"REGEXP_EXTRACT_ALL({this}, '({expression[1:-1]})')"
+    return f"REGEXP_EXTRACT({this}, '({expression[1:-1]})', {position})"
+
+
 def handle_replace(self, expression: exp.Replace) -> str:
     this = self.sql(expression, "this")
     old = self.sql(expression, "old")
@@ -123,13 +132,14 @@ class Doris(MySQL):
             exp.LTrim: rename_func("LTRIM"),
             exp.RTrim: rename_func("RTRIM"),
             exp.Range: rename_func("ARRAY_RANGE"),
-            exp.RegexpExtract: lambda self, e: f"REGEXP_EXTRACT_ALL({self.sql(e, 'this')}, '({self.sql(e, 'expression')[1:-1]})')",
+            exp.RegexpExtract: handle_regexp_extract,
             exp.RegexpLike: rename_func("REGEXP"),
             exp.RegexpSplit: rename_func("SPLIT_BY_STRING"),
             exp.Replace: handle_replace,
             exp.Repeat: rename_func("COUNTEQUAL"),
             exp.SetAgg: rename_func("COLLECT_SET"),
             exp.SortArray: rename_func("ARRAY_SORT"),
+            exp.StrPosition: lambda self, e: f"LOCATE({self.sql(e, 'substr')}, {self.sql(e, 'this')})",
             exp.StrToUnix: _str_to_unix_sql,
             exp.Split: rename_func("SPLIT_BY_STRING"),
             exp.SafeDPipe: rename_func("CONCAT"),
