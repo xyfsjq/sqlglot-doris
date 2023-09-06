@@ -6,6 +6,8 @@ class TestOracle(Validator):
     dialect = "oracle"
 
     def test_oracle(self):
+        self.validate_identity("SELECT JSON_OBJECT('name': first_name || ' ' || last_name) FROM t")
+        self.validate_identity("COALESCE(c1, c2, c3)")
         self.validate_identity("SELECT * FROM TABLE(foo)")
         self.validate_identity("SELECT a$x#b")
         self.validate_identity("SELECT :OBJECT")
@@ -43,7 +45,7 @@ class TestOracle(Validator):
             "NVL(NULL, 1)",
             write={
                 "": "COALESCE(NULL, 1)",
-                "oracle": "NVL(NULL, 1)",
+                "oracle": "COALESCE(NULL, 1)",
             },
         )
         self.validate_all(

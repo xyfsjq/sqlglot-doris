@@ -3154,12 +3154,12 @@ class Parser(metaclass=_Parser):
 
             if len(parts) == 2:
                 if unit:
-                    # this is not actually a unit, it's something else
+                    # This is not actually a unit, it's something else (e.g. a "window side")
                     unit = None
                     self._retreat(self._index - 1)
-                else:
-                    this = exp.Literal.string(parts[0])
-                    unit = self.expression(exp.Var, this=parts[1])
+
+                this = exp.Literal.string(parts[0])
+                unit = self.expression(exp.Var, this=parts[1])
 
         return self.expression(exp.Interval, this=this, unit=unit)
 
@@ -4151,7 +4151,7 @@ class Parser(metaclass=_Parser):
         key = self._parse_column()
         self._match_set((TokenType.COLON, TokenType.COMMA))
         self._match_text_seq("VALUE")
-        value = self._parse_column()
+        value = self._parse_bitwise()
 
         if not key and not value:
             return None
@@ -4852,8 +4852,7 @@ class Parser(metaclass=_Parser):
         parser = self._find_parser(self.SHOW_PARSERS, self.SHOW_TRIE)
         if parser:
             return parser(self)
-        self._advance()
-        return self.expression(exp.Show, this=self._prev.text.upper())
+        return self._parse_as_command(self._prev)
 
     def _parse_set_item_assignment(
         self, kind: t.Optional[str] = None
