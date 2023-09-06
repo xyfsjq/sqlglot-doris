@@ -159,6 +159,7 @@ class Doris(MySQL):
             exp.ArrayStringConcat: handle_array_concat,
             exp.ArrayFilter: lambda self, e: f"ARRAY_FILTER({self.sql(e, 'expression')},{self.sql(e, 'this')})",
             exp.ArrayUniq: lambda self, e: f"SIZE(ARRAY_DISTINCT({self.sql(e, 'this')}))",
+            exp.ArrayOverlaps: rename_func("ARRAYS_OVERLAP"),
             exp.BitwiseNot: rename_func("BITNOT"),
             exp.BitwiseAnd: rename_func("BITAND"),
             exp.BitwiseOr: rename_func("BITOR"),

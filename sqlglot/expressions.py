@@ -3900,8 +3900,6 @@ class Sub(Binary):
     pass
 
 
-class ArrayOverlaps(Binary):
-    pass
 
 
 # Unary Expressions
@@ -4308,9 +4306,11 @@ class ArrayContains(Binary, Func):
     pass
 
 
-class ArrayContained(Binary):
+class ArrayContained(Binary, Func):
     pass
 
+class ArrayOverlaps(Binary, Func):
+    pass
 
 class ArrayFilter(Func):
     arg_types = {"this": True, "expression": True}
