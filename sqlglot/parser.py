@@ -137,6 +137,7 @@ class Parser(metaclass=_Parser):
         TokenType.INT256,
         TokenType.UINT256,
         TokenType.MEDIUMINT,
+        TokenType.UMEDIUMINT,
         TokenType.FIXEDSTRING,
         TokenType.FLOAT,
         TokenType.DOUBLE,
@@ -204,6 +205,14 @@ class Parser(metaclass=_Parser):
         TokenType.NULL,
         *ENUM_TYPE_TOKENS,
         *NESTED_TYPE_TOKENS,
+    }
+
+    SIGNED_TO_UNSIGNED_TYPE_TOKEN = {
+        TokenType.BIGINT: TokenType.UBIGINT,
+        TokenType.INT: TokenType.UINT,
+        TokenType.MEDIUMINT: TokenType.UMEDIUMINT,
+        TokenType.SMALLINT: TokenType.USMALLINT,
+        TokenType.TINYINT: TokenType.UTINYINT,
     }
 
     SUBQUERY_PREDICATES = {
@@ -855,6 +864,9 @@ class Parser(metaclass=_Parser):
 
     # Whether or not ADD is present for each column added by ALTER TABLE
     ALTER_TABLE_ADD_COLUMN_KEYWORD = True
+
+    # Whether or not the table sample clause expects CSV syntax
+    TABLESAMPLE_CSV = False
 
     __slots__ = (
         "error_level",
@@ -2672,7 +2684,12 @@ class Parser(metaclass=_Parser):
 
         self._match(TokenType.L_PAREN)
 
-        num = self._parse_number()
+        if self.TABLESAMPLE_CSV:
+            num = None
+            expressions = self._parse_csv(self._parse_primary)
+        else:
+            expressions = None
+            num = self._parse_number()
 
         if self._match_text_seq("BUCKET"):
             bucket_numerator = self._parse_number()
@@ -2684,7 +2701,7 @@ class Parser(metaclass=_Parser):
             percent = num
         elif self._match(TokenType.ROWS):
             rows = num
-        else:
+        elif num:
             size = num
 
         self._match(TokenType.R_PAREN)
@@ -2698,6 +2715,7 @@ class Parser(metaclass=_Parser):
 
         return self.expression(
             exp.TableSample,
+            expressions=expressions,
             method=method,
             bucket_numerator=bucket_numerator,
             bucket_denominator=bucket_denominator,
@@ -3325,15 +3343,14 @@ class Parser(metaclass=_Parser):
             elif self._match_text_seq("WITHOUT", "TIME", "ZONE"):
                 maybe_func = False
         elif type_token == TokenType.INTERVAL:
-            if self._match_text_seq("YEAR", "TO", "MONTH"):
-                span: t.Optional[t.List[exp.Expression]] = [exp.IntervalYearToMonthSpan()]
-            elif self._match_text_seq("DAY", "TO", "SECOND"):
-                span = [exp.IntervalDayToSecondSpan()]
+            unit = self._parse_var()
+
+            if self._match_text_seq("TO"):
+                span = [exp.IntervalSpan(this=unit, expression=self._parse_var())]
             else:
                 span = None
 
-            unit = not span and self._parse_var()
-            if not unit:
+            if span or not unit:
                 this = self.expression(
                     exp.DataType, this=exp.DataType.Type.INTERVAL, expressions=span
                 )
@@ -3351,6 +3368,13 @@ class Parser(metaclass=_Parser):
             self._retreat(index2)
 
         if not this:
+            if self._match_text_seq("UNSIGNED"):
+                unsigned_type_token = self.SIGNED_TO_UNSIGNED_TYPE_TOKEN.get(type_token)
+                if not unsigned_type_token:
+                    self.raise_error(f"Cannot convert {type_token.value} to unsigned.")
+
+                type_token = unsigned_type_token or type_token
+
             this = exp.DataType(
                 this=exp.DataType.Type[type_token.value],
                 expressions=expressions,
@@ -4761,6 +4785,7 @@ class Parser(metaclass=_Parser):
             return self._parse_as_command(start)
 
         exists = self._parse_exists()
+        only = self._match_text_seq("ONLY")
         this = self._parse_table(schema=True)
 
         if self._next:
@@ -4776,7 +4801,9 @@ class Parser(metaclass=_Parser):
                     this=this,
                     exists=exists,
                     actions=actions,
+                    only=only,
                 )
+
         return self._parse_as_command(start)
 
     def _parse_merge(self) -> exp.Merge:
