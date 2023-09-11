@@ -72,8 +72,7 @@ class Generator:
         exp.ExternalProperty: lambda self, e: "EXTERNAL",
         exp.HeapProperty: lambda self, e: "HEAP",
         exp.InlineLengthColumnConstraint: lambda self, e: f"INLINE LENGTH {self.sql(e, 'this')}",
-        exp.IntervalDayToSecondSpan: "DAY TO SECOND",
-        exp.IntervalYearToMonthSpan: "YEAR TO MONTH",
+        exp.IntervalSpan: lambda self, e: f"{self.sql(e, 'this')} TO {self.sql(e, 'expression')}",
         exp.LanguageProperty: lambda self, e: self.naked_property(e),
         exp.LocationProperty: lambda self, e: self.naked_property(e),
         exp.LogProperty: lambda self, e: f"{'NO ' if e.args.get('no') else ''}LOG",
@@ -194,8 +193,10 @@ class Generator:
         exp.DataType.Type.NVARCHAR: "VARCHAR",
         exp.DataType.Type.MEDIUMTEXT: "TEXT",
         exp.DataType.Type.LONGTEXT: "TEXT",
+        exp.DataType.Type.TINYTEXT: "TEXT",
         exp.DataType.Type.MEDIUMBLOB: "BLOB",
         exp.DataType.Type.LONGBLOB: "BLOB",
+        exp.DataType.Type.TINYBLOB: "BLOB",
         exp.DataType.Type.INET: "INET",
     }
 
@@ -953,7 +954,7 @@ class Generator:
 
     def filter_sql(self, expression: exp.Filter) -> str:
         this = self.sql(expression, "this")
-        where = self.sql(expression, "expression")[1:]  # where has a leading space
+        where = self.sql(expression, "expression").strip()
         return f"{this} FILTER({where})"
 
     def hint_sql(self, expression: exp.Hint) -> str:
@@ -2290,7 +2291,8 @@ class Generator:
             actions = self.expressions(expression, key="actions")
 
         exists = " IF EXISTS" if expression.args.get("exists") else ""
-        return f"ALTER TABLE{exists} {self.sql(expression, 'this')} {actions}"
+        only = " ONLY" if expression.args.get("only") else ""
+        return f"ALTER TABLE{exists}{only} {self.sql(expression, 'this')} {actions}"
 
     def droppartition_sql(self, expression: exp.DropPartition) -> str:
         expressions = self.expressions(expression)

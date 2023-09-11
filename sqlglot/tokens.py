@@ -86,6 +86,7 @@ class TokenType(AutoName):
     SMALLINT = auto()
     USMALLINT = auto()
     MEDIUMINT = auto()
+    UMEDIUMINT = auto()
     INT = auto()
     UINT = auto()
     BIGINT = auto()
@@ -107,6 +108,8 @@ class TokenType(AutoName):
     LONGTEXT = auto()
     MEDIUMBLOB = auto()
     LONGBLOB = auto()
+    TINYBLOB = auto()
+    TINYTEXT = auto()
     BINARY = auto()
     VARBINARY = auto()
     JSON = auto()
@@ -674,6 +677,7 @@ class Tokenizer(metaclass=_Tokenizer):
         "BOOL": TokenType.BOOLEAN,
         "BOOLEAN": TokenType.BOOLEAN,
         "BYTE": TokenType.TINYINT,
+        "MEDIUMINT": TokenType.MEDIUMINT,
         "TINYINT": TokenType.TINYINT,
         "SHORT": TokenType.SMALLINT,
         "SMALLINT": TokenType.SMALLINT,
@@ -711,10 +715,16 @@ class Tokenizer(metaclass=_Tokenizer):
         "STR": TokenType.TEXT,
         "STRING": TokenType.TEXT,
         "TEXT": TokenType.TEXT,
+        "LONGTEXT": TokenType.LONGTEXT,
+        "MEDIUMTEXT": TokenType.MEDIUMTEXT,
+        "TINYTEXT": TokenType.TINYTEXT,
         "CLOB": TokenType.TEXT,
         "LONGVARCHAR": TokenType.TEXT,
         "BINARY": TokenType.BINARY,
         "BLOB": TokenType.VARBINARY,
+        "LONGBLOB": TokenType.LONGBLOB,
+        "MEDIUMBLOB": TokenType.MEDIUMBLOB,
+        "TINYBLOB": TokenType.TINYBLOB,
         "BYTEA": TokenType.VARBINARY,
         "VARBINARY": TokenType.VARBINARY,
         "TIME": TokenType.TIME,
