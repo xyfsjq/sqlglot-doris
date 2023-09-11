@@ -23,7 +23,7 @@ def handle_date_trunc(self, expression: exp.DateTrunc) -> str:
         return f"DATE_TRUNC({mapped_unit}, {this})"
     elif unit.isdigit():
         return f"TRUNCATE({this},{unit})"
-    return f"DATE({this})"
+    return f"DATE({unit})"
 
 
 def handle_to_char(self, expression: exp.ToChar) -> str:
