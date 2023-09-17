@@ -13,6 +13,7 @@ def qualify_tables(
     db: t.Optional[str] = None,
     catalog: t.Optional[str] = None,
     schema: t.Optional[Schema] = None,
+    case_sensitive: t.Optional[bool] = None,
 ) -> E:
     """
     Rewrite sqlglot AST to have fully qualified tables. Join constructs such as
@@ -64,10 +65,14 @@ def qualify_tables(
                         source.set("db", exp.to_identifier(db))
                     if not source.args.get("catalog"):
                         source.set("catalog", exp.to_identifier(catalog))
-
                 if not source.alias:
+                    alias_name = name or source.name or next_alias_name()
+                    if case_sensitive:
+                        alias_name = alias_name.upper()
+                    else:
+                        alias_name = alias_name.lower()
                     # Mutates the source by attaching an alias to it
-                    alias(source, name or source.name or next_alias_name(), copy=False, table=True)
+                    alias(source, alias_name, copy=False, table=True, case_sensitive=case_sensitive)
 
                 pivots = source.args.get("pivots")
                 if pivots and not pivots[0].alias:
@@ -96,5 +101,4 @@ def qualify_tables(
                 if isinstance(udtf, exp.Values) and not table_alias.columns:
                     for i, e in enumerate(udtf.expressions[0].expressions):
                         table_alias.append("columns", exp.to_identifier(f"_col_{i}"))
-
     return expression

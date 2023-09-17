@@ -3904,8 +3904,6 @@ class Sub(Binary):
     pass
 
 
-
-
 # Unary Expressions
 # (NOT a)
 class Unary(Condition):
@@ -4308,8 +4306,10 @@ class ArrayContains(Binary, Func):
 class ArrayContained(Binary, Func):
     pass
 
+
 class ArrayOverlaps(Binary, Func):
     pass
+
 
 class ArrayFilter(Func):
     arg_types = {"this": True, "expression": True}
@@ -5911,6 +5911,7 @@ def alias_(
     quoted: t.Optional[bool] = None,
     dialect: DialectType = None,
     copy: bool = True,
+    case_sensitive: t.Optional[bool] = None,
     **opts,
 ):
     """Create an Alias expression.
@@ -5937,6 +5938,12 @@ def alias_(
         Alias: the aliased expression
     """
     exp = maybe_parse(expression, dialect=dialect, copy=copy, **opts)
+    if case_sensitive != None:
+        # 将表名规范为大写或者小写
+        if case_sensitive:
+            exp.set("this", exp.name.upper())
+        else:
+            exp.set("this", exp.name.lower())
     alias = to_identifier(alias, quoted=quoted)
 
     if table:
