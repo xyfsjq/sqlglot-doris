@@ -78,11 +78,32 @@ class TestSnowflake(Validator):
             r"SELECT $$a ' \ \t \x21 z $ $$",
             r"SELECT 'a \' \\ \\t \\x21 z $ '",
         )
+        self.validate_identity(
+            "SELECT {'test': 'best'}::VARIANT",
+            "SELECT CAST(OBJECT_CONSTRUCT('test', 'best') AS VARIANT)",
+        )
 
         self.validate_all("CAST(x AS BYTEINT)", write={"snowflake": "CAST(x AS INT)"})
         self.validate_all("CAST(x AS CHAR VARYING)", write={"snowflake": "CAST(x AS VARCHAR)"})
         self.validate_all("CAST(x AS CHARACTER VARYING)", write={"snowflake": "CAST(x AS VARCHAR)"})
         self.validate_all("CAST(x AS NCHAR VARYING)", write={"snowflake": "CAST(x AS VARCHAR)"})
+        self.validate_all(
+            "ARRAY_GENERATE_RANGE(0, 3)",
+            write={
+                "bigquery": "GENERATE_ARRAY(0, 3 - 1)",
+                "postgres": "GENERATE_SERIES(0, 3 - 1)",
+                "presto": "SEQUENCE(0, 3 - 1)",
+                "snowflake": "ARRAY_GENERATE_RANGE(0, (3 - 1) + 1)",
+            },
+        )
+        self.validate_all(
+            "ARRAY_GENERATE_RANGE(0, 3 + 1)",
+            read={
+                "bigquery": "GENERATE_ARRAY(0, 3)",
+                "postgres": "GENERATE_SERIES(0, 3)",
+                "presto": "SEQUENCE(0, 3)",
+            },
+        )
         self.validate_all(
             "SELECT DATE_PART('year', TIMESTAMP '2020-01-01')",
             write={

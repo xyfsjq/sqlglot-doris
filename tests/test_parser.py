@@ -433,7 +433,7 @@ class TestParser(unittest.TestCase):
         self.assertEqual(parse_one("TIMESTAMP(1) WITH TIME ZONE").sql(), "TIMESTAMPTZ(1)")
         self.assertEqual(parse_one("TIMESTAMP(1) WITH LOCAL TIME ZONE").sql(), "TIMESTAMPLTZ(1)")
         self.assertEqual(parse_one("TIMESTAMP(1) WITHOUT TIME ZONE").sql(), "TIMESTAMP(1)")
-        self.assertEqual(parse_one("""JSON '{"x":"y"}'""").sql(), """CAST('{"x":"y"}' AS JSON)""")
+        self.assertEqual(parse_one("""JSON '{"x":"y"}'""").sql(), """PARSE_JSON('{"x":"y"}')""")
         self.assertIsInstance(parse_one("TIMESTAMP(1)"), exp.Func)
         self.assertIsInstance(parse_one("TIMESTAMP('2022-01-01')"), exp.Func)
         self.assertIsInstance(parse_one("TIMESTAMP()"), exp.Func)
@@ -719,3 +719,18 @@ class TestParser(unittest.TestCase):
 
         self.assertEqual(ast.find(exp.Interval).this.sql(), "'71'")
         self.assertEqual(ast.find(exp.Interval).unit.assert_is(exp.Var).sql(), "days")
+
+    def test_parse_concat_ws(self):
+        ast = parse_one("CONCAT_WS(' ', 'John', 'Doe')")
+
+        self.assertEqual(ast.sql(), "CONCAT_WS(' ', 'John', 'Doe')")
+        self.assertEqual(ast.expressions[0].sql(), "' '")
+        self.assertEqual(ast.expressions[1].sql(), "'John'")
+        self.assertEqual(ast.expressions[2].sql(), "'Doe'")
+
+        # Ensure we can parse without argument when error level is ignore
+        ast = parse(
+            "CONCAT_WS()",
+            error_level=ErrorLevel.IGNORE,
+        )
+        self.assertEqual(ast[0].sql(), "CONCAT_WS()")

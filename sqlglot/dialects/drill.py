@@ -39,6 +39,8 @@ class Drill(Dialect):
     DATE_FORMAT = "'yyyy-MM-dd'"
     DATEINT_FORMAT = "'yyyyMMdd'"
     TIME_FORMAT = "'yyyy-MM-dd HH:mm:ss'"
+    SUPPORTS_USER_DEFINED_TYPES = False
+    SUPPORTS_SEMI_ANTI_JOIN = False
 
     TIME_MAPPING = {
         "y": "%Y",
@@ -80,7 +82,6 @@ class Drill(Dialect):
     class Parser(parser.Parser):
         STRICT_CAST = False
         CONCAT_NULL_OUTPUTS_STRING = True
-        SUPPORTS_USER_DEFINED_TYPES = False
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
@@ -135,7 +136,9 @@ class Drill(Dialect):
             exp.StrPosition: str_position_sql,
             exp.StrToDate: _str_to_date,
             exp.Pow: rename_func("POW"),
-            exp.Select: transforms.preprocess([transforms.eliminate_distinct_on]),
+            exp.Select: transforms.preprocess(
+                [transforms.eliminate_distinct_on, transforms.eliminate_semi_and_anti_joins]
+            ),
             exp.StrToTime: lambda self, e: f"TO_TIMESTAMP({self.sql(e, 'this')}, {self.format_time(e)})",
             exp.TimeStrToDate: lambda self, e: f"CAST({self.sql(e, 'this')} AS DATE)",
             exp.TimeStrToTime: timestrtotime_sql,

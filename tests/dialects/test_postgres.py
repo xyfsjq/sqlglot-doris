@@ -102,7 +102,7 @@ class TestPostgres(Validator):
             write={
                 "hive": "SELECT EXPLODE(c) FROM t",
                 "postgres": "SELECT UNNEST(c) FROM t",
-                "presto": "SELECT col FROM t CROSS JOIN UNNEST(c) AS _u(col)",
+                "presto": "SELECT IF(pos = pos_2, col) AS col FROM t, UNNEST(SEQUENCE(1, GREATEST(CARDINALITY(c)))) AS _u(pos) CROSS JOIN UNNEST(c) WITH ORDINALITY AS _u_2(col, pos_2) WHERE pos = pos_2 OR (pos > CARDINALITY(c) AND pos_2 = CARDINALITY(c))",
             },
         )
         self.validate_all(
@@ -110,7 +110,7 @@ class TestPostgres(Validator):
             write={
                 "hive": "SELECT EXPLODE(ARRAY(1))",
                 "postgres": "SELECT UNNEST(ARRAY[1])",
-                "presto": "SELECT col FROM UNNEST(ARRAY[1]) AS _u(col)",
+                "presto": "SELECT IF(pos = pos_2, col) AS col FROM UNNEST(SEQUENCE(1, GREATEST(CARDINALITY(ARRAY[1])))) AS _u(pos) CROSS JOIN UNNEST(ARRAY[1]) WITH ORDINALITY AS _u_2(col, pos_2) WHERE pos = pos_2 OR (pos > CARDINALITY(ARRAY[1]) AND pos_2 = CARDINALITY(ARRAY[1]))",
             },
         )
 
@@ -132,6 +132,9 @@ class TestPostgres(Validator):
 
         alter_table_only = """ALTER TABLE ONLY "Album" ADD CONSTRAINT "FK_AlbumArtistId" FOREIGN KEY ("ArtistId") REFERENCES "Artist" ("ArtistId") ON DELETE NO ACTION ON UPDATE NO ACTION"""
         expr = parse_one(alter_table_only)
+
+        # Checks that user-defined types are parsed into DataType instead of Identifier
+        parse_one("CREATE TABLE t (a udt)").this.expressions[0].args["kind"].assert_is(exp.DataType)
 
         self.assertIsInstance(expr, exp.AlterTable)
         self.assertEqual(expr.sql(dialect="postgres"), alter_table_only)
@@ -204,6 +207,7 @@ class TestPostgres(Validator):
             "SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY amount)",
             write={
                 "databricks": "SELECT PERCENTILE_APPROX(amount, 0.5)",
+                "postgres": "SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY amount)",
                 "presto": "SELECT APPROX_PERCENTILE(amount, 0.5)",
                 "spark": "SELECT PERCENTILE_APPROX(amount, 0.5)",
                 "trino": "SELECT APPROX_PERCENTILE(amount, 0.5)",
