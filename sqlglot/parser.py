@@ -858,6 +858,8 @@ class Parser(metaclass=_Parser):
 
     DISTINCT_TOKENS = {TokenType.DISTINCT}
 
+    NULL_TOKENS = {TokenType.NULL}
+
     STRICT_CAST = True
 
     # A NULL arg in CONCAT yields NULL by default
@@ -2944,20 +2946,20 @@ class Parser(metaclass=_Parser):
 
     def _parse_ordered(self) -> exp.Ordered:
         this = self._parse_conjunction()
-        self._match(TokenType.ASC)
 
-        is_desc = self._match(TokenType.DESC)
+        asc = self._match(TokenType.ASC)
+        desc = self._match(TokenType.DESC) or (asc and False)
+
         is_nulls_first = self._match_text_seq("NULLS", "FIRST")
         is_nulls_last = self._match_text_seq("NULLS", "LAST")
-        desc = is_desc or False
-        asc = not desc
+
         nulls_first = is_nulls_first or False
         explicitly_null_ordered = is_nulls_first or is_nulls_last
 
         if (
             not explicitly_null_ordered
             and (
-                (asc and self.NULL_ORDERING == "nulls_are_small")
+                (not desc and self.NULL_ORDERING == "nulls_are_small")
                 or (desc and self.NULL_ORDERING != "nulls_are_small")
             )
             and self.NULL_ORDERING != "nulls_are_last"
@@ -3851,6 +3853,8 @@ class Parser(metaclass=_Parser):
                     action = "NO ACTION"
                 elif self._match_text_seq("CASCADE"):
                     action = "CASCADE"
+                elif self._match_text_seq("RESTRICT"):
+                    action = "RESTRICT"
                 elif self._match_pair(TokenType.SET, TokenType.NULL):
                     action = "SET NULL"
                 elif self._match_pair(TokenType.SET, TokenType.DEFAULT):
@@ -4577,7 +4581,7 @@ class Parser(metaclass=_Parser):
         return self._parse_var() or self._parse_string()
 
     def _parse_null(self) -> t.Optional[exp.Expression]:
-        if self._match(TokenType.NULL):
+        if self._match_set(self.NULL_TOKENS):
             return self.PRIMARY_PARSERS[TokenType.NULL](self, self._prev)
         return self._parse_placeholder()
 

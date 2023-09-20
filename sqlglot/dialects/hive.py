@@ -469,6 +469,11 @@ class Hive(Dialect):
             exp.NumberToStr: rename_func("FORMAT_NUMBER"),
             exp.LastDateOfMonth: rename_func("LAST_DAY"),
             exp.National: lambda self, e: self.national_sql(e, prefix=""),
+            exp.ClusteredColumnConstraint: lambda self, e: f"({self.expressions(e, 'this', indent=False)})",
+            exp.NonClusteredColumnConstraint: lambda self, e: f"({self.expressions(e, 'this', indent=False)})",
+            exp.NotForReplicationColumnConstraint: lambda self, e: "",
+            exp.OnProperty: lambda self, e: "",
+            exp.PrimaryKeyColumnConstraint: lambda self, e: "PRIMARY KEY",
         }
 
         PROPERTIES_LOCATION = {
@@ -477,6 +482,25 @@ class Hive(Dialect):
             exp.PartitionedByProperty: exp.Properties.Location.POST_SCHEMA,
             exp.VolatileProperty: exp.Properties.Location.UNSUPPORTED,
         }
+
+        def schema_sql(self, expression: exp.Schema) -> str:
+            expression = expression.copy()
+
+            for ordered in expression.find_all(exp.Ordered):
+                if ordered.args.get("desc") is False:
+                    ordered.set("desc", None)
+
+            return super().schema_sql(expression)
+
+        def constraint_sql(self, expression: exp.Constraint) -> str:
+            expression = expression.copy()
+
+            for prop in list(expression.find_all(exp.Properties)):
+                prop.pop()
+
+            this = self.sql(expression, "this")
+            expressions = self.expressions(expression, sep=" ", flat=True)
+            return f"CONSTRAINT {this} {expressions}"
 
         def rowformatserdeproperty_sql(self, expression: exp.RowFormatSerdeProperty) -> str:
             serde_props = self.sql(expression, "serde_properties")

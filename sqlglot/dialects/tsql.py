@@ -664,11 +664,16 @@ class TSQL(Dialect):
             exists = expression.args.pop("exists", None)
             sql = super().create_sql(expression)
 
+            table = expression.find(exp.Table)
+
+            if kind == "TABLE" and expression.expression:
+                sql = f"SELECT * INTO {self.sql(table)} FROM ({self.sql(expression.expression)}) AS temp"
+
             if exists:
-                table = expression.find(exp.Table)
                 identifier = self.sql(exp.Literal.string(exp.table_name(table) if table else ""))
+                sql = self.sql(exp.Literal.string(sql))
                 if kind == "SCHEMA":
-                    sql = f"""IF NOT EXISTS (SELECT * FROM information_schema.schemata WHERE schema_name = {identifier}) EXEC('{sql}')"""
+                    sql = f"""IF NOT EXISTS (SELECT * FROM information_schema.schemata WHERE schema_name = {identifier}) EXEC({sql})"""
                 elif kind == "TABLE":
                     assert table
                     where = exp.and_(
@@ -676,10 +681,10 @@ class TSQL(Dialect):
                         exp.column("table_schema").eq(table.db) if table.db else None,
                         exp.column("table_catalog").eq(table.catalog) if table.catalog else None,
                     )
-                    sql = f"""IF NOT EXISTS (SELECT * FROM information_schema.tables WHERE {where}) EXEC('{sql}')"""
+                    sql = f"""IF NOT EXISTS (SELECT * FROM information_schema.tables WHERE {where}) EXEC({sql})"""
                 elif kind == "INDEX":
                     index = self.sql(exp.Literal.string(expression.this.text("this")))
-                    sql = f"""IF NOT EXISTS (SELECT * FROM sys.indexes WHERE object_id = object_id({identifier}) AND name = {index}) EXEC('{sql}')"""
+                    sql = f"""IF NOT EXISTS (SELECT * FROM sys.indexes WHERE object_id = object_id({identifier}) AND name = {index}) EXEC({sql})"""
             elif expression.args.get("replace"):
                 sql = sql.replace("CREATE OR REPLACE ", "CREATE OR ALTER ", 1)
 
