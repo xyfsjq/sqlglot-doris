@@ -20,6 +20,7 @@ import typing as t
 from collections import deque
 from copy import deepcopy
 from enum import auto
+from functools import reduce
 
 from sqlglot._typing import E
 from sqlglot.errors import ParseError
@@ -1170,7 +1171,7 @@ class Column(Condition):
                 parts.append(parent.expression)
             parent = parent.parent
 
-        return Dot.build(parts)
+        return Dot.build(deepcopy(parts))
 
 
 class ColumnPosition(Expression):
@@ -1320,7 +1321,13 @@ class GeneratedAsIdentityColumnConstraint(ColumnConstraintKind):
 
 # https://dev.mysql.com/doc/refman/8.0/en/create-table.html
 class IndexColumnConstraint(ColumnConstraintKind):
-    arg_types = {"this": False, "schema": True, "kind": False, "type": False, "options": False}
+    arg_types = {
+        "this": False,
+        "schema": True,
+        "kind": False,
+        "index_type": False,
+        "options": False,
+    }
 
 
 class InlineLengthColumnConstraint(ColumnConstraintKind):
@@ -1353,7 +1360,7 @@ class TitleColumnConstraint(ColumnConstraintKind):
 
 
 class UniqueColumnConstraint(ColumnConstraintKind):
-    arg_types = {"this": False}
+    arg_types = {"this": False, "index_type": False}
 
 
 class UppercaseColumnConstraint(ColumnConstraintKind):
@@ -1535,6 +1542,10 @@ class ForeignKey(Expression):
         "delete": False,
         "update": False,
     }
+
+
+class ColumnPrefix(Expression):
+    arg_types = {"this": True, "expression": True}
 
 
 class PrimaryKey(Expression):
@@ -1906,7 +1917,7 @@ class Sort(Order):
 
 
 class Ordered(Expression):
-    arg_types = {"this": True, "desc": True, "nulls_first": True}
+    arg_types = {"this": True, "desc": False, "nulls_first": True}
 
 
 class Property(Expression):
@@ -2558,7 +2569,6 @@ class Intersect(Union):
 class Unnest(UDTF):
     arg_types = {
         "expressions": True,
-        "ordinality": False,
         "alias": False,
         "offset": False,
     }
@@ -2851,6 +2861,7 @@ class Select(Subqueryable):
             prefix="LIMIT",
             dialect=dialect,
             copy=copy,
+            into_arg="expression",
             **opts,
         )
 
@@ -3795,13 +3806,7 @@ class Dot(Binary):
         if len(expressions) < 2:
             raise ValueError(f"Dot requires >= 2 expressions.")
 
-        a, b, *expressions = expressions
-        dot = Dot(this=a, expression=b)
-
-        for expression in expressions:
-            dot = Dot(this=dot, expression=expression)
-
-        return dot
+        return t.cast(Dot, reduce(lambda x, y: Dot(this=x, expression=y), expressions))
 
 
 class DPipe(Binary):
@@ -3956,6 +3961,13 @@ class Between(Predicate):
 
 class Bracket(Condition):
     arg_types = {"this": True, "expressions": True}
+
+    @property
+    def output_name(self) -> str:
+        if len(self.expressions) == 1:
+            return self.expressions[0].output_name
+
+        return super().output_name
 
 
 class SafeBracket(Bracket):
@@ -4528,6 +4540,10 @@ class Extract(Func):
     arg_types = {"this": True, "expression": True}
 
 
+class Timestamp(Func):
+    arg_types = {"this": False, "expression": False}
+
+
 class TimestampAdd(Func, TimeUnit):
     arg_types = {"this": True, "expression": True, "unit": False}
 
@@ -4579,7 +4595,8 @@ class DateToDi(Func):
 
 # https://cloud.google.com/bigquery/docs/reference/standard-sql/date_functions#date
 class Date(Func):
-    arg_types = {"this": True, "zone": False}
+    arg_types = {"this": False, "zone": False, "expressions": False}
+    is_var_len_args = True
 
 
 class Day(Func):
@@ -4647,6 +4664,10 @@ class IsNan(Func):
     _sql_names = ["IS_NAN", "ISNAN"]
 
 
+class FormatJson(Expression):
+    pass
+
+
 class JSONKeyValue(Expression):
     arg_types = {"this": True, "expression": True}
 
@@ -4657,8 +4678,45 @@ class JSONObject(Func):
         "null_handling": False,
         "unique_keys": False,
         "return_type": False,
-        "format_json": False,
         "encoding": False,
+    }
+
+
+# https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/JSON_ARRAY.html
+class JSONArray(Func):
+    arg_types = {
+        "expressions": True,
+        "null_handling": False,
+        "return_type": False,
+        "strict": False,
+    }
+
+
+# https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/JSON_ARRAYAGG.html
+class JSONArrayAgg(Func):
+    arg_types = {
+        "this": True,
+        "order": False,
+        "null_handling": False,
+        "return_type": False,
+        "strict": False,
+    }
+
+
+# https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/JSON_TABLE.html
+# Note: parsing of JSON column definitions is currently incomplete.
+class JSONColumnDef(Expression):
+    arg_types = {"this": True, "kind": False, "path": False}
+
+
+# # https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/JSON_TABLE.html
+class JSONTable(Func):
+    arg_types = {
+        "this": True,
+        "expressions": True,
+        "path": False,
+        "error_handling": False,
+        "empty_handling": False,
     }
 
 
@@ -4698,6 +4756,11 @@ class JSONFormat(Func):
 # https://dev.mysql.com/doc/refman/8.0/en/json-search-functions.html#operator_member-of
 class JSONArrayContains(Binary, Predicate, Func):
     _sql_names = ["JSON_ARRAY_CONTAINS"]
+
+
+class ParseJSON(Func):
+    # BigQuery, Snowflake have PARSE_JSON, Presto has JSON_PARSE
+    _sql_names = ["PARSE_JSON", "JSON_PARSE"]
 
 
 class Least(Func):
@@ -5237,10 +5300,11 @@ def _apply_builder(
     prefix=None,
     into=None,
     dialect=None,
+    into_arg="this",
     **opts,
 ):
     if _is_wrong_expression(expression, into):
-        expression = into(this=expression)
+        expression = into(**{into_arg: expression})
     instance = maybe_copy(instance, copy)
     expression = maybe_parse(
         sql_or_expression=expression,
