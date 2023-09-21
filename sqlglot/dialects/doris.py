@@ -132,18 +132,22 @@ class Doris(MySQL):
     DATE_FORMAT = "'yyyy-MM-dd'"
     DATEINT_FORMAT = "'yyyyMMdd'"
     # 后面考虑改成doris的默认格式，暂时doris的2.0.0由于str_to_date对yyyy-MM-dd这些格式有点问题，已修复https://github.com/apache/doris/pull/22981
-    # TIME_FORMAT = "'%Y-%m-%d %H:%i-%s'"
+    TIME_FORMAT = "'yyyy-MM-dd HH:mm:ss'"
 
     class Parser(MySQL.Parser):
         FUNCTIONS = {
             **MySQL.Parser.FUNCTIONS,
             "DATE_TRUNC": parse_timestamp_trunc,
             "REGEXP": exp.RegexpLike.from_arg_list,
+            "FROM_UNIXTIME": exp.StrToUnix.from_arg_list,
+            "SIZE": exp.ArraySize.from_arg_list,
+            "COLLECT_LIST": exp.ArrayAgg.from_arg_list,
         }
 
     class Generator(MySQL.Generator):
         CAST_MAPPING = {}
         INTERVAL_ALLOWS_PLURAL_FORM = False
+        # case_sensitive
         TYPE_MAPPING = {
             **MySQL.Generator.TYPE_MAPPING,
             exp.DataType.Type.TEXT: "STRING",

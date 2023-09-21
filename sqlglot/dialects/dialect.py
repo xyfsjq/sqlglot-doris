@@ -438,7 +438,7 @@ def var_map_sql(
 
 
 def format_time_lambda(
-    exp_class: t.Type[E], dialect: str, default: t.Optional[bool | str] = None
+    exp_class: t.Type[E], dialect: str, default: t.Optional[bool | str] = "None"
 ) -> t.Callable[[t.List], E]:
     """Helper used for time expressions.
 
@@ -452,13 +452,21 @@ def format_time_lambda(
     """
 
     def _format_time(args: t.List):
-        return exp_class(
-            this=seq_get(args, 0),
-            format=Dialect[dialect].format_time(
-                seq_get(args, 1)
-                or (Dialect[dialect].TIME_FORMAT if default is True else default or None)
-            ),
-        )
+
+        if len(args) == 2 or len(args) == 1:
+            return exp_class(
+                this=seq_get(args, 0),
+                format=Dialect[dialect].format_time(
+                    seq_get(args, 1)
+                    or (Dialect[dialect].TIME_FORMAT if default is True else default or None)
+                ),
+            )
+        else:
+            return exp_class(
+                this=seq_get(args, 0),
+                format=Dialect[dialect].format_time(seq_get(args, 1)),
+            )
+
 
     return _format_time
 
