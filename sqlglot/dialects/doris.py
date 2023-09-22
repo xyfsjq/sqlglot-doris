@@ -198,7 +198,7 @@ class Doris(MySQL):
             exp.Slice: rename_func("ARRAY_SLICE"),
             exp.TimeStrToDate: rename_func("TO_DATE"),
             exp.ToChar: handle_to_char,
-            exp.TsOrDsAdd: lambda self, e: f"DATE_ADD({self.sql(e, 'this')}, {self.sql(e, 'expression')})",  # Only for day level
+            exp.TsOrDsAdd: lambda self, e: f"DATE_ADD({self.sql(e, 'this')}, INTERVAL {self.sql(e, 'expression')} {self.sql(e, 'unit')})",  # Only for day level
             exp.TsOrDsToDate: lambda self, e: f"CAST({self.sql(e,'this')} AS DATE)",
             exp.TimeStrToUnix: rename_func("UNIX_TIMESTAMP"),
             exp.TimeToUnix: rename_func("UNIX_TIMESTAMP"),
