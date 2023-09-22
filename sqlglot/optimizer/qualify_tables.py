@@ -67,10 +67,13 @@ def qualify_tables(
                         source.set("catalog", exp.to_identifier(catalog))
                 if not source.alias:
                     alias_name = name or source.name or next_alias_name()
-                    if case_sensitive:
-                        alias_name = alias_name.upper()
+                    if case_sensitive == None:
+                        pass
                     else:
-                        alias_name = alias_name.lower()
+                        if case_sensitive:
+                            alias_name = alias_name.upper()
+                        else:
+                            alias_name = alias_name.lower()
                     # Mutates the source by attaching an alias to it
                     alias(source, alias_name, copy=False, table=True, case_sensitive=case_sensitive)
 
