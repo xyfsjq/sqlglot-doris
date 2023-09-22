@@ -10,6 +10,7 @@ from sqlglot.dialects.dialect import (
     any_value_to_max_sql,
     max_or_greatest,
     min_or_least,
+    move_insert_cte_sql,
     parse_date_delta,
     rename_func,
     timestrtotime_sql,
@@ -346,6 +347,8 @@ class TSQL(Dialect):
         }
 
     class Parser(parser.Parser):
+        SET_REQUIRES_ASSIGNMENT_DELIMITER = False
+
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
             "CHARINDEX": lambda args: exp.StrPosition(
@@ -610,6 +613,7 @@ class TSQL(Dialect):
             exp.Extract: rename_func("DATEPART"),
             exp.GroupConcat: _string_agg_sql,
             exp.If: rename_func("IIF"),
+            exp.Insert: move_insert_cte_sql,
             exp.Max: max_or_greatest,
             exp.MD5: lambda self, e: self.func("HASHBYTES", exp.Literal.string("MD5"), e.this),
             exp.Min: min_or_least,
@@ -634,6 +638,14 @@ class TSQL(Dialect):
             **generator.Generator.PROPERTIES_LOCATION,
             exp.VolatileProperty: exp.Properties.Location.UNSUPPORTED,
         }
+
+        def setitem_sql(self, expression: exp.SetItem) -> str:
+            this = expression.this
+            if isinstance(this, exp.EQ) and not isinstance(this.left, exp.Parameter):
+                # T-SQL does not use '=' in SET command, except when the LHS is a variable.
+                return f"{self.sql(this.left)} {self.sql(this.right)}"
+
+            return super().setitem_sql(expression)
 
         def boolean_sql(self, expression: exp.Boolean) -> str:
             if type(expression.parent) in BIT_TYPES:

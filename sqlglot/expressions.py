@@ -664,16 +664,6 @@ class Expression(metaclass=_Expression):
 
         return load(obj)
 
-
-IntoType = t.Union[
-    str,
-    t.Type[Expression],
-    t.Collection[t.Union[str, t.Type[Expression]]],
-]
-ExpOrStr = t.Union[str, Expression]
-
-
-class Condition(Expression):
     def and_(
         self,
         *expressions: t.Optional[ExpOrStr],
@@ -766,6 +756,12 @@ class Condition(Expression):
         return Bracket(
             this=self.copy(), expressions=[convert(e, copy=True) for e in ensure_list(other)]
         )
+
+    def __iter__(self):
+        # We define this because __getitem__ converts Expression into an iterable, which is
+        # problematic because one can hit infinite loops if they do "for x in some_expr: ..."
+        # See: https://peps.python.org/pep-0234/
+        raise TypeError(f"'{self.__class__.__name__}' object is not iterable")
 
     def isin(
         self,
@@ -884,6 +880,18 @@ class Condition(Expression):
 
     def __invert__(self) -> Not:
         return not_(self.copy())
+
+
+IntoType = t.Union[
+    str,
+    t.Type[Expression],
+    t.Collection[t.Union[str, t.Type[Expression]]],
+]
+ExpOrStr = t.Union[str, Expression]
+
+
+class Condition(Expression):
+    """Logical conditions like x AND y, or simply x"""
 
 
 class Predicate(Condition):
@@ -1043,6 +1051,10 @@ class Clone(Expression):
 
 class Describe(Expression):
     arg_types = {"this": True, "kind": False, "expressions": False}
+
+
+class Kill(Expression):
+    arg_types = {"this": True, "kind": False}
 
 
 class Pragma(Expression):
@@ -1607,6 +1619,7 @@ class Index(Expression):
         "primary": False,
         "amp": False,  # teradata
         "partition_by": False,  # teradata
+        "where": False,  # postgres partial indexes
     }
 
 
@@ -4003,6 +4016,10 @@ class TimeUnit(Expression):
 
         super().__init__(**args)
 
+    @property
+    def unit(self) -> t.Optional[Var]:
+        return self.args.get("unit")
+
 
 # https://www.oracletutorial.com/oracle-basics/oracle-interval/
 # https://trino.io/docs/current/language/types.html#interval-day-to-second
@@ -4013,10 +4030,6 @@ class IntervalSpan(Expression):
 
 class Interval(TimeUnit):
     arg_types = {"this": False, "unit": False}
-
-    @property
-    def unit(self) -> t.Optional[Var]:
-        return self.args.get("unit")
 
 
 class IgnoreNulls(Expression):
@@ -4494,6 +4507,10 @@ class DateDiff(Func, TimeUnit):
 
 class DateTrunc(Func):
     arg_types = {"unit": True, "this": False, "zone": False}
+
+    @property
+    def unit(self) -> Expression:
+        return self.args["unit"]
 
 
 class DatetimeAdd(Func, TimeUnit):

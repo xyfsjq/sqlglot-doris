@@ -577,6 +577,12 @@ class TestTSQL(Validator):
             },
         )
 
+    def test_insert_cte(self):
+        self.validate_all(
+            "INSERT INTO foo.bar WITH cte AS (SELECT 1 AS one) SELECT * FROM cte",
+            write={"tsql": "WITH cte AS (SELECT 1 AS one) INSERT INTO foo.bar SELECT * FROM cte"},
+        )
+
     def test_transaction(self):
         # BEGIN { TRAN | TRANSACTION }
         #    [ { transaction_name | @tran_name_variable }
@@ -1187,6 +1193,16 @@ WHERE
         self.assertIsInstance(table.this, exp.Parameter)
         self.assertIsInstance(table.this.this, exp.Var)
 
+        self.validate_all(
+            "SELECT @x",
+            write={
+                "databricks": "SELECT ${x}",
+                "hive": "SELECT ${x}",
+                "spark": "SELECT ${x}",
+                "tsql": "SELECT @x",
+            },
+        )
+
     def test_temp_table(self):
         self.validate_all(
             "SELECT * FROM #mytemptable",
@@ -1327,4 +1343,22 @@ FROM OPENJSON(@json) WITH (
 )"""
             },
             pretty=True,
+        )
+
+    def test_set(self):
+        self.validate_all(
+            "SET KEY VALUE",
+            write={
+                "tsql": "SET KEY VALUE",
+                "duckdb": "SET KEY = VALUE",
+                "spark": "SET KEY = VALUE",
+            },
+        )
+        self.validate_all(
+            "SET @count = (SELECT COUNT(1) FROM x)",
+            write={
+                "databricks": "SET count = (SELECT COUNT(1) FROM x)",
+                "tsql": "SET @count = (SELECT COUNT(1) FROM x)",
+                "spark": "SET count = (SELECT COUNT(1) FROM x)",
+            },
         )

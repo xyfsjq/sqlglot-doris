@@ -278,6 +278,7 @@ class Parser(metaclass=_Parser):
         TokenType.ISNULL,
         TokenType.INTERVAL,
         TokenType.KEEP,
+        TokenType.KILL,
         TokenType.LEFT,
         TokenType.LOAD,
         TokenType.MERGE,
@@ -285,6 +286,7 @@ class Parser(metaclass=_Parser):
         TokenType.NEXT,
         TokenType.OFFSET,
         TokenType.ORDINALITY,
+        TokenType.OVERLAPS,
         TokenType.OVERWRITE,
         TokenType.PARTITION,
         TokenType.PERCENT,
@@ -543,6 +545,7 @@ class Parser(metaclass=_Parser):
         TokenType.DESCRIBE: lambda self: self._parse_describe(),
         TokenType.DROP: lambda self: self._parse_drop(),
         TokenType.INSERT: lambda self: self._parse_insert(),
+        TokenType.KILL: lambda self: self._parse_kill(),
         TokenType.LOAD: lambda self: self._parse_load(),
         TokenType.MERGE: lambda self: self._parse_merge(),
         TokenType.PIVOT: lambda self: self._parse_simplified_pivot(),
@@ -876,6 +879,9 @@ class Parser(metaclass=_Parser):
 
     # Whether or not the table sample clause expects CSV syntax
     TABLESAMPLE_CSV = False
+
+    # Whether or not the SET command needs a delimiter (e.g. "=") for assignments.
+    SET_REQUIRES_ASSIGNMENT_DELIMITER = True
 
     __slots__ = (
         "error_level",
@@ -1822,6 +1828,15 @@ class Parser(metaclass=_Parser):
             ignore=ignore,
         )
 
+    def _parse_kill(self) -> exp.Kill:
+        kind = exp.var(self._prev.text) if self._match_texts(("CONNECTION", "QUERY")) else None
+
+        return self.expression(
+            exp.Kill,
+            this=self._parse_primary(),
+            kind=kind,
+        )
+
     def _parse_on_conflict(self) -> t.Optional[exp.OnConflict]:
         conflict = self._match_text_seq("ON", "CONFLICT")
         duplicate = self._match_text_seq("ON", "DUPLICATE", "KEY")
@@ -2463,7 +2478,7 @@ class Parser(metaclass=_Parser):
             index = self._parse_id_var()
             table = None
 
-        using = self._parse_field() if self._match(TokenType.USING) else None
+        using = self._parse_var(any_token=True) if self._match(TokenType.USING) else None
 
         if self._match(TokenType.L_PAREN, advance=False):
             columns = self._parse_wrapped_csv(self._parse_ordered)
@@ -2480,6 +2495,7 @@ class Parser(metaclass=_Parser):
             primary=primary,
             amp=amp,
             partition_by=self._parse_partition_by(),
+            where=self._parse_where(),
         )
 
     def _parse_table_hints(self) -> t.Optional[t.List[exp.Expression]]:
@@ -4616,14 +4632,18 @@ class Parser(metaclass=_Parser):
             return None
         if self._match(TokenType.L_PAREN, advance=False):
             return self._parse_wrapped_csv(self._parse_column)
-        return self._parse_csv(self._parse_column)
+
+        except_column = self._parse_column()
+        return [except_column] if except_column else None
 
     def _parse_replace(self) -> t.Optional[t.List[exp.Expression]]:
         if not self._match(TokenType.REPLACE):
             return None
         if self._match(TokenType.L_PAREN, advance=False):
             return self._parse_wrapped_csv(self._parse_expression)
-        return self._parse_expressions()
+
+        replace_expression = self._parse_expression()
+        return [replace_expression] if replace_expression else None
 
     def _parse_csv(
         self, parse_method: t.Callable, sep: TokenType = TokenType.COMMA
@@ -4939,8 +4959,9 @@ class Parser(metaclass=_Parser):
             return self._parse_set_transaction(global_=kind == "GLOBAL")
 
         left = self._parse_primary() or self._parse_id_var()
+        assignment_delimiter = self._match_texts(("=", "TO"))
 
-        if not self._match_texts(("=", "TO")):
+        if not left or (self.SET_REQUIRES_ASSIGNMENT_DELIMITER and not assignment_delimiter):
             self._retreat(index)
             return None
 

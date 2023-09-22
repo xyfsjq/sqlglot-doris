@@ -197,6 +197,9 @@ class Generator:
     # Whether or not JOIN sides (LEFT, RIGHT) are supported in conjunction with SEMI/ANTI join kinds
     SEMI_ANTI_JOIN_WITH_SIDE = True
 
+    # Whether or not session variables / parameters are supported, e.g. @x in T-SQL
+    SUPPORTS_PARAMETERS = True
+
     TYPE_MAPPING = {
         exp.DataType.Type.NCHAR: "CHAR",
         exp.DataType.Type.NVARCHAR: "VARCHAR",
@@ -992,13 +995,14 @@ class Generator:
         table = self.sql(expression, "table")
         table = f"{self.INDEX_ON} {table}" if table else ""
         using = self.sql(expression, "using")
-        using = f" USING {using} " if using else ""
+        using = f" USING {using}" if using else ""
         index = "INDEX " if not table else ""
         columns = self.expressions(expression, key="columns", flat=True)
         columns = f"({columns})" if columns else ""
         partition_by = self.expressions(expression, key="partition_by", flat=True)
         partition_by = f" PARTITION BY {partition_by}" if partition_by else ""
-        return f"{unique}{primary}{amp}{index}{name}{table}{using}{columns}{partition_by}"
+        where = self.sql(expression, "where")
+        return f"{unique}{primary}{amp}{index}{name}{table}{using}{columns}{partition_by}{where}"
 
     def identifier_sql(self, expression: exp.Identifier) -> str:
         text = expression.name
@@ -1241,6 +1245,13 @@ class Generator:
     def introducer_sql(self, expression: exp.Introducer) -> str:
         return f"{self.sql(expression, 'this')} {self.sql(expression, 'expression')}"
 
+    def kill_sql(self, expression: exp.Kill) -> str:
+        kind = self.sql(expression, "kind")
+        kind = f" {kind}" if kind else ""
+        this = self.sql(expression, "this")
+        this = f" {this}" if this else ""
+        return f"KILL{kind}{this}"
+
     def pseudotype_sql(self, expression: exp.PseudoType) -> str:
         return expression.name.upper()
 
@@ -1403,9 +1414,6 @@ class Generator:
             return f"{values} AS {alias}" if alias else values
 
         # Converts `VALUES...` expression into a series of select unions.
-        # Note: If you have a lot of unions then this will result in a large number of recursive statements to
-        # evaluate the expression. You may need to increase `sys.setrecursionlimit` to run and it can also be
-        # very slow.
         expression = expression.copy()
         column_names = expression.alias and expression.args["alias"].columns
 
@@ -1421,14 +1429,22 @@ class Generator:
 
             selects.append(exp.Select(expressions=row))
 
-        subquery_expression: exp.Select | exp.Union = selects[0]
-        if len(selects) > 1:
-            for select in selects[1:]:
-                subquery_expression = exp.union(
-                    subquery_expression, select, distinct=False, copy=False
-                )
+        if self.pretty:
+            # This may result in poor performance for large-cardinality `VALUES` tables, due to
+            # the deep nesting of the resulting exp.Unions. If this is a problem, either increase
+            # `sys.setrecursionlimit` to avoid RecursionErrors, or don't set `pretty`.
+            subquery_expression: exp.Select | exp.Union = selects[0]
+            if len(selects) > 1:
+                for select in selects[1:]:
+                    subquery_expression = exp.union(
+                        subquery_expression, select, distinct=False, copy=False
+                    )
 
-        return self.subquery_sql(subquery_expression.subquery(expression.alias, copy=False))
+            return self.subquery_sql(subquery_expression.subquery(expression.alias, copy=False))
+
+        alias = f" AS {expression.alias}" if expression.alias else ""
+        unions = " UNION ALL ".join(self.sql(select) for select in selects)
+        return f"({unions}){alias}"
 
     def var_sql(self, expression: exp.Var) -> str:
         return self.sql(expression, "this")
@@ -1839,8 +1855,7 @@ class Generator:
 
     def parameter_sql(self, expression: exp.Parameter) -> str:
         this = self.sql(expression, "this")
-        this = f"{{{this}}}" if expression.args.get("wrapped") else f"{this}"
-        return f"{self.PARAMETER_TOKEN}{this}"
+        return f"{self.PARAMETER_TOKEN}{this}" if self.SUPPORTS_PARAMETERS else this
 
     def sessionparameter_sql(self, expression: exp.SessionParameter) -> str:
         this = self.sql(expression, "this")
