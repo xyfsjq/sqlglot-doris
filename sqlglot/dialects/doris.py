@@ -25,9 +25,30 @@ def handle_date_trunc(self, expression: exp.DateTrunc) -> str:
         return f"TRUNCATE({this},{unit})"
     return f"DATE({unit})"
 
+def handle_date_diff(self, expression: exp.DateDiff) -> str:
+    this = self.sql(expression, "unit")
+    expressions = self.sql(expression, "expression")
+    unit = self.sql(expression, "this").lower()
+    if unit == "microsecond":
+        return f"MICROSECONDS_DIFF({this},{expressions})"
+    elif unit == "millisecond":
+        return f"MILLISECONDS_DIFF({this},{expressions})"
+    elif unit == "second":
+        return f"SECONDS_DIFF({this},{expressions})"
+    elif unit == "minute":
+        return f"MINUTES_DIFF({this},{expressions})"
+    elif unit == "hour":
+        return f"HOURS_DIFF({this},{expressions})"
+    elif unit == "day":
+        return f"DATEDIFF({this},{expressions})"
+    elif unit == "month":
+        return f"MONTHS_DIFF({this},{expressions})"
+    elif unit == "year":
+        return f"YEARS_DIFF({this},{expressions})"
 
 def handle_to_char(self, expression: exp.ToChar) -> str:
-    self.sql(expression, "this")
+    if self.sql(expression, "format") == "":
+        return f"DATE_FORMAT({self.sql(expression, 'this')}, '%H:%i:%s')"
     decimal_places, has_decimal = parse_format_string(self.sql(expression, "format"))
     if has_decimal:
         return f"Round({self.sql(expression, 'this')},{decimal_places})"
@@ -37,7 +58,8 @@ def handle_to_char(self, expression: exp.ToChar) -> str:
 
 def parse_format_string(format_string):
     decimal_places = None
-    if "." in format_string:
+    number_pattern = r"^[-+]?\d+(\.\d+)?$"
+    if re.match(number_pattern, format_string):
         decimal_places = len(format_string) - format_string.index(".") - 2
     has_decimal = decimal_places is not None
     return decimal_places, has_decimal
@@ -63,6 +85,18 @@ def handle_array_concat(self, expression: exp.ArrayStringConcat) -> str:
     if expr == "":
         return f"concat_ws('',{this})"
     return f"concat_ws({expr}, {this})"
+
+
+def handle_geography(
+    self, expression: exp.StAstext
+) -> str:  # Realize the identification of geography
+    this = self.sql(expression, "this").upper()
+    match = re.search(r"POINT\(([-\d.]+) ([-\d.]+)\)", this)
+    if match is None:
+        return f"ST_ASTEXT(ST_GEOMETRYFROMWKB({this}))"
+    x = float(match.group(1))
+    y = float(match.group(2))
+    return f"ST_ASTEXT(ST_POINT{x, y})"
 
 
 def handle_replace(self, expression: exp.Replace) -> str:
@@ -172,7 +206,9 @@ class Doris(MySQL):
             exp.BitwiseXor: rename_func("BITXOR"),
             exp.CurrentTimestamp: lambda *_: "NOW()",
             exp.CurrentDate: no_paren_current_date_sql,
+            exp.DateDiff: handle_date_diff,
             exp.DateTrunc: handle_date_trunc,
+            exp.Explode: rename_func("LATERAL VIEW EXPLODE"),
             exp.GroupBitmap: lambda self, e: f"BITMAP_COUNT(BITMAP_AGG({self.sql(e, 'this')}))",
             exp.GroupBitmapAnd: lambda self, e: f"BITMAP_COUNT(BITMAP_INTERSECT({self.sql(e, 'this')}))",
             exp.GroupBitmapOr: lambda self, e: f"BITMAP_COUNT(BITMAP_UNION({self.sql(e, 'this')}))",
@@ -196,10 +232,12 @@ class Doris(MySQL):
             exp.SafeDPipe: rename_func("CONCAT"),
             exp.Shuffle: rename_func("ARRAY_SHUFFLE"),
             exp.Slice: rename_func("ARRAY_SLICE"),
+            exp.StAstext: handle_geography,
             exp.TimeStrToDate: rename_func("TO_DATE"),
             exp.ToChar: handle_to_char,
-            exp.TsOrDsAdd: lambda self, e: f"DATE_ADD({self.sql(e, 'this')}, INTERVAL {self.sql(e, 'expression')} {self.sql(e, 'unit')})",  # Only for day level
-            exp.TsOrDsToDate: lambda self, e: f"CAST({self.sql(e,'this')} AS DATE)",
+            exp.TsOrDsAdd: lambda self, e: f"DATE_ADD({self.sql(e, 'this')}, INTERVAL {self.sql(e, 'expression')} {self.sql(e, 'unit')})",
+            # Only for day level
+            exp.TsOrDsToDate: lambda self, e: f"CAST({self.sql(e, 'this')} AS DATE)",
             exp.TimeStrToUnix: rename_func("UNIX_TIMESTAMP"),
             exp.TimeToUnix: rename_func("UNIX_TIMESTAMP"),
             exp.TimestampTrunc: lambda self, e: self.func(
@@ -222,7 +260,7 @@ class Doris(MySQL):
                 "FROM_UNIXTIME", e.this, time_format("doris")(self, e)
             ),
             exp.UnixToTime: rename_func("FROM_UNIXTIME"),
-            exp.QuartersAdd: lambda self, e: f"MONTHS_ADD({self.sql(e, 'this')},{3 * int(self.sql(e,'expression'))})",
+            exp.QuartersAdd: lambda self, e: f"MONTHS_ADD({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
             exp.QuartersSub: lambda self, e: f"MONTHS_SUB({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
         }
 

@@ -4306,6 +4306,11 @@ class Char(Func):
     arg_types = {"this": True, "expression": False}
 
 
+class StAstext(Func):
+    _sql_names = ["TO_GEOGRAPHY", "TRY_TO_GEOGRAPHY", "ST_GEOGRAPHYFROMWKB"]
+    arg_types = {"this": True, "expression": False}
+
+
 class ArrayAgg(AggFunc):
     pass
 

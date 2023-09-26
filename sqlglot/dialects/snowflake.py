@@ -274,6 +274,12 @@ class Snowflake(Dialect):
             "TO_TIMESTAMP": _parse_to_timestamp,
             "TO_VARCHAR": exp.ToChar.from_arg_list,
             "ZEROIFNULL": _zeroifnull_to_if,
+            "BITAND_AGG": exp.GroupBitAnd.from_arg_list,
+            "BITOR_AGG": exp.GroupBitOr.from_arg_list,
+            "BITXOR_AGG": exp.GroupBitXor.from_arg_list,
+            "TO_TIME": exp.ToChar.from_arg_list,
+            "TIME": exp.ToChar.from_arg_list,
+            # "TO_GEOGRAPHY": exp.StAstext.from_arg_list,
         }
 
         FUNCTION_PARSERS = {
