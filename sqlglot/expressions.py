@@ -752,12 +752,14 @@ class Expression(metaclass=_Expression):
             return klass(this=other, expression=this)
         return klass(this=this, expression=other)
 
-    def __getitem__(self, other: ExpOrStr | t.Tuple[ExpOrStr]):
+    def __getitem__(self, other: ExpOrStr | t.Tuple[ExpOrStr]) -> Bracket:
         return Bracket(
             this=self.copy(), expressions=[convert(e, copy=True) for e in ensure_list(other)]
         )
 
-    def __iter__(self):
+    def __iter__(self) -> t.Iterator:
+        if "expressions" in self.arg_types:
+            return iter(self.args.get("expressions") or [])
         # We define this because __getitem__ converts Expression into an iterable, which is
         # problematic because one can hit infinite loops if they do "for x in some_expr: ..."
         # See: https://peps.python.org/pep-0234/
@@ -1039,6 +1041,8 @@ class Create(DDL):
 
 
 # https://docs.snowflake.com/en/sql-reference/sql/create-clone
+# https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#create_table_clone_statement
+# https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#create_table_copy
 class Clone(Expression):
     arg_types = {
         "this": True,
@@ -1046,6 +1050,7 @@ class Clone(Expression):
         "kind": False,
         "shallow": False,
         "expression": False,
+        "copy": False,
     }
 
 
@@ -1173,7 +1178,7 @@ class Column(Condition):
             if self.args.get(part)
         ]
 
-    def to_dot(self) -> Dot:
+    def to_dot(self) -> Dot | Identifier:
         """Converts the column into a dot expression."""
         parts = self.parts
         parent = self.parent
@@ -1183,7 +1188,7 @@ class Column(Condition):
                 parts.append(parent.expression)
             parent = parent.parent
 
-        return Dot.build(deepcopy(parts))
+        return Dot.build(deepcopy(parts)) if len(parts) > 1 else parts[0]
 
 
 class ColumnPosition(Expression):
@@ -1606,6 +1611,11 @@ class Identifier(Expression):
     @property
     def output_name(self) -> str:
         return self.name
+
+
+# https://www.postgresql.org/docs/current/indexes-opclass.html
+class Opclass(Expression):
+    arg_types = {"this": True, "expression": True}
 
 
 class Index(Expression):
@@ -2908,6 +2918,7 @@ class Select(Subqueryable):
             prefix="OFFSET",
             dialect=dialect,
             copy=copy,
+            into_arg="expression",
             **opts,
         )
 
@@ -3691,13 +3702,13 @@ class DataType(Expression):
 
 
 # https://www.postgresql.org/docs/15/datatype-pseudo.html
-class PseudoType(Expression):
-    pass
+class PseudoType(DataType):
+    arg_types = {"this": True}
 
 
 # https://www.postgresql.org/docs/15/datatype-oid.html
-class ObjectIdentifier(Expression):
-    pass
+class ObjectIdentifier(DataType):
+    arg_types = {"this": True}
 
 
 # WHERE x <OP> EXISTS|ALL|ANY|SOME(SELECT ...)
@@ -4024,7 +4035,7 @@ class TimeUnit(Expression):
 # https://www.oracletutorial.com/oracle-basics/oracle-interval/
 # https://trino.io/docs/current/language/types.html#interval-day-to-second
 # https://docs.databricks.com/en/sql/language-manual/data-types/interval-type.html
-class IntervalSpan(Expression):
+class IntervalSpan(DataType):
     arg_types = {"this": True, "expression": True}
 
 
@@ -6125,7 +6136,10 @@ def cast(expression: ExpOrStr, to: str | DataType | DataType.Type, **opts) -> Ca
         The new Cast instance.
     """
     expression = maybe_parse(expression, **opts)
-    return Cast(this=expression, to=DataType.build(to, **opts))
+    data_type = DataType.build(to, **opts)
+    expression = Cast(this=expression, to=data_type)
+    expression.type = data_type
+    return expression
 
 
 def table_(

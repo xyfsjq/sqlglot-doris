@@ -5,6 +5,9 @@ class TestDatabricks(Validator):
     dialect = "databricks"
 
     def test_databricks(self):
+        self.validate_identity("CREATE TABLE t (c STRUCT<interval: DOUBLE COMMENT 'aaa'>)")
+        self.validate_identity("CREATE TABLE my_table () TBLPROPERTIES (a.b=15)")
+        self.validate_identity("CREATE TABLE my_table () TBLPROPERTIES ('a.b'=15)")
         self.validate_identity("SELECT CAST('11 23:4:0' AS INTERVAL DAY TO HOUR)")
         self.validate_identity("SELECT CAST('11 23:4:0' AS INTERVAL DAY TO MINUTE)")
         self.validate_identity("SELECT CAST('11 23:4:0' AS INTERVAL DAY TO SECOND)")
@@ -29,6 +32,7 @@ class TestDatabricks(Validator):
             "CREATE TABLE foo (x INT GENERATED ALWAYS AS (YEAR(y)))",
             write={
                 "databricks": "CREATE TABLE foo (x INT GENERATED ALWAYS AS (YEAR(TO_DATE(y))))",
+                "tsql": "CREATE TABLE foo (x AS YEAR(CAST(y AS DATE)))",
             },
         )
 

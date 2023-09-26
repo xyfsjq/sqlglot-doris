@@ -10,6 +10,10 @@ class TestDuckDB(Validator):
             parse_one("select * from t limit (select 5)").sql(dialect="duckdb"),
             exp.select("*").from_("t").limit(exp.select("5").subquery()).sql(dialect="duckdb"),
         )
+        self.assertEqual(
+            parse_one("select * from t offset (select 5)").sql(dialect="duckdb"),
+            exp.select("*").from_("t").offset(exp.select("5").subquery()).sql(dialect="duckdb"),
+        )
 
         for struct_value in ("{'a': 1}", "struct_pack(a := 1)"):
             self.validate_all(struct_value, write={"presto": UnsupportedError})
@@ -446,6 +450,7 @@ class TestDuckDB(Validator):
             write={
                 "duckdb": "SELECT QUANTILE_CONT(x, q) FROM t",
                 "postgres": "SELECT PERCENTILE_CONT(q) WITHIN GROUP (ORDER BY x) FROM t",
+                "snowflake": "SELECT PERCENTILE_CONT(q) WITHIN GROUP (ORDER BY x) FROM t",
             },
         )
         self.validate_all(
@@ -453,6 +458,7 @@ class TestDuckDB(Validator):
             write={
                 "duckdb": "SELECT QUANTILE_DISC(x, q) FROM t",
                 "postgres": "SELECT PERCENTILE_DISC(q) WITHIN GROUP (ORDER BY x) FROM t",
+                "snowflake": "SELECT PERCENTILE_DISC(q) WITHIN GROUP (ORDER BY x) FROM t",
             },
         )
         self.validate_all(
@@ -460,6 +466,7 @@ class TestDuckDB(Validator):
             write={
                 "duckdb": "SELECT QUANTILE_CONT(x, 0.5) FROM t",
                 "postgres": "SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x) FROM t",
+                "snowflake": "SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x) FROM t",
             },
         )
 

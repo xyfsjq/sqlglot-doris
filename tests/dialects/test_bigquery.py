@@ -122,6 +122,10 @@ class TestBigQuery(Validator):
             """SELECT JSON '"foo"' AS json_data""",
             """SELECT PARSE_JSON('"foo"') AS json_data""",
         )
+        self.validate_identity(
+            "CREATE OR REPLACE TABLE `a.b.c` CLONE `a.b.d`",
+            "CREATE OR REPLACE TABLE a.b.c CLONE a.b.d",
+        )
 
         self.validate_all("SELECT SPLIT(foo)", write={"bigquery": "SELECT SPLIT(foo, ',')"})
         self.validate_all("SELECT 1 AS hash", write={"bigquery": "SELECT 1 AS `hash`"})
@@ -130,6 +134,13 @@ class TestBigQuery(Validator):
         self.validate_all('x <> """"""', write={"bigquery": "x <> ''"})
         self.validate_all("x <> ''''''", write={"bigquery": "x <> ''"})
         self.validate_all("CAST(x AS DATETIME)", read={"": "x::timestamp"})
+        self.validate_all(
+            "CREATE OR REPLACE TABLE `a.b.c` COPY `a.b.d`",
+            write={
+                "bigquery": "CREATE OR REPLACE TABLE a.b.c COPY a.b.d",
+                "snowflake": "CREATE OR REPLACE TABLE a.b.c CLONE a.b.d",
+            },
+        )
         self.validate_all(
             "SELECT DATETIME_DIFF('2023-01-01T00:00:00', '2023-01-01T05:00:00', MILLISECOND)",
             write={
@@ -710,6 +721,8 @@ WHERE
             pretty=True,
         )
 
+        self.validate_identity("LOG(n, b)")
+
     def test_user_defined_functions(self):
         self.validate_identity(
             "CREATE TEMPORARY FUNCTION a(x FLOAT64, y FLOAT64) RETURNS FLOAT64 NOT DETERMINISTIC LANGUAGE js AS 'return x*y;'"
@@ -718,6 +731,10 @@ WHERE
         self.validate_identity("CREATE TEMPORARY FUNCTION a(x FLOAT64, y FLOAT64) AS ((x + 4) / y)")
         self.validate_identity(
             "CREATE TABLE FUNCTION a(x INT64) RETURNS TABLE <q STRING, r INT64> AS SELECT s, t"
+        )
+        self.validate_identity(
+            '''CREATE TEMPORARY FUNCTION string_length_0(strings ARRAY<STRING>) RETURNS FLOAT64 LANGUAGE js AS """'use strict'; function string_length(strings) { return _.sum(_.map(strings, ((x) => x.length))); } return string_length(strings);""" OPTIONS (library=['gs://ibis-testing-libraries/lodash.min.js'])''',
+            "CREATE TEMPORARY FUNCTION string_length_0(strings ARRAY<STRING>) RETURNS FLOAT64 LANGUAGE js OPTIONS (library=['gs://ibis-testing-libraries/lodash.min.js']) AS '\\'use strict\\'; function string_length(strings) { return _.sum(_.map(strings, ((x) => x.length))); } return string_length(strings);'",
         )
 
     def test_group_concat(self):

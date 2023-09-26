@@ -224,6 +224,33 @@ class TestClickhouse(Validator):
         self.validate_identity(
             "SELECT s, arr_external FROM arrays_test ARRAY JOIN [1, 2, 3] AS arr_external"
         )
+        self.validate_all(
+            "SELECT quantile(0.5)(a)",
+            read={"duckdb": "SELECT quantile(a, 0.5)"},
+            write={"clickhouse": "SELECT quantile(0.5)(a)"},
+        )
+        self.validate_all(
+            "SELECT quantiles(0.5, 0.4)(a)",
+            read={"duckdb": "SELECT quantile(a, [0.5, 0.4])"},
+            write={"clickhouse": "SELECT quantiles(0.5, 0.4)(a)"},
+        )
+        self.validate_all(
+            "SELECT quantiles(0.5)(a)",
+            read={"duckdb": "SELECT quantile(a, [0.5])"},
+            write={"clickhouse": "SELECT quantiles(0.5)(a)"},
+        )
+
+        self.validate_identity("SELECT isNaN(x)")
+        self.validate_all(
+            "SELECT IS_NAN(x), ISNAN(x)",
+            write={"clickhouse": "SELECT isNaN(x), isNaN(x)"},
+        )
+
+        self.validate_identity("SELECT startsWith('a', 'b')")
+        self.validate_all(
+            "SELECT STARTS_WITH('a', 'b'), STARTSWITH('a', 'b')",
+            write={"clickhouse": "SELECT startsWith('a', 'b'), startsWith('a', 'b')"},
+        )
 
     def test_cte(self):
         self.validate_identity("WITH 'x' AS foo SELECT foo")

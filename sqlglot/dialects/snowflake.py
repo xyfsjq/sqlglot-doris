@@ -400,6 +400,7 @@ class Snowflake(Dialect):
         TABLE_HINTS = False
         QUERY_HINTS = False
         AGGREGATE_FILTER_SUPPORTED = False
+        SUPPORTS_TABLE_COPY = False
 
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
@@ -429,6 +430,12 @@ class Snowflake(Dialect):
             exp.Max: max_or_greatest,
             exp.Min: min_or_least,
             exp.PartitionedByProperty: lambda self, e: f"PARTITION BY {self.sql(e, 'this')}",
+            exp.PercentileCont: transforms.preprocess(
+                [transforms.add_within_group_for_percentiles]
+            ),
+            exp.PercentileDisc: transforms.preprocess(
+                [transforms.add_within_group_for_percentiles]
+            ),
             exp.RegexpILike: _regexpilike_sql,
             exp.Select: transforms.preprocess(
                 [

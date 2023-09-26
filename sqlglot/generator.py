@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import typing as t
 from collections import defaultdict
+from functools import reduce
 
 from sqlglot import exp
 from sqlglot.errors import ErrorLevel, UnsupportedError, concat_messages
@@ -98,6 +99,9 @@ class Generator:
         exp.VolatileProperty: lambda self, e: "VOLATILE",
         exp.WithJournalTableProperty: lambda self, e: f"WITH JOURNAL TABLE={self.sql(e, 'this')}",
     }
+
+    # Whether the base comes first
+    LOG_BASE_FIRST = True
 
     # Whether or not null ordering is supported in order by
     NULL_ORDERING_SUPPORTED = True
@@ -199,6 +203,12 @@ class Generator:
 
     # Whether or not session variables / parameters are supported, e.g. @x in T-SQL
     SUPPORTS_PARAMETERS = True
+
+    # Whether or not to include the type of a computed column in the CREATE DDL
+    COMPUTED_COLUMN_WITH_TYPE = True
+
+    # Whether or not CREATE TABLE .. COPY .. is supported. False means we'll generate CLONE instead of COPY
+    SUPPORTS_TABLE_COPY = True
 
     TYPE_MAPPING = {
         exp.DataType.Type.NCHAR: "CHAR",
@@ -645,6 +655,9 @@ class Generator:
         position = self.sql(expression, "position")
         position = f" {position}" if position else ""
 
+        if expression.find(exp.ComputedColumnConstraint) and not self.COMPUTED_COLUMN_WITH_TYPE:
+            kind = ""
+
         return f"{exists}{column}{kind}{constraints}{position}"
 
     def columnconstraint_sql(self, expression: exp.ColumnConstraint) -> str:
@@ -813,7 +826,8 @@ class Generator:
     def clone_sql(self, expression: exp.Clone) -> str:
         this = self.sql(expression, "this")
         shallow = "SHALLOW " if expression.args.get("shallow") else ""
-        this = f"{shallow}CLONE {this}"
+        keyword = "COPY" if expression.args.get("copy") and self.SUPPORTS_TABLE_COPY else "CLONE"
+        this = f"{shallow}{keyword} {this}"
         when = self.sql(expression, "when")
 
         if when:
@@ -1081,10 +1095,15 @@ class Generator:
 
         return properties_locs
 
+    def property_name(self, expression: exp.Property, string_key: bool = False) -> str:
+        if isinstance(expression.this, exp.Dot):
+            return self.sql(expression, "this")
+        return f"'{expression.name}'" if string_key else expression.name
+
     def property_sql(self, expression: exp.Property) -> str:
         property_cls = expression.__class__
         if property_cls == exp.Property:
-            return f"{expression.name}={self.sql(expression, 'value')}"
+            return f"{self.property_name(expression)}={self.sql(expression, 'value')}"
 
         property_name = exp.Properties.PROPERTY_TO_NAME.get(property_cls)
         if not property_name:
@@ -1415,9 +1434,10 @@ class Generator:
 
         # Converts `VALUES...` expression into a series of select unions.
         expression = expression.copy()
-        column_names = expression.alias and expression.args["alias"].columns
+        alias_node = expression.args.get("alias")
+        column_names = alias_node and alias_node.columns
 
-        selects = []
+        selects: t.List[exp.Subqueryable] = []
 
         for i, tup in enumerate(expression.expressions):
             row = tup.expressions
@@ -1433,16 +1453,12 @@ class Generator:
             # This may result in poor performance for large-cardinality `VALUES` tables, due to
             # the deep nesting of the resulting exp.Unions. If this is a problem, either increase
             # `sys.setrecursionlimit` to avoid RecursionErrors, or don't set `pretty`.
-            subquery_expression: exp.Select | exp.Union = selects[0]
-            if len(selects) > 1:
-                for select in selects[1:]:
-                    subquery_expression = exp.union(
-                        subquery_expression, select, distinct=False, copy=False
-                    )
+            subqueryable = reduce(lambda x, y: exp.union(x, y, distinct=False, copy=False), selects)
+            return self.subquery_sql(
+                subqueryable.subquery(alias_node and alias_node.this, copy=False)
+            )
 
-            return self.subquery_sql(subquery_expression.subquery(expression.alias, copy=False))
-
-        alias = f" AS {expression.alias}" if expression.alias else ""
+        alias = f" AS {self.sql(alias_node, 'this')}" if alias_node else ""
         unions = " UNION ALL ".join(self.sql(select) for select in selects)
         return f"({unions}){alias}"
 
@@ -2524,6 +2540,12 @@ class Generator:
     def trycast_sql(self, expression: exp.TryCast) -> str:
         return self.cast_sql(expression, safe_prefix="TRY_")
 
+    def log_sql(self, expression: exp.Log) -> str:
+        args = list(expression.args.values())
+        if not self.LOG_BASE_FIRST:
+            args.reverse()
+        return self.func("LOG", *args)
+
     def use_sql(self, expression: exp.Use) -> str:
         kind = self.sql(expression, "kind")
         kind = f" {kind}" if kind else ""
@@ -2828,6 +2850,9 @@ class Generator:
 
     def columnprefix_sql(self, expression: exp.ColumnPrefix) -> str:
         return f"{self.sql(expression, 'this')}({self.sql(expression, 'expression')})"
+
+    def opclass_sql(self, expression: exp.Opclass) -> str:
+        return f"{self.sql(expression, 'this')} {self.sql(expression, 'expression')}"
 
 
 def cached_generator(
