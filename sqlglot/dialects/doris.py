@@ -25,6 +25,7 @@ def handle_date_trunc(self, expression: exp.DateTrunc) -> str:
         return f"TRUNCATE({this},{unit})"
     return f"DATE({unit})"
 
+
 def handle_date_diff(self, expression: exp.DateDiff) -> str:
     this = self.sql(expression, "unit")
     expressions = self.sql(expression, "expression")
@@ -45,6 +46,8 @@ def handle_date_diff(self, expression: exp.DateDiff) -> str:
         return f"MONTHS_DIFF({this},{expressions})"
     elif unit == "year":
         return f"YEARS_DIFF({this},{expressions})"
+    return f"DATEDIFF({this},{expressions})"
+
 
 def handle_to_char(self, expression: exp.ToChar) -> str:
     if self.sql(expression, "format") == "":
