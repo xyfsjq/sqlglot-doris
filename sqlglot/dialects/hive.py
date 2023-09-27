@@ -348,14 +348,14 @@ class Hive(Dialect):
             this = super()._parse_types(
                 check_func=check_func, schema=schema, allow_identifiers=allow_identifiers
             )
-
-            if this and not schema:
-                return this.transform(
-                    lambda node: node.replace(exp.DataType.build("text"))
-                    if isinstance(node, exp.DataType) and node.is_type("char", "varchar")
-                    else node,
-                    copy=False,
-                )
+            # cast(x as varchar(10)) -> cast(x as String),取消了这种行为的改变
+            # if this and not schema:
+            #     return this.transform(
+            #         lambda node: node.replace(exp.DataType.build("text"))
+            #         if isinstance(node, exp.DataType) and node.is_type("char", "varchar")
+            #         else node,
+            #         copy=False,
+            #     )
 
             return this
 
