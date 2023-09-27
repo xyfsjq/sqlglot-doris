@@ -45,3 +45,11 @@ class TestDoris(Validator):
                 result_3 == expected_result_3
         ), f"Transpile result doesn't match expected result. Expected: {expected_result_3}, Actual: {result_3}"
         print("Test3 passed!")
+
+        expected_result_4 = "DATE_TRUNC(NOW(), 'day')"
+        input_sql_4 = """TRUNC(current_timestamp(), 'DD')"""
+        result_4 = sqlglot.transpile(input_sql_4, read="hive", write="doris", pretty=True)[0]
+        assert (
+                result_4 == expected_result_4
+        ), f"Transpile result doesn't match expected result. Expected: {expected_result_4}, Actual: {result_4}"
+        print("Test4 passed!")
