@@ -4528,6 +4528,14 @@ class DateTrunc(Func):
     def unit(self) -> Expression:
         return self.args["unit"]
 
+# 转为oracle设置的datetrunc
+class DateTrunc_oracle(Func):
+    arg_types = {"this": True, "unit": False, "zone": False}
+
+    @property
+    def unit(self) -> Expression:
+        return self.args["unit"]
+
 
 class DatetimeAdd(Func, TimeUnit):
     arg_types = {"this": True, "expression": True, "unit": False}

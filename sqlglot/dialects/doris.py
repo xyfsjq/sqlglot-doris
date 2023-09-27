@@ -13,17 +13,17 @@ from sqlglot.dialects.mysql import MySQL
 from sqlglot.dialects.tsql import DATE_DELTA_INTERVAL
 
 
-def handle_date_trunc(self, expression: exp.DateTrunc) -> str:
-    this = self.sql(expression, "unit")
-    unit = self.sql(expression, "this").strip("\"'").lower()
+def handle_date_trunc(self, expression: exp.DateTrunc|exp.DateTrunc_oracle) -> str:
+    unit = self.sql(expression, "unit").strip("\"'").lower()
+    this = self.sql(expression, "this")
     if unit.isalpha():
         mapped_unit = (
             DATE_DELTA_INTERVAL.get(unit) if DATE_DELTA_INTERVAL.get(unit) != None else unit
         )
-        return f"DATE_TRUNC({mapped_unit}, {this})"
+        return f"DATE_TRUNC({this}, '{mapped_unit}')"
     elif unit.isdigit():
-        return f"TRUNCATE({this},{unit})"
-    return f"DATE({unit})"
+        return f"TRUNCATE({this}, {unit})"
+    return f"DATE({this})"
 
 
 def handle_date_diff(self, expression: exp.DateDiff) -> str:
@@ -171,6 +171,19 @@ class Doris(MySQL):
     # 后面考虑改成doris的默认格式，暂时doris的2.0.0由于str_to_date对yyyy-MM-dd这些格式有点问题，已修复https://github.com/apache/doris/pull/22981
     TIME_FORMAT = "'yyyy-MM-dd HH:mm:ss'"
 
+    TIME_MAPPING = {
+        **MySQL.TIME_MAPPING,
+        "%Y": "yyyy",
+        "%m": "mm",
+        "%d": "dd",
+    }
+
+    class Tokenizer(MySQL.Tokenizer):
+        KEYWORDS = {
+            **MySQL.Tokenizer.KEYWORDS,
+            # "BITXOR": TokenType.CARET,
+        }
+
     class Parser(MySQL.Parser):
         FUNCTIONS = {
             **MySQL.Parser.FUNCTIONS,
@@ -178,13 +191,20 @@ class Doris(MySQL):
             "REGEXP": exp.RegexpLike.from_arg_list,
             "FROM_UNIXTIME": exp.StrToUnix.from_arg_list,
             "SIZE": exp.ArraySize.from_arg_list,
+            "COUNTEQUAL": exp.Repeat.from_arg_list,
             "COLLECT_LIST": exp.ArrayAgg.from_arg_list,
+            "GROUP_ARRAY": exp.ArrayAgg.from_arg_list,
+            "NOW": exp.CurrentTimestamp.from_arg_list,
+            "ARRAY_RANGE": exp.Range.from_arg_list,
+            "COLLECT_SET": exp.SetAgg.from_arg_list,
+            "ARRAY_SORT": exp.SortArray.from_arg_list,
+            "SPLIT_BY_STRING": exp.RegexpSplit.from_arg_list,
+            "ARRAY_SHUFFLE": exp.Shuffle.from_arg_list,
         }
 
     class Generator(MySQL.Generator):
         CAST_MAPPING = {}
         INTERVAL_ALLOWS_PLURAL_FORM = False
-        # case_sensitive
         TYPE_MAPPING = {
             **MySQL.Generator.TYPE_MAPPING,
             exp.DataType.Type.TEXT: "STRING",
@@ -198,7 +218,6 @@ class Doris(MySQL):
             **MySQL.Generator.TRANSFORMS,
             exp.ApproxDistinct: approx_count_distinct_sql,
             exp.ArrayAgg: rename_func("COLLECT_LIST"),
-            exp.ArraySize: rename_func("SIZE"),
             exp.ArrayStringConcat: handle_array_concat,
             exp.ArrayFilter: lambda self, e: f"ARRAY_FILTER({self.sql(e, 'expression')},{self.sql(e, 'this')})",
             exp.ArrayUniq: lambda self, e: f"SIZE(ARRAY_DISTINCT({self.sql(e, 'this')}))",
@@ -211,6 +230,7 @@ class Doris(MySQL):
             exp.CurrentDate: no_paren_current_date_sql,
             exp.DateDiff: handle_date_diff,
             exp.DateTrunc: handle_date_trunc,
+            exp.DateTrunc_oracle: handle_date_trunc,
             exp.Explode: rename_func("LATERAL VIEW EXPLODE"),
             exp.GroupBitmap: lambda self, e: f"BITMAP_COUNT(BITMAP_AGG({self.sql(e, 'this')}))",
             exp.GroupBitmapAnd: lambda self, e: f"BITMAP_COUNT(BITMAP_INTERSECT({self.sql(e, 'this')}))",

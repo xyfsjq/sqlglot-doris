@@ -69,7 +69,7 @@ class Oracle(Dialect):
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
             "SQUARE": lambda args: exp.Pow(this=seq_get(args, 0), expression=exp.Literal.number(2)),
-            "TRUNC": exp.DateTrunc.from_arg_list,
+            "TRUNC": exp.DateTrunc_oracle.from_arg_list,
             "SUBSTR": exp.Substring.from_arg_list,
             "TO_DATE": exp.TsOrDsToDate.from_arg_list,
         }
