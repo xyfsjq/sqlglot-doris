@@ -331,6 +331,7 @@ class Postgres(Dialect):
             ),
             "BIT_AND": exp.GroupBitAnd.from_arg_list,
             "BIT_OR": exp.GroupBitOr.from_arg_list,
+            "ARRAY_TO_STRING": exp.ConcatWs.from_arg_list,
         }
 
         FUNCTION_PARSERS = {

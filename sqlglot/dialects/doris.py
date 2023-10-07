@@ -5,16 +5,16 @@ import re
 from sqlglot import exp, generator
 from sqlglot.dialects.dialect import (
     approx_count_distinct_sql,
+    count_if_to_sum,
     parse_timestamp_trunc,
     rename_func,
     time_format,
-    count_if_to_sum,
 )
 from sqlglot.dialects.mysql import MySQL
 from sqlglot.dialects.tsql import DATE_DELTA_INTERVAL
 
 
-def handle_date_trunc(self, expression: exp.DateTrunc|exp.DateTrunc_oracle) -> str:
+def handle_date_trunc(self, expression: exp.DateTrunc | exp.DateTrunc_oracle) -> str:
     unit = self.sql(expression, "unit").strip("\"'").lower()
     this = self.sql(expression, "this")
     if unit.isalpha():
@@ -165,6 +165,7 @@ def handle_regexp_extract(self, expr: exp.RegexpExtract) -> str:
         return f"REGEXP_EXTRACT_ALL({this}, '({expression[1:-1]})')"
     return f"REGEXP_EXTRACT({this}, '({expression[1:-1]})', {position})"
 
+
 def _string_agg_sql(self: Doris.Generator, expression: exp.GroupConcat) -> str:
     expression = expression.copy()
     separator = expression.args.get("separator") or exp.Literal.string(",")
@@ -177,6 +178,13 @@ def _string_agg_sql(self: Doris.Generator, expression: exp.GroupConcat) -> str:
         order = self.sql(expression.this)  # Order has a leading space
 
     return f"GROUP_CONCAT({self.format_args(this, separator)}{order})"
+
+
+def handle_concat_ws(self, expression: exp.ConcatWs) -> str:
+    expression = expression.expressions[0]
+    this = expression.expressions[1]
+    return f"CONCAT_WS({this},{expression})"
+
 
 class Doris(MySQL):
     DATE_FORMAT = "'yyyy-MM-dd'"
@@ -244,6 +252,7 @@ class Doris(MySQL):
             exp.CurrentTimestamp: lambda *_: "NOW()",
             exp.CurrentDate: no_paren_current_date_sql,
             exp.CountIf: count_if_to_sum,
+            exp.ConcatWs: handle_concat_ws,
             exp.DateDiff: handle_date_diff,
             exp.DateTrunc: handle_date_trunc,
             exp.DateTrunc_oracle: handle_date_trunc,
