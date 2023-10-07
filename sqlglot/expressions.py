@@ -4429,6 +4429,8 @@ class Avg(AggFunc):
 class AnyValue(AggFunc):
     arg_types = {"this": True, "having": False, "max": False, "ignore_nulls": False}
 
+class Ascii(Func):
+    arg_types = {'this':True}
 
 class First(Func):
     arg_types = {"this": True, "ignore_nulls": False}
