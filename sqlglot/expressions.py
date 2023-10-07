@@ -4429,8 +4429,10 @@ class Avg(AggFunc):
 class AnyValue(AggFunc):
     arg_types = {"this": True, "having": False, "max": False, "ignore_nulls": False}
 
+
 class Ascii(Func):
-    arg_types = {'this':True}
+    arg_types = {"this": True}
+
 
 class First(Func):
     arg_types = {"this": True, "ignore_nulls": False}
@@ -4580,6 +4582,7 @@ class DateTrunc(Func):
     @property
     def unit(self) -> Expression:
         return self.args["unit"]
+
 
 # 转为oracle设置的datetrunc
 class DateTrunc_oracle(Func):
