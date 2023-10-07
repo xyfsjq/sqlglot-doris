@@ -190,6 +190,16 @@ class BigQuery(Dialect):
         "%D": "%m/%d/%y",
     }
 
+    ESCAPE_SEQUENCES = {
+        "\\a": "\a",
+        "\\b": "\b",
+        "\\f": "\f",
+        "\\n": "\n",
+        "\\r": "\r",
+        "\\t": "\t",
+        "\\v": "\v",
+    }
+
     FORMAT_MAPPING = {
         "DD": "%d",
         "MM": "%m",
@@ -212,15 +222,14 @@ class BigQuery(Dialect):
 
     @classmethod
     def normalize_identifier(cls, expression: E) -> E:
-        # In BigQuery, CTEs aren't case-sensitive, but table names are (by default, at least).
-        # The following check is essentially a heuristic to detect tables based on whether or
-        # not they're qualified.
         if isinstance(expression, exp.Identifier):
             parent = expression.parent
-
             while isinstance(parent, exp.Dot):
                 parent = parent.parent
 
+            # In BigQuery, CTEs aren't case-sensitive, but table names are (by default, at least).
+            # The following check is essentially a heuristic to detect tables based on whether or
+            # not they're qualified. It also avoids normalizing UDFs, because they're case-sensitive.
             if (
                 not isinstance(parent, exp.UserDefinedFunction)
                 and not (isinstance(parent, exp.Table) and parent.db)
@@ -251,15 +260,16 @@ class BigQuery(Dialect):
             "ANY TYPE": TokenType.VARIANT,
             "BEGIN": TokenType.COMMAND,
             "BEGIN TRANSACTION": TokenType.BEGIN,
-            "CURRENT_DATETIME": TokenType.CURRENT_DATETIME,
             "BYTES": TokenType.BINARY,
+            "CURRENT_DATETIME": TokenType.CURRENT_DATETIME,
             "DECLARE": TokenType.COMMAND,
             "FLOAT64": TokenType.DOUBLE,
+            "FOR SYSTEM_TIME": TokenType.TIMESTAMP_SNAPSHOT,
             "INT64": TokenType.BIGINT,
+            "MODEL": TokenType.MODEL,
+            "NOT DETERMINISTIC": TokenType.VOLATILE,
             "RECORD": TokenType.STRUCT,
             "TIMESTAMP": TokenType.TIMESTAMPTZ,
-            "NOT DETERMINISTIC": TokenType.VOLATILE,
-            "FOR SYSTEM_TIME": TokenType.TIMESTAMP_SNAPSHOT,
         }
         KEYWORDS.pop("DIV")
 
@@ -419,6 +429,7 @@ class BigQuery(Dialect):
         RENAME_TABLE_WITH_DB = False
         NVL2_SUPPORTED = False
         UNNEST_WITH_ORDINALITY = False
+        COLLATE_IS_FUNC = True
 
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
@@ -519,18 +530,6 @@ class BigQuery(Dialect):
             exp.PartitionedByProperty: exp.Properties.Location.POST_SCHEMA,
             exp.VolatileProperty: exp.Properties.Location.UNSUPPORTED,
         }
-
-        UNESCAPED_SEQUENCE_TABLE = str.maketrans(  # type: ignore
-            {
-                "\a": "\\a",
-                "\b": "\\b",
-                "\f": "\\f",
-                "\n": "\\n",
-                "\r": "\\r",
-                "\t": "\\t",
-                "\v": "\\v",
-            }
-        )
 
         # from: https://cloud.google.com/bigquery/docs/reference/standard-sql/lexical#reserved_keywords
         RESERVED_KEYWORDS = {

@@ -99,6 +99,7 @@ class TokenType(AutoName):
     FLOAT = auto()
     DOUBLE = auto()
     DECIMAL = auto()
+    UDECIMAL = auto()
     BIGDECIMAL = auto()
     CHAR = auto()
     NCHAR = auto()
@@ -262,6 +263,7 @@ class TokenType(AutoName):
     MEMBER_OF = auto()
     MERGE = auto()
     MOD = auto()
+    MODEL = auto()
     NATURAL = auto()
     NEXT = auto()
     NOTNULL = auto()
@@ -492,6 +494,7 @@ class Tokenizer(metaclass=_Tokenizer):
     QUOTES: t.List[t.Tuple[str, str] | str] = ["'"]
     STRING_ESCAPES = ["'"]
     VAR_SINGLE_TOKENS: t.Set[str] = set()
+    ESCAPE_SEQUENCES: t.Dict[str, str] = {}
 
     # Autofilled
     IDENTIFIERS_CAN_START_WITH_DIGIT: bool = False
@@ -1201,6 +1204,13 @@ class Tokenizer(metaclass=_Tokenizer):
 
                 if self._end:
                     raise TokenError(f"Missing {delimiter} from {self._line}:{self._start}")
+
+                if self.ESCAPE_SEQUENCES and self._peek and self._char in self.STRING_ESCAPES:
+                    escaped_sequence = self.ESCAPE_SEQUENCES.get(self._char + self._peek)
+                    if escaped_sequence:
+                        self._advance(2)
+                        text += escaped_sequence
+                        continue
 
                 current = self._current - 1
                 self._advance(alnum=True)

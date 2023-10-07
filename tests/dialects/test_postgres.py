@@ -648,10 +648,10 @@ class TestPostgres(Validator):
             },
         )
         self.validate_all(
-            "merge into x as x using (select id) as y on a = b WHEN matched then update set X.a = y.b",
+            """merge into x as x using (select id) as y on a = b WHEN matched then update set X."A" = y.b""",
             write={
-                "postgres": "MERGE INTO x AS x USING (SELECT id) AS y ON a = b WHEN MATCHED THEN UPDATE SET a = y.b",
-                "snowflake": "MERGE INTO x AS x USING (SELECT id) AS y ON a = b WHEN MATCHED THEN UPDATE SET X.a = y.b",
+                "postgres": """MERGE INTO x AS x USING (SELECT id) AS y ON a = b WHEN MATCHED THEN UPDATE SET "A" = y.b""",
+                "snowflake": """MERGE INTO x AS x USING (SELECT id) AS y ON a = b WHEN MATCHED THEN UPDATE SET X."A" = y.b""",
             },
         )
         self.validate_all(
@@ -723,4 +723,12 @@ class TestPostgres(Validator):
                 "postgres": "a || b",
                 "presto": "CONCAT(CAST(a AS VARCHAR), CAST(b AS VARCHAR))",
             },
+        )
+
+    def test_variance(self):
+        self.validate_all("VAR_SAMP(x)", write={"postgres": "VAR_SAMP(x)"})
+        self.validate_all("VAR_POP(x)", write={"postgres": "VAR_POP(x)"})
+        self.validate_all("VARIANCE(x)", write={"postgres": "VAR_SAMP(x)"})
+        self.validate_all(
+            "VAR_POP(x)", read={"": "VARIANCE_POP(x)"}, write={"postgres": "VAR_POP(x)"}
         )

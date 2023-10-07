@@ -52,6 +52,9 @@ class _Expression(type):
         return klass
 
 
+SQLGLOT_META = "sqlglot.meta"
+
+
 class Expression(metaclass=_Expression):
     """
     The base class for all expressions in a syntax tree. Each Expression encapsulates any necessary
@@ -266,7 +269,14 @@ class Expression(metaclass=_Expression):
         if self.comments is None:
             self.comments = []
         if comments:
-            self.comments.extend(comments)
+            for comment in comments:
+                _, *meta = comment.split(SQLGLOT_META)
+                if meta:
+                    for kv in "".join(meta).split(","):
+                        k, *v = kv.split("=")
+                        value = v[0].strip() if v else True
+                        self.meta[k.strip()] = value
+                self.comments.append(comment)
 
     def append(self, arg_key: str, value: t.Any) -> None:
         """
@@ -1036,6 +1046,7 @@ class Create(DDL):
         "indexes": False,
         "no_schema_binding": False,
         "begin": False,
+        "end": False,
         "clone": False,
     }
 
@@ -2029,8 +2040,12 @@ class FreespaceProperty(Property):
     arg_types = {"this": True, "percent": False}
 
 
-class InputOutputFormat(Expression):
-    arg_types = {"input_format": False, "output_format": False}
+class InputModelProperty(Property):
+    arg_types = {"this": True}
+
+
+class OutputModelProperty(Property):
+    arg_types = {"this": True}
 
 
 class IsolatedLoadingProperty(Property):
@@ -2126,6 +2141,10 @@ class PartitionedByProperty(Property):
     arg_types = {"this": True}
 
 
+class RemoteWithConnectionModelProperty(Property):
+    arg_types = {"this": True}
+
+
 class ReturnsProperty(Property):
     arg_types = {"this": True, "is_table": False, "table": False}
 
@@ -2164,6 +2183,10 @@ class QueryTransform(Expression):
     }
 
 
+class SampleProperty(Property):
+    arg_types = {"this": True}
+
+
 class SchemaCommentProperty(Property):
     arg_types = {"this": True}
 
@@ -2194,6 +2217,10 @@ class StabilityProperty(Property):
 
 class TemporaryProperty(Property):
     arg_types = {}
+
+
+class TransformModelProperty(Property):
+    arg_types = {"expressions": True}
 
 
 class TransientProperty(Property):
@@ -2276,6 +2303,10 @@ class Properties(Expression):
 
 class Qualify(Expression):
     pass
+
+
+class InputOutputFormat(Expression):
+    arg_types = {"input_format": False, "output_format": False}
 
 
 # https://www.ibm.com/docs/en/ias?topic=procedures-return-statement-in-sql
@@ -2448,6 +2479,9 @@ class Table(Expression):
         "hints": False,
         "system_time": False,
         "version": False,
+        "format": False,
+        "pattern": False,
+        "index": False,
     }
 
     @property
@@ -2473,17 +2507,17 @@ class Table(Expression):
         return []
 
     @property
-    def parts(self) -> t.List[Identifier]:
+    def parts(self) -> t.List[Expression]:
         """Return the parts of a table in order catalog, db, table."""
-        parts: t.List[Identifier] = []
+        parts: t.List[Expression] = []
 
         for arg in ("catalog", "db", "this"):
             part = self.args.get(arg)
 
-            if isinstance(part, Identifier):
-                parts.append(part)
-            elif isinstance(part, Dot):
+            if isinstance(part, Dot):
                 parts.extend(part.flatten())
+            elif isinstance(part, Expression):
+                parts.append(part)
 
         return parts
 
@@ -3414,7 +3448,7 @@ class Pivot(Expression):
     arg_types = {
         "this": False,
         "alias": False,
-        "expressions": True,
+        "expressions": False,
         "field": False,
         "unpivot": False,
         "using": False,
@@ -3581,6 +3615,7 @@ class DataType(Expression):
         UINT128 = auto()
         UINT256 = auto()
         UMEDIUMINT = auto()
+        UDECIMAL = auto()
         UNIQUEIDENTIFIER = auto()
         UNKNOWN = auto()  # Sentinel value, useful for type annotation
         USERDEFINED = "USER-DEFINED"
@@ -4032,6 +4067,16 @@ class TimeUnit(Expression):
         return self.args.get("unit")
 
 
+class IntervalOp(TimeUnit):
+    arg_types = {"unit": True, "expression": True}
+
+    def interval(self):
+        return Interval(
+            this=self.expression.copy(),
+            unit=self.unit.copy(),
+        )
+
+
 # https://www.oracletutorial.com/oracle-basics/oracle-interval/
 # https://trino.io/docs/current/language/types.html#interval-day-to-second
 # https://docs.databricks.com/en/sql/language-manual/data-types/interval-type.html
@@ -4451,7 +4496,7 @@ class CastToStrType(Func):
     arg_types = {"this": True, "to": True}
 
 
-class Collate(Binary):
+class Collate(Binary, Func):
     pass
 
 
@@ -4514,11 +4559,11 @@ class CurrentUser(Func):
     arg_types = {"this": False}
 
 
-class DateAdd(Func, TimeUnit):
+class DateAdd(Func, IntervalOp):
     arg_types = {"this": True, "expression": True, "unit": False}
 
 
-class DateSub(Func, TimeUnit):
+class DateSub(Func, IntervalOp):
     arg_types = {"this": True, "expression": True, "unit": False}
 
 
@@ -4543,11 +4588,11 @@ class DateTrunc_oracle(Func):
         return self.args["unit"]
 
 
-class DatetimeAdd(Func, TimeUnit):
+class DatetimeAdd(Func, IntervalOp):
     arg_types = {"this": True, "expression": True, "unit": False}
 
 
-class DatetimeSub(Func, TimeUnit):
+class DatetimeSub(Func, IntervalOp):
     arg_types = {"this": True, "expression": True, "unit": False}
 
 
@@ -4569,6 +4614,10 @@ class DayOfMonth(Func):
 
 class DayOfYear(Func):
     _sql_names = ["DAY_OF_YEAR", "DAYOFYEAR", "TODAYOFYEAR"]
+
+
+class ToDays(Func):
+    pass
 
 
 class WeekOfYear(Func):
@@ -4924,6 +4973,11 @@ class Nvl2(Func):
 
 class Posexplode(Func):
     pass
+
+
+# https://cloud.google.com/bigquery/docs/reference/standard-sql/bigqueryml-syntax-predict#mlpredict_function
+class Predict(Func):
+    arg_types = {"this": True, "expression": True, "params_struct": False}
 
 
 class Pow(Binary, Func):
@@ -6363,7 +6417,7 @@ def table_name(table: Table | str, dialect: DialectType = None) -> str:
         The table name.
     """
 
-    table = maybe_parse(table, into=Table)
+    table = maybe_parse(table, into=Table, dialect=dialect)
 
     if not table:
         raise ValueError(f"Cannot parse {table}")

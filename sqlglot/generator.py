@@ -73,6 +73,7 @@ class Generator:
         exp.ExternalProperty: lambda self, e: "EXTERNAL",
         exp.HeapProperty: lambda self, e: "HEAP",
         exp.InlineLengthColumnConstraint: lambda self, e: f"INLINE LENGTH {self.sql(e, 'this')}",
+        exp.InputModelProperty: lambda self, e: f"INPUT{self.sql(e, 'this')}",
         exp.IntervalSpan: lambda self, e: f"{self.sql(e, 'this')} TO {self.sql(e, 'expression')}",
         exp.LanguageProperty: lambda self, e: self.naked_property(e),
         exp.LocationProperty: lambda self, e: self.naked_property(e),
@@ -84,8 +85,11 @@ class Generator:
         exp.OnCommitProperty: lambda self, e: f"ON COMMIT {'DELETE' if e.args.get('delete') else 'PRESERVE'} ROWS",
         exp.OnProperty: lambda self, e: f"ON {self.sql(e, 'this')}",
         exp.OnUpdateColumnConstraint: lambda self, e: f"ON UPDATE {self.sql(e, 'this')}",
+        exp.OutputModelProperty: lambda self, e: f"OUTPUT{self.sql(e, 'this')}",
         exp.PathColumnConstraint: lambda self, e: f"PATH {self.sql(e, 'this')}",
+        exp.RemoteWithConnectionModelProperty: lambda self, e: f"REMOTE WITH CONNECTION {self.sql(e, 'this')}",
         exp.ReturnsProperty: lambda self, e: self.naked_property(e),
+        exp.SampleProperty: lambda self, e: f"SAMPLE BY {self.sql(e, 'this')}",
         exp.SetProperty: lambda self, e: f"{'MULTI' if e.args.get('multi') else ''}SET",
         exp.SettingsProperty: lambda self, e: f"SETTINGS{self.seg('')}{(self.expressions(e))}",
         exp.SqlSecurityProperty: lambda self, e: f"SQL SECURITY {'DEFINER' if e.args.get('definer') else 'INVOKER'}",
@@ -93,6 +97,7 @@ class Generator:
         exp.TemporaryProperty: lambda self, e: f"TEMPORARY",
         exp.ToTableProperty: lambda self, e: f"TO {self.sql(e.this)}",
         exp.TransientProperty: lambda self, e: "TRANSIENT",
+        exp.TransformModelProperty: lambda self, e: self.func("TRANSFORM", *e.expressions),
         exp.TitleColumnConstraint: lambda self, e: f"TITLE {self.sql(e, 'this')}",
         exp.UppercaseColumnConstraint: lambda self, e: f"UPPERCASE",
         exp.VarMap: lambda self, e: self.func("MAP", e.args["keys"], e.args["values"]),
@@ -210,6 +215,15 @@ class Generator:
     # Whether or not CREATE TABLE .. COPY .. is supported. False means we'll generate CLONE instead of COPY
     SUPPORTS_TABLE_COPY = True
 
+    # Whether or not parentheses are required around the table sample's expression
+    TABLESAMPLE_REQUIRES_PARENS = True
+
+    # Whether or not COLLATE is a function instead of a binary operator
+    COLLATE_IS_FUNC = False
+
+    # Whether or not data types support additional specifiers like e.g. CHAR or BYTE (oracle)
+    DATA_TYPE_SPECIFIERS_ALLOWED = False
+
     TYPE_MAPPING = {
         exp.DataType.Type.NCHAR: "CHAR",
         exp.DataType.Type.NVARCHAR: "VARCHAR",
@@ -268,6 +282,7 @@ class Generator:
         exp.FileFormatProperty: exp.Properties.Location.POST_WITH,
         exp.FreespaceProperty: exp.Properties.Location.POST_NAME,
         exp.HeapProperty: exp.Properties.Location.POST_WITH,
+        exp.InputModelProperty: exp.Properties.Location.POST_SCHEMA,
         exp.IsolatedLoadingProperty: exp.Properties.Location.POST_NAME,
         exp.JournalProperty: exp.Properties.Location.POST_NAME,
         exp.LanguageProperty: exp.Properties.Location.POST_SCHEMA,
@@ -281,13 +296,16 @@ class Generator:
         exp.OnProperty: exp.Properties.Location.POST_SCHEMA,
         exp.OnCommitProperty: exp.Properties.Location.POST_EXPRESSION,
         exp.Order: exp.Properties.Location.POST_SCHEMA,
+        exp.OutputModelProperty: exp.Properties.Location.POST_SCHEMA,
         exp.PartitionedByProperty: exp.Properties.Location.POST_WITH,
         exp.PrimaryKey: exp.Properties.Location.POST_SCHEMA,
         exp.Property: exp.Properties.Location.POST_WITH,
+        exp.RemoteWithConnectionModelProperty: exp.Properties.Location.POST_SCHEMA,
         exp.ReturnsProperty: exp.Properties.Location.POST_SCHEMA,
         exp.RowFormatProperty: exp.Properties.Location.POST_SCHEMA,
         exp.RowFormatDelimitedProperty: exp.Properties.Location.POST_SCHEMA,
         exp.RowFormatSerdeProperty: exp.Properties.Location.POST_SCHEMA,
+        exp.SampleProperty: exp.Properties.Location.POST_SCHEMA,
         exp.SchemaCommentProperty: exp.Properties.Location.POST_SCHEMA,
         exp.SerdeProperties: exp.Properties.Location.POST_SCHEMA,
         exp.Set: exp.Properties.Location.POST_SCHEMA,
@@ -299,6 +317,7 @@ class Generator:
         exp.TemporaryProperty: exp.Properties.Location.POST_CREATE,
         exp.ToTableProperty: exp.Properties.Location.POST_SCHEMA,
         exp.TransientProperty: exp.Properties.Location.POST_CREATE,
+        exp.TransformModelProperty: exp.Properties.Location.POST_SCHEMA,
         exp.MergeTreeTTL: exp.Properties.Location.POST_SCHEMA,
         exp.VolatileProperty: exp.Properties.Location.POST_CREATE,
         exp.WithDataProperty: exp.Properties.Location.POST_EXPRESSION,
@@ -330,13 +349,12 @@ class Generator:
         exp.Paren,
     )
 
-    UNESCAPED_SEQUENCE_TABLE = None  # type: ignore
-
     SENTINEL_LINE_BREAK = "__SQLGLOT__LB__"
 
     # Autofilled
     INVERSE_TIME_MAPPING: t.Dict[str, str] = {}
     INVERSE_TIME_TRIE: t.Dict = {}
+    INVERSE_ESCAPE_SEQUENCES: t.Dict[str, str] = {}
     INDEX_OFFSET = 0
     UNNEST_COLUMN_ONLY = False
     ALIAS_POST_TABLESAMPLE = False
@@ -486,8 +504,7 @@ class Generator:
         if not comments or isinstance(expression, exp.Binary):
             return sql
 
-        sep = "\n" if self.pretty else " "
-        comments_sql = sep.join(
+        comments_sql = " ".join(
             f"/*{self.pad_comment(comment)}*/" for comment in comments if comment
         )
 
@@ -759,9 +776,11 @@ class Generator:
             )
 
         begin = " BEGIN" if expression.args.get("begin") else ""
+        end = " END" if expression.args.get("end") else ""
+
         expression_sql = self.sql(expression, "expression")
         if expression_sql:
-            expression_sql = f"{begin}{self.sep()}{expression_sql}"
+            expression_sql = f"{begin}{self.sep()}{expression_sql}{end}"
 
             if self.CREATE_FUNCTION_RETURN_AS or not isinstance(expression.expression, exp.Return):
                 if properties_locs.get(exp.Properties.Location.POST_ALIAS):
@@ -887,7 +906,7 @@ class Generator:
     def datatypeparam_sql(self, expression: exp.DataTypeParam) -> str:
         this = self.sql(expression, "this")
         specifier = self.sql(expression, "expression")
-        specifier = f" {specifier}" if specifier else ""
+        specifier = f" {specifier}" if specifier and self.DATA_TYPE_SPECIFIERS_ALLOWED else ""
         return f"{this}{specifier}"
 
     def datatype_sql(self, expression: exp.DataType) -> str:
@@ -1340,7 +1359,16 @@ class Generator:
         joins = self.expressions(expression, key="joins", sep="", skip_first=True)
         laterals = self.expressions(expression, key="laterals", sep="")
 
-        return f"{table}{version}{alias}{hints}{pivots}{joins}{laterals}"
+        file_format = self.sql(expression, "format")
+        if file_format:
+            pattern = self.sql(expression, "pattern")
+            pattern = f", PATTERN => {pattern}" if pattern else ""
+            file_format = f" (FILE_FORMAT => {file_format}{pattern})"
+
+        index = self.sql(expression, "index")
+        index = f" AT {index}" if index else ""
+
+        return f"{table}{version}{file_format}{alias}{index}{hints}{pivots}{joins}{laterals}"
 
     def tablesample_sql(
         self, expression: exp.TableSample, seed_prefix: str = "SEED", sep=" AS "
@@ -1353,6 +1381,7 @@ class Generator:
         else:
             this = self.sql(expression, "this")
             alias = ""
+
         method = self.sql(expression, "method")
         method = f"{method.upper()} " if method and self.TABLESAMPLE_WITH_METHOD else ""
         numerator = self.sql(expression, "bucket_numerator")
@@ -1364,19 +1393,29 @@ class Generator:
         percent = f"{percent} PERCENT" if percent else ""
         rows = self.sql(expression, "rows")
         rows = f"{rows} ROWS" if rows else ""
+
         size = self.sql(expression, "size")
         if size and self.TABLESAMPLE_SIZE_IS_PERCENT:
             size = f"{size} PERCENT"
+
         seed = self.sql(expression, "seed")
         seed = f" {seed_prefix} ({seed})" if seed else ""
         kind = expression.args.get("kind", "TABLESAMPLE")
-        return f"{this} {kind} {method}({bucket}{percent}{rows}{size}){seed}{alias}"
+
+        expr = f"{bucket}{percent}{rows}{size}"
+        if self.TABLESAMPLE_REQUIRES_PARENS:
+            expr = f"({expr})"
+
+        return f"{this} {kind} {method}{expr}{seed}{alias}"
 
     def pivot_sql(self, expression: exp.Pivot) -> str:
         expressions = self.expressions(expression, flat=True)
 
         if expression.this:
             this = self.sql(expression, "this")
+            if not expressions:
+                return f"UNPIVOT {this}"
+
             on = f"{self.seg('ON')} {expressions}"
             using = self.expressions(expression, key="using", flat=True)
             using = f"{self.seg('USING')} {using}" if using else ""
@@ -1648,8 +1687,8 @@ class Generator:
 
     def escape_str(self, text: str) -> str:
         text = text.replace(self.QUOTE_END, self._escaped_quote_end)
-        if self.UNESCAPED_SEQUENCE_TABLE:
-            text = text.translate(self.UNESCAPED_SEQUENCE_TABLE)
+        if self.INVERSE_ESCAPE_SEQUENCES:
+            text = "".join(self.INVERSE_ESCAPE_SEQUENCES.get(ch, ch) for ch in text)
         elif self.pretty:
             text = text.replace("\n", self.SENTINEL_LINE_BREAK)
         return text
@@ -2311,6 +2350,8 @@ class Generator:
         return f"CURRENT_DATE({zone})" if zone else "CURRENT_DATE"
 
     def collate_sql(self, expression: exp.Collate) -> str:
+        if self.COLLATE_IS_FUNC:
+            return self.function_fallback_sql(expression)
         return self.binary(expression, "COLLATE")
 
     def command_sql(self, expression: exp.Command) -> str:
@@ -2369,7 +2410,7 @@ class Generator:
             collate = f" COLLATE {collate}" if collate else ""
             using = self.sql(expression, "using")
             using = f" USING {using}" if using else ""
-            return f"ALTER COLUMN {this} TYPE {dtype}{collate}{using}"
+            return f"ALTER COLUMN {this} SET DATA TYPE {dtype}{collate}{using}"
 
         default = self.sql(expression, "default")
         if default:
@@ -2406,7 +2447,7 @@ class Generator:
         elif isinstance(actions[0], exp.Delete):
             actions = self.expressions(expression, key="actions", flat=True)
         else:
-            actions = self.expressions(expression, key="actions")
+            actions = self.expressions(expression, key="actions", flat=True)
 
         exists = " IF EXISTS" if expression.args.get("exists") else ""
         only = " ONLY" if expression.args.get("only") else ""
@@ -2853,6 +2894,14 @@ class Generator:
 
     def opclass_sql(self, expression: exp.Opclass) -> str:
         return f"{self.sql(expression, 'this')} {self.sql(expression, 'expression')}"
+
+    def predict_sql(self, expression: exp.Predict) -> str:
+        model = self.sql(expression, "this")
+        model = f"MODEL {model}"
+        table = self.sql(expression, "expression")
+        table = f"TABLE {table}" if not isinstance(expression.expression, exp.Subquery) else table
+        parameters = self.sql(expression, "params_struct")
+        return self.func("PREDICT", model, table, parameters or None)
 
 
 def cached_generator(
