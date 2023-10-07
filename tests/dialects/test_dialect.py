@@ -608,6 +608,7 @@ class TestDialect(Validator):
                 "snowflake": "CAST(x AS DATE)",
                 "doris": "TO_DATE(x)",
                 "mysql": "DATE(x)",
+
             },
         )
         self.validate_all(
