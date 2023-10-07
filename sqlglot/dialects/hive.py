@@ -315,6 +315,7 @@ class Hive(Dialect):
             "UNIX_TIMESTAMP": format_time_lambda(exp.StrToUnix, "hive", True),
             "YEAR": lambda args: exp.Year(this=exp.TsOrDsToDate.from_arg_list(args)),
             "TRUNC": exp.DateTrunc_oracle.from_arg_list,
+            "LATERAL_VIEW_EXPLODE": exp.Explode.from_arg_list,
         }
 
         NO_PAREN_FUNCTION_PARSERS = {

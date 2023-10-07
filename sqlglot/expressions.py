@@ -4342,6 +4342,10 @@ class BitmapToArray(Func):
     arg_types = {"this": True, "expressions": False}
 
 
+class BitmapFromArray(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
 class GroupBitmap(Func):
     arg_types = {"this": True, "expressions": False}
 
@@ -4469,6 +4473,30 @@ class StAstext(Func):
 
 class ArrayToString(Func):
     arg_types = {"this": True, "sep": True, "null_replace": False}
+
+
+class MICROSECONDS_ADD(Func):
+    arg_types = {"this": True, "expression": True}
+
+
+class JSON_EXISTS_PATH(Func):
+    arg_types = {"this": True, "expression": True}
+
+
+class MULTI_DISTINCT_COUNT(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class MULTI_DISTINCT_SUM(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class PERCENTILE_APPROX(Func):
+    arg_types = {"this": True, "expression": True}
+
+
+class RETENTION(Func):
+    arg_types = {"this": True, "expression": False}
 
 
 class ArrayAgg(AggFunc):
@@ -6257,6 +6285,7 @@ def alias_(
     quoted: t.Optional[bool] = None,
     dialect: DialectType = None,
     copy: bool = True,
+    case_sensitive: t.Optional[bool] = None,
     **opts,
 ):
     """Create an Alias expression.
