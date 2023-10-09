@@ -24,7 +24,9 @@ class TestClickhouse(Validator):
         self.assertEqual(expr.sql(dialect="clickhouse"), "COUNT(x)")
         self.assertIsNone(expr._meta)
 
-        self.validate_identity("SELECT sum(foo * bar) FROM bla SAMPLE (10000000)")
+        self.validate_identity("SELECT * FROM (SELECT a FROM b SAMPLE 0.01)")
+        self.validate_identity("SELECT * FROM (SELECT a FROM b SAMPLE 1 / 10 OFFSET 1 / 2)")
+        self.validate_identity("SELECT sum(foo * bar) FROM bla SAMPLE 10000000")
         self.validate_identity("CAST(x AS Nested(ID UInt32, Serial UInt32, EventTime DATETIME))")
         self.validate_identity("CAST(x AS Enum('hello' = 1, 'world' = 2))")
         self.validate_identity("CAST(x AS Enum('hello', 'world'))")
@@ -83,6 +85,16 @@ class TestClickhouse(Validator):
             "CREATE MATERIALIZED VIEW test_view (id UInt8) TO db.table1 AS SELECT * FROM test_data"
         )
 
+        self.validate_all(
+            "SELECT '\\0'",
+            read={
+                "mysql": "SELECT '\0'",
+            },
+            write={
+                "clickhouse": "SELECT '\\0'",
+                "mysql": "SELECT '\0'",
+            },
+        )
         self.validate_all(
             "DATE_ADD('day', 1, x)",
             read={
@@ -332,6 +344,9 @@ class TestClickhouse(Validator):
             )
 
     def test_ddl(self):
+        self.validate_identity(
+            'CREATE TABLE data5 ("x" UInt32, "y" UInt32) ENGINE=MergeTree ORDER BY (round(y / 1000000000), cityHash64(x)) SAMPLE BY cityHash64(x)'
+        )
         self.validate_identity(
             "CREATE TABLE foo (x UInt32) TTL time_column + INTERVAL '1' MONTH DELETE WHERE column = 'value'"
         )

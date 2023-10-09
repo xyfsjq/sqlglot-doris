@@ -126,6 +126,10 @@ class TestBigQuery(Validator):
             "CREATE OR REPLACE TABLE `a.b.c` CLONE `a.b.d`",
             "CREATE OR REPLACE TABLE a.b.c CLONE a.b.d",
         )
+        self.validate_identity(
+            "SELECT * FROM UNNEST(x) WITH OFFSET EXCEPT DISTINCT SELECT * FROM UNNEST(y) WITH OFFSET",
+            "SELECT * FROM UNNEST(x) WITH OFFSET AS offset EXCEPT DISTINCT SELECT * FROM UNNEST(y) WITH OFFSET AS offset",
+        )
 
         self.validate_all("SELECT SPLIT(foo)", write={"bigquery": "SELECT SPLIT(foo, ',')"})
         self.validate_all("SELECT 1 AS hash", write={"bigquery": "SELECT 1 AS `hash`"})
@@ -134,6 +138,28 @@ class TestBigQuery(Validator):
         self.validate_all('x <> """"""', write={"bigquery": "x <> ''"})
         self.validate_all("x <> ''''''", write={"bigquery": "x <> ''"})
         self.validate_all("CAST(x AS DATETIME)", read={"": "x::timestamp"})
+        self.validate_all(
+            "SELECT '\\n'",
+            read={
+                "bigquery": "SELECT '''\n'''",
+            },
+            write={
+                "bigquery": "SELECT '\\n'",
+                "postgres": "SELECT '\n'",
+            },
+        )
+        self.validate_all(
+            "TRIM(item, '*')",
+            read={
+                "snowflake": "TRIM(item, '*')",
+                "spark": "TRIM('*', item)",
+            },
+            write={
+                "bigquery": "TRIM(item, '*')",
+                "snowflake": "TRIM(item, '*')",
+                "spark": "TRIM('*' FROM item)",
+            },
+        )
         self.validate_all(
             "CREATE OR REPLACE TABLE `a.b.c` COPY `a.b.d`",
             write={
@@ -619,6 +645,9 @@ class TestBigQuery(Validator):
                 "postgres": "CURRENT_DATE AT TIME ZONE 'UTC'",
             },
         )
+        self.validate_identity(
+            "SELECT * FROM test QUALIFY a IS DISTINCT FROM b WINDOW c AS (PARTITION BY d)"
+        )
         self.validate_all(
             "SELECT a FROM test WHERE a = 1 GROUP BY a HAVING a = 2 QUALIFY z ORDER BY a LIMIT 10",
             write={
@@ -773,6 +802,63 @@ WHERE
             write={
                 "bigquery": "INSERT INTO test (cola, colb) VALUES (CAST(7 AS STRING), CAST(14 AS STRING))",
             },
+        )
+
+    def test_models(self):
+        self.validate_identity(
+            "SELECT * FROM ML.PREDICT(MODEL mydataset.mymodel, (SELECT label, column1, column2 FROM mydataset.mytable))"
+        )
+        self.validate_identity(
+            "SELECT label, predicted_label1, predicted_label AS predicted_label2 FROM ML.PREDICT(MODEL mydataset.mymodel2, (SELECT * EXCEPT (predicted_label), predicted_label AS predicted_label1 FROM ML.PREDICT(MODEL mydataset.mymodel1, TABLE mydataset.mytable)))"
+        )
+        self.validate_identity(
+            "SELECT * FROM ML.PREDICT(MODEL mydataset.mymodel, (SELECT custom_label, column1, column2 FROM mydataset.mytable), STRUCT(0.55 AS threshold))"
+        )
+        self.validate_identity(
+            "SELECT * FROM ML.PREDICT(MODEL `my_project`.my_dataset.my_model, (SELECT * FROM input_data))"
+        )
+        self.validate_identity(
+            "SELECT * FROM ML.PREDICT(MODEL my_dataset.vision_model, (SELECT uri, ML.RESIZE_IMAGE(ML.DECODE_IMAGE(data), 480, 480, FALSE) AS input FROM my_dataset.object_table))"
+        )
+        self.validate_identity(
+            "SELECT * FROM ML.PREDICT(MODEL my_dataset.vision_model, (SELECT uri, ML.CONVERT_COLOR_SPACE(ML.RESIZE_IMAGE(ML.DECODE_IMAGE(data), 224, 280, TRUE), 'YIQ') AS input FROM my_dataset.object_table WHERE content_type = 'image/jpeg'))"
+        )
+        self.validate_identity(
+            "CREATE OR REPLACE MODEL foo OPTIONS (model_type='linear_reg') AS SELECT bla FROM foo WHERE cond"
+        )
+        self.validate_identity(
+            """CREATE OR REPLACE MODEL m
+TRANSFORM(
+  ML.FEATURE_CROSS(STRUCT(f1, f2)) AS cross_f,
+  ML.QUANTILE_BUCKETIZE(f3) OVER () AS buckets,
+  label_col
+)
+OPTIONS (
+  model_type='linear_reg',
+  input_label_cols=['label_col']
+) AS
+SELECT
+  *
+FROM t""",
+            pretty=True,
+        )
+        self.validate_identity(
+            """CREATE MODEL project_id.mydataset.mymodel
+INPUT(
+  f1 INT64,
+  f2 FLOAT64,
+  f3 STRING,
+  f4 ARRAY<INT64>
+)
+OUTPUT(
+  out1 INT64,
+  out2 INT64
+)
+REMOTE WITH CONNECTION myproject.us.test_connection
+OPTIONS (
+  ENDPOINT='https://us-central1-aiplatform.googleapis.com/v1/projects/myproject/locations/us-central1/endpoints/1234'
+)""",
+            pretty=True,
         )
 
     def test_merge(self):

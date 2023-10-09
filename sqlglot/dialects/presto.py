@@ -260,6 +260,8 @@ class Presto(Dialect):
             "URL_EXTRACT_QUERY": lambda args: exp.ParseUrl(
                 this=seq_get(args, 0), expression="'QUERY'"
             ),
+            "CODEPOINT": exp.Ascii.from_arg_list,
+            "LAST_DAY_OF_MONTH": exp.LastDateOfMonth.from_arg_list,
         }
 
         FUNCTION_PARSERS = parser.Parser.FUNCTION_PARSERS.copy()

@@ -607,6 +607,7 @@ class TestDialect(Validator):
                 "presto": "CAST(CAST(x AS TIMESTAMP) AS DATE)",
                 "snowflake": "CAST(x AS DATE)",
                 "doris": "CAST(x AS DATE)",
+                "mysql": "DATE(x)",
             },
         )
         self.validate_all(
@@ -687,9 +688,7 @@ class TestDialect(Validator):
         self.validate_all(
             "DATE_ADD(x, 1, 'DAY')",
             read={
-                "mysql": "DATE_ADD(x, INTERVAL 1 DAY)",
                 "snowflake": "DATEADD('DAY', 1, x)",
-                "starrocks": "DATE_ADD(x, INTERVAL 1 DAY)",
             },
             write={
                 "bigquery": "DATE_ADD(x, INTERVAL 1 DAY)",
@@ -881,6 +880,7 @@ class TestDialect(Validator):
                 "hive": "DATE_ADD('2021-02-01', 1)",
                 "presto": "DATE_ADD('DAY', 1, CAST(CAST('2021-02-01' AS TIMESTAMP) AS DATE))",
                 "spark": "DATE_ADD('2021-02-01', 1)",
+                "mysql": "DATE_ADD('2021-02-01', INTERVAL 1 DAY)",
             },
         )
         self.validate_all(
@@ -936,10 +936,7 @@ class TestDialect(Validator):
                         "bigquery",
                         "drill",
                         "duckdb",
-                        "mysql",
                         "presto",
-                        "starrocks",
-                        "doris",
                     )
                 },
                 write={
@@ -952,8 +949,25 @@ class TestDialect(Validator):
                         "presto",
                         "hive",
                         "spark",
-                        "starrocks",
+                    )
+                },
+            )
+            self.validate_all(
+                f"{unit}(TS_OR_DS_TO_DATE(x))",
+                read={
+                    dialect: f"{unit}(x)"
+                    for dialect in (
+                        "mysql",
                         "doris",
+                        "starrocks",
+                    )
+                },
+                write={
+                    dialect: f"{unit}(x)"
+                    for dialect in (
+                        "mysql",
+                        "doris",
+                        "starrocks",
                     )
                 },
             )
@@ -1829,3 +1843,17 @@ SELECT
 
         with self.assertRaises(ParseError):
             parse_one("CAST(x AS some_udt)", read="bigquery")
+
+    def test_qualify(self):
+        self.validate_all(
+            "SELECT * FROM t QUALIFY COUNT(*) OVER () > 1",
+            write={
+                "duckdb": "SELECT * FROM t QUALIFY COUNT(*) OVER () > 1",
+                "snowflake": "SELECT * FROM t QUALIFY COUNT(*) OVER () > 1",
+                "clickhouse": "SELECT * FROM (SELECT *, COUNT(*) OVER () AS _w FROM t) AS _t WHERE _w > 1",
+                "mysql": "SELECT * FROM (SELECT *, COUNT(*) OVER () AS _w FROM t) AS _t WHERE _w > 1",
+                "oracle": "SELECT * FROM (SELECT *, COUNT(*) OVER () AS _w FROM t) _t WHERE _w > 1",
+                "postgres": "SELECT * FROM (SELECT *, COUNT(*) OVER () AS _w FROM t) AS _t WHERE _w > 1",
+                "tsql": "SELECT * FROM (SELECT *, COUNT(*) OVER () AS _w FROM t) AS _t WHERE _w > 1",
+            },
+        )

@@ -5,6 +5,7 @@ import re
 from sqlglot import exp, generator
 from sqlglot.dialects.dialect import (
     approx_count_distinct_sql,
+    count_if_to_sum,
     parse_timestamp_trunc,
     rename_func,
     time_format,
@@ -13,7 +14,7 @@ from sqlglot.dialects.mysql import MySQL
 from sqlglot.dialects.tsql import DATE_DELTA_INTERVAL
 
 
-def handle_date_trunc(self, expression: exp.DateTrunc|exp.DateTrunc_oracle) -> str:
+def handle_date_trunc(self, expression: exp.DateTrunc | exp.DateTrunc_oracle) -> str:
     unit = self.sql(expression, "unit").strip("\"'").lower()
     this = self.sql(expression, "this")
     if unit.isalpha():
@@ -165,6 +166,26 @@ def handle_regexp_extract(self, expr: exp.RegexpExtract) -> str:
     return f"REGEXP_EXTRACT({this}, '({expression[1:-1]})', {position})"
 
 
+def _string_agg_sql(self: Doris.Generator, expression: exp.GroupConcat) -> str:
+    expression = expression.copy()
+    separator = expression.args.get("separator") or exp.Literal.string(",")
+
+    order = ""
+    this = expression.this
+    if isinstance(this, exp.Order):
+        if this.this:
+            this = this.this.pop()
+        order = self.sql(expression.this)  # Order has a leading space
+
+    return f"GROUP_CONCAT({self.format_args(this, separator)}{order})"
+
+
+def handle_concat_ws(self, expression: exp.ConcatWs) -> str:
+    expression = expression.expressions[0]
+    this = expression.expressions[1]
+    return f"CONCAT_WS({this},{expression})"
+
+
 class Doris(MySQL):
     DATE_FORMAT = "'yyyy-MM-dd'"
     DATEINT_FORMAT = "'yyyyMMdd'"
@@ -200,6 +221,8 @@ class Doris(MySQL):
             "ARRAY_SORT": exp.SortArray.from_arg_list,
             "SPLIT_BY_STRING": exp.RegexpSplit.from_arg_list,
             "ARRAY_SHUFFLE": exp.Shuffle.from_arg_list,
+            "LAST_DAY": exp.LastDateOfMonth.from_arg_list,
+            "SAMP": exp.StddevSamp.from_arg_list,
         }
 
     class Generator(MySQL.Generator):
@@ -229,7 +252,8 @@ class Doris(MySQL):
             exp.CastToStrType: lambda self, e: f"CAST({self.sql(e, 'this')} AS {self.sql(e, 'to')})",
             exp.CurrentTimestamp: lambda *_: "NOW()",
             exp.CurrentDate: no_paren_current_date_sql,
-            exp.ConcatWs: lambda self, e: self.func("CONCAT_WS", e.expressions),
+            exp.CountIf: count_if_to_sum,
+            exp.ConcatWs: handle_concat_ws,
             exp.DateDiff: handle_date_diff,
             exp.DateTrunc: handle_date_trunc,
             exp.DateTrunc_oracle: handle_date_trunc,
@@ -237,10 +261,12 @@ class Doris(MySQL):
             exp.GroupBitmap: lambda self, e: f"BITMAP_COUNT(BITMAP_AGG({self.sql(e, 'this')}))",
             exp.GroupBitmapAnd: lambda self, e: f"BITMAP_COUNT(BITMAP_INTERSECT({self.sql(e, 'this')}))",
             exp.GroupBitmapOr: lambda self, e: f"BITMAP_COUNT(BITMAP_UNION({self.sql(e, 'this')}))",
+            exp.GroupConcat: _string_agg_sql,
             exp.JSONExtractScalar: arrow_json_extract_scalar_sql,
             exp.JSONExtract: arrow_json_extract_sql,
             exp.JSONBExtract: arrow_jsonb_extract_sql,
             exp.JSONBExtractScalar: arrow_jsonb_extract_scalar_sql,
+            exp.LastDateOfMonth: rename_func("LAST_DAY"),
             exp.LTrim: rename_func("LTRIM"),
             exp.RTrim: rename_func("RTRIM"),
             exp.Range: rename_func("ARRAY_RANGE"),
@@ -305,13 +331,13 @@ class Doris(MySQL):
         #         return f"{this} + INTERVAL {expr} DAY"
         #     return self.binary(expression, "+")
 
-        def where_sql(self, expression: exp.Where) -> str:
-            this = self.indent(self.sql(expression, "this"))
-            numbers = re.findall(r"\d+", this)
-            letters = re.findall(r"[a-zA-Z]+", this)
-            if letters[0] == "rownum":
-                return f"{self.seg('LIMIT')} {numbers[0]}"
-            return f"{self.seg('WHERE')}{self.sep()}{this}"
+        # def where_sql(self, expression: exp.Where) -> str:
+        #     this = self.indent(self.sql(expression, "this"))
+        #     numbers = re.findall(r"\d+", this)
+        #     letters = re.findall(r"[a-zA-Z]+", this)
+        #     if letters[0] == "rownum":
+        #         return f"{self.seg('LIMIT')} {numbers[0]}"
+        #     return f"{self.seg('WHERE')}{self.sep()}{this}"
 
         def currentdate_sql(self, expression: exp.CurrentDate) -> str:
             zone = self.sql(expression, "this")

@@ -22,6 +22,7 @@ from sqlglot.dialects.dialect import (
     rename_func,
     simplify_literal,
     str_position_sql,
+    struct_extract_sql,
     timestamptrunc_sql,
     timestrtotime_sql,
     trim_sql,
@@ -204,7 +205,7 @@ def _remove_target_from_merge(expression: exp.Expression) -> exp.Expression:
 
         for when in expression.expressions:
             when.transform(
-                lambda node: exp.column(node.name)
+                lambda node: exp.column(node.this)
                 if isinstance(node, exp.Column) and normalize(node.args.get("table")) in targets
                 else node,
                 copy=False,
@@ -440,9 +441,15 @@ class Postgres(Dialect):
             exp.Pow: lambda self, e: self.binary(e, "^"),
             exp.RegexpLike: lambda self, e: self.binary(e, "~"),
             exp.RegexpILike: lambda self, e: self.binary(e, "~*"),
-            exp.Select: transforms.preprocess([transforms.eliminate_semi_and_anti_joins]),
+            exp.Select: transforms.preprocess(
+                [
+                    transforms.eliminate_semi_and_anti_joins,
+                    transforms.eliminate_qualify,
+                ]
+            ),
             exp.StrPosition: str_position_sql,
             exp.StrToTime: lambda self, e: f"TO_TIMESTAMP({self.sql(e, 'this')}, {self.format_time(e)})",
+            exp.StructExtract: struct_extract_sql,
             exp.Substring: _substring_sql,
             exp.TimestampTrunc: timestamptrunc_sql,
             exp.TimeStrToTime: timestrtotime_sql,
@@ -453,6 +460,8 @@ class Postgres(Dialect):
             exp.TryCast: no_trycast_sql,
             exp.TsOrDsToDate: ts_or_ds_to_date_sql("postgres"),
             exp.UnixToTime: lambda self, e: f"TO_TIMESTAMP({self.sql(e, 'this')})",
+            exp.VariancePop: rename_func("VAR_POP"),
+            exp.Variance: rename_func("VAR_SAMP"),
             exp.Xor: bool_xor_sql,
         }
 

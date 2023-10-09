@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typing as t
 
-from sqlglot import exp, generator, parser, tokens
+from sqlglot import exp, generator, parser, tokens, transforms
 from sqlglot.dialects.dialect import (
     Dialect,
     inline_array_sql,
@@ -36,6 +36,10 @@ class ClickHouse(Dialect):
     NULL_ORDERING = "nulls_are_last"
     STRICT_STRING_CONCAT = True
     SUPPORTS_USER_DEFINED_TYPES = False
+
+    ESCAPE_SEQUENCES = {
+        "\\0": "\0",
+    }
 
     class Tokenizer(tokens.Tokenizer):
         COMMENTS = ["--", "#", "#!", ("/*", "*/")]
@@ -445,6 +449,7 @@ class ClickHouse(Dialect):
         QUERY_HINTS = False
         STRUCT_DELIMITER = ("(", ")")
         NVL2_SUPPORTED = False
+        TABLESAMPLE_REQUIRES_PARENS = False
 
         STRING_TYPE_MAPPING = {
             exp.DataType.Type.CHAR: "String",
@@ -492,6 +497,7 @@ class ClickHouse(Dialect):
 
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
+            exp.Select: transforms.preprocess([transforms.eliminate_qualify]),
             exp.AnyValue: rename_func("any"),
             exp.ApproxDistinct: rename_func("uniq"),
             exp.Array: inline_array_sql,
