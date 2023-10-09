@@ -27,9 +27,9 @@ def handle_date_trunc(self, expression: exp.DateTrunc|exp.DateTrunc_oracle) -> s
 
 
 def handle_date_diff(self, expression: exp.DateDiff) -> str:
-    this = self.sql(expression, "unit")
+    unit = self.sql(expression, "unit").lower()
     expressions = self.sql(expression, "expression")
-    unit = self.sql(expression, "this").lower()
+    this = self.sql(expression, "this")
     if unit == "microsecond":
         return f"MICROSECONDS_DIFF({this},{expressions})"
     elif unit == "millisecond":
@@ -226,8 +226,10 @@ class Doris(MySQL):
             exp.BitwiseAnd: rename_func("BITAND"),
             exp.BitwiseOr: rename_func("BITOR"),
             exp.BitwiseXor: rename_func("BITXOR"),
+            exp.CastToStrType: lambda self, e: f"CAST({self.sql(e, 'this')} AS {self.sql(e, 'to')})",
             exp.CurrentTimestamp: lambda *_: "NOW()",
             exp.CurrentDate: no_paren_current_date_sql,
+            exp.ConcatWs: lambda self, e: self.func("CONCAT_WS", e.expressions),
             exp.DateDiff: handle_date_diff,
             exp.DateTrunc: handle_date_trunc,
             exp.DateTrunc_oracle: handle_date_trunc,

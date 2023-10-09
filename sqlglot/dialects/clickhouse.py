@@ -224,6 +224,10 @@ class ClickHouse(Dialect):
                 this="10",
                 expression=seq_get(args, 0),
             ),
+            "TOSTRING": lambda args: exp.CastToStrType(
+                this=seq_get(args, 0),
+                to="STRING",
+            ),
         }
 
         FUNCTIONS_WITH_ALIASED_ARGS = {*parser.Parser.FUNCTIONS_WITH_ALIASED_ARGS, "TUPLE"}
