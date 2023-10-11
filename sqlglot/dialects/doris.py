@@ -181,9 +181,9 @@ def _string_agg_sql(self: Doris.Generator, expression: exp.GroupConcat) -> str:
 
 
 def handle_concat_ws(self, expression: exp.ConcatWs) -> str:
-    expression = expression.expressions[0]
-    this = expression.expressions[1]
-    return f"CONCAT_WS({this},{expression})"
+    expression = expression.copy()
+    delim, *rest_args = expression.expressions
+    return f"CONCAT_WS({rest_args[0]},{delim})"
 
 
 class Doris(MySQL):
