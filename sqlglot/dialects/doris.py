@@ -242,6 +242,7 @@ class Doris(MySQL):
             exp.ApproxDistinct: approx_count_distinct_sql,
             exp.ArrayAgg: rename_func("COLLECT_LIST"),
             exp.ArrayStringConcat: handle_array_concat,
+            exp.ArrayToString: lambda self, e: f"ARRAY_JOIN({self.sql(e, 'this')},{self.sql(e, 'sep')}" + (f",{self.sql(e, 'null_replace')}" if self.sql(e, 'null_replace') else "") + ")",
             exp.ArrayFilter: lambda self, e: f"ARRAY_FILTER({self.sql(e, 'expression')},{self.sql(e, 'this')})",
             exp.ArrayUniq: lambda self, e: f"SIZE(ARRAY_DISTINCT({self.sql(e, 'this')}))",
             exp.ArrayOverlaps: rename_func("ARRAYS_OVERLAP"),

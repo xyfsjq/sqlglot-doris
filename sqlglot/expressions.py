@@ -645,10 +645,10 @@ class Expression(metaclass=_Expression):
                 errors.append(f"Required keyword: '{k}' missing for {self.__class__}")
 
         if (
-            args
-            and isinstance(self, Func)
-            and len(args) > len(self.arg_types)
-            and not self.is_var_len_args
+                args
+                and isinstance(self, Func)
+                and len(args) > len(self.arg_types)
+                and not self.is_var_len_args
         ):
             errors.append(
                 f"The number of provided arguments ({len(args)}) is greater than "
@@ -675,11 +675,11 @@ class Expression(metaclass=_Expression):
         return load(obj)
 
     def and_(
-        self,
-        *expressions: t.Optional[ExpOrStr],
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            *expressions: t.Optional[ExpOrStr],
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Condition:
         """
         AND this condition with one or multiple expressions.
@@ -701,11 +701,11 @@ class Expression(metaclass=_Expression):
         return and_(self, *expressions, dialect=dialect, copy=copy, **opts)
 
     def or_(
-        self,
-        *expressions: t.Optional[ExpOrStr],
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            *expressions: t.Optional[ExpOrStr],
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Condition:
         """
         OR this condition with one or multiple expressions.
@@ -743,12 +743,12 @@ class Expression(metaclass=_Expression):
         return not_(self, copy=copy)
 
     def as_(
-        self,
-        alias: str | Identifier,
-        quoted: t.Optional[bool] = None,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            alias: str | Identifier,
+            quoted: t.Optional[bool] = None,
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Alias:
         return alias_(self, alias, quoted=quoted, dialect=dialect, copy=copy, **opts)
 
@@ -776,12 +776,12 @@ class Expression(metaclass=_Expression):
         raise TypeError(f"'{self.__class__.__name__}' object is not iterable")
 
     def isin(
-        self,
-        *expressions: t.Any,
-        query: t.Optional[ExpOrStr] = None,
-        unnest: t.Optional[ExpOrStr] | t.Collection[ExpOrStr] = None,
-        copy: bool = True,
-        **opts,
+            self,
+            *expressions: t.Any,
+            query: t.Optional[ExpOrStr] = None,
+            unnest: t.Optional[ExpOrStr] | t.Collection[ExpOrStr] = None,
+            copy: bool = True,
+            **opts,
     ) -> In:
         return In(
             this=maybe_copy(self, copy),
@@ -922,7 +922,7 @@ class DerivedTable(Expression):
 
 class Unionable(Expression):
     def union(
-        self, expression: ExpOrStr, distinct: bool = True, dialect: DialectType = None, **opts
+            self, expression: ExpOrStr, distinct: bool = True, dialect: DialectType = None, **opts
     ) -> Unionable:
         """
         Builds a UNION expression.
@@ -945,7 +945,7 @@ class Unionable(Expression):
         return union(left=self, right=expression, distinct=distinct, dialect=dialect, **opts)
 
     def intersect(
-        self, expression: ExpOrStr, distinct: bool = True, dialect: DialectType = None, **opts
+            self, expression: ExpOrStr, distinct: bool = True, dialect: DialectType = None, **opts
     ) -> Unionable:
         """
         Builds an INTERSECT expression.
@@ -968,7 +968,7 @@ class Unionable(Expression):
         return intersect(left=self, right=expression, distinct=distinct, dialect=dialect, **opts)
 
     def except_(
-        self, expression: ExpOrStr, distinct: bool = True, dialect: DialectType = None, **opts
+            self, expression: ExpOrStr, distinct: bool = True, dialect: DialectType = None, **opts
     ) -> Unionable:
         """
         Builds an EXCEPT expression.
@@ -1421,11 +1421,11 @@ class Delete(Expression):
     }
 
     def delete(
-        self,
-        table: ExpOrStr,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            table: ExpOrStr,
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Delete:
         """
         Create a DELETE expression or replace the table on an existing DELETE expression.
@@ -1454,12 +1454,12 @@ class Delete(Expression):
         )
 
     def where(
-        self,
-        *expressions: t.Optional[ExpOrStr],
-        append: bool = True,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            *expressions: t.Optional[ExpOrStr],
+            append: bool = True,
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Delete:
         """
         Append to or set the WHERE expressions.
@@ -1493,11 +1493,11 @@ class Delete(Expression):
         )
 
     def returning(
-        self,
-        expression: ExpOrStr,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            expression: ExpOrStr,
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Delete:
         """
         Set the RETURNING expression. Not supported by all dialects.
@@ -1661,14 +1661,14 @@ class Insert(DDL):
     }
 
     def with_(
-        self,
-        alias: ExpOrStr,
-        as_: ExpOrStr,
-        recursive: t.Optional[bool] = None,
-        append: bool = True,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            alias: ExpOrStr,
+            as_: ExpOrStr,
+            recursive: t.Optional[bool] = None,
+            append: bool = True,
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Insert:
         """
         Append to or set the common table expressions.
@@ -1818,12 +1818,12 @@ class Join(Expression):
         return self.this.alias_or_name
 
     def on(
-        self,
-        *expressions: t.Optional[ExpOrStr],
-        append: bool = True,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            *expressions: t.Optional[ExpOrStr],
+            append: bool = True,
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Join:
         """
         Append to or set the ON expressions.
@@ -1862,12 +1862,12 @@ class Join(Expression):
         return join
 
     def using(
-        self,
-        *expressions: t.Optional[ExpOrStr],
-        append: bool = True,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            *expressions: t.Optional[ExpOrStr],
+            append: bool = True,
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Join:
         """
         Append to or set the USING expressions.
@@ -2322,12 +2322,12 @@ class Tuple(Expression):
     arg_types = {"expressions": False}
 
     def isin(
-        self,
-        *expressions: t.Any,
-        query: t.Optional[ExpOrStr] = None,
-        unnest: t.Optional[ExpOrStr] | t.Collection[ExpOrStr] = None,
-        copy: bool = True,
-        **opts,
+            self,
+            *expressions: t.Any,
+            query: t.Optional[ExpOrStr] = None,
+            unnest: t.Optional[ExpOrStr] | t.Collection[ExpOrStr] = None,
+            copy: bool = True,
+            **opts,
     ) -> In:
         return In(
             this=maybe_copy(self, copy),
@@ -2367,7 +2367,7 @@ class Subqueryable(Unionable):
         return Subquery(this=instance, alias=alias)
 
     def limit(
-        self, expression: ExpOrStr | int, dialect: DialectType = None, copy: bool = True, **opts
+            self, expression: ExpOrStr | int, dialect: DialectType = None, copy: bool = True, **opts
     ) -> Select:
         raise NotImplementedError
 
@@ -2387,24 +2387,24 @@ class Subqueryable(Unionable):
         raise NotImplementedError("Subqueryable objects must implement `named_selects`")
 
     def select(
-        self,
-        *expressions: t.Optional[ExpOrStr],
-        append: bool = True,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            *expressions: t.Optional[ExpOrStr],
+            append: bool = True,
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Subqueryable:
         raise NotImplementedError("Subqueryable objects must implement `select`")
 
     def with_(
-        self,
-        alias: ExpOrStr,
-        as_: ExpOrStr,
-        recursive: t.Optional[bool] = None,
-        append: bool = True,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            alias: ExpOrStr,
+            as_: ExpOrStr,
+            recursive: t.Optional[bool] = None,
+            append: bool = True,
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Subqueryable:
         """
         Append to or set the common table expressions.
@@ -2533,7 +2533,7 @@ class Union(Subqueryable):
     }
 
     def limit(
-        self, expression: ExpOrStr | int, dialect: DialectType = None, copy: bool = True, **opts
+            self, expression: ExpOrStr | int, dialect: DialectType = None, copy: bool = True, **opts
     ) -> Select:
         """
         Set the LIMIT expression.
@@ -2561,12 +2561,12 @@ class Union(Subqueryable):
         )
 
     def select(
-        self,
-        *expressions: t.Optional[ExpOrStr],
-        append: bool = True,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            *expressions: t.Optional[ExpOrStr],
+            append: bool = True,
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Union:
         """Append to or set the SELECT of the union recursively.
 
@@ -2693,7 +2693,7 @@ class Select(Subqueryable):
     }
 
     def from_(
-        self, expression: ExpOrStr, dialect: DialectType = None, copy: bool = True, **opts
+            self, expression: ExpOrStr, dialect: DialectType = None, copy: bool = True, **opts
     ) -> Select:
         """
         Set the FROM expression.
@@ -2725,12 +2725,12 @@ class Select(Subqueryable):
         )
 
     def group_by(
-        self,
-        *expressions: t.Optional[ExpOrStr],
-        append: bool = True,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            *expressions: t.Optional[ExpOrStr],
+            append: bool = True,
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Select:
         """
         Set the GROUP BY expression.
@@ -2769,12 +2769,12 @@ class Select(Subqueryable):
         )
 
     def order_by(
-        self,
-        *expressions: t.Optional[ExpOrStr],
-        append: bool = True,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            *expressions: t.Optional[ExpOrStr],
+            append: bool = True,
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Select:
         """
         Set the ORDER BY expression.
@@ -2809,12 +2809,12 @@ class Select(Subqueryable):
         )
 
     def sort_by(
-        self,
-        *expressions: t.Optional[ExpOrStr],
-        append: bool = True,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            *expressions: t.Optional[ExpOrStr],
+            append: bool = True,
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Select:
         """
         Set the SORT BY expression.
@@ -2849,12 +2849,12 @@ class Select(Subqueryable):
         )
 
     def cluster_by(
-        self,
-        *expressions: t.Optional[ExpOrStr],
-        append: bool = True,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            *expressions: t.Optional[ExpOrStr],
+            append: bool = True,
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Select:
         """
         Set the CLUSTER BY expression.
@@ -2889,7 +2889,7 @@ class Select(Subqueryable):
         )
 
     def limit(
-        self, expression: ExpOrStr | int, dialect: DialectType = None, copy: bool = True, **opts
+            self, expression: ExpOrStr | int, dialect: DialectType = None, copy: bool = True, **opts
     ) -> Select:
         """
         Set the LIMIT expression.
@@ -2923,7 +2923,7 @@ class Select(Subqueryable):
         )
 
     def offset(
-        self, expression: ExpOrStr | int, dialect: DialectType = None, copy: bool = True, **opts
+            self, expression: ExpOrStr | int, dialect: DialectType = None, copy: bool = True, **opts
     ) -> Select:
         """
         Set the OFFSET expression.
@@ -2957,12 +2957,12 @@ class Select(Subqueryable):
         )
 
     def select(
-        self,
-        *expressions: t.Optional[ExpOrStr],
-        append: bool = True,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            *expressions: t.Optional[ExpOrStr],
+            append: bool = True,
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Select:
         """
         Append to or set the SELECT expressions.
@@ -2994,12 +2994,12 @@ class Select(Subqueryable):
         )
 
     def lateral(
-        self,
-        *expressions: t.Optional[ExpOrStr],
-        append: bool = True,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            *expressions: t.Optional[ExpOrStr],
+            append: bool = True,
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Select:
         """
         Append to or set the LATERAL expressions.
@@ -3033,16 +3033,16 @@ class Select(Subqueryable):
         )
 
     def join(
-        self,
-        expression: ExpOrStr,
-        on: t.Optional[ExpOrStr] = None,
-        using: t.Optional[ExpOrStr | t.Collection[ExpOrStr]] = None,
-        append: bool = True,
-        join_type: t.Optional[str] = None,
-        join_alias: t.Optional[Identifier | str] = None,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            expression: ExpOrStr,
+            on: t.Optional[ExpOrStr] = None,
+            using: t.Optional[ExpOrStr | t.Collection[ExpOrStr]] = None,
+            append: bool = True,
+            join_type: t.Optional[str] = None,
+            join_alias: t.Optional[Identifier | str] = None,
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Select:
         """
         Append to or set the JOIN expressions.
@@ -3131,12 +3131,12 @@ class Select(Subqueryable):
         )
 
     def where(
-        self,
-        *expressions: t.Optional[ExpOrStr],
-        append: bool = True,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            *expressions: t.Optional[ExpOrStr],
+            append: bool = True,
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Select:
         """
         Append to or set the WHERE expressions.
@@ -3170,12 +3170,12 @@ class Select(Subqueryable):
         )
 
     def having(
-        self,
-        *expressions: t.Optional[ExpOrStr],
-        append: bool = True,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            *expressions: t.Optional[ExpOrStr],
+            append: bool = True,
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Select:
         """
         Append to or set the HAVING expressions.
@@ -3209,12 +3209,12 @@ class Select(Subqueryable):
         )
 
     def window(
-        self,
-        *expressions: t.Optional[ExpOrStr],
-        append: bool = True,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            *expressions: t.Optional[ExpOrStr],
+            append: bool = True,
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Select:
         return _apply_list_builder(
             *expressions,
@@ -3228,12 +3228,12 @@ class Select(Subqueryable):
         )
 
     def qualify(
-        self,
-        *expressions: t.Optional[ExpOrStr],
-        append: bool = True,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            *expressions: t.Optional[ExpOrStr],
+            append: bool = True,
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Select:
         return _apply_conjunction_builder(
             *expressions,
@@ -3247,7 +3247,7 @@ class Select(Subqueryable):
         )
 
     def distinct(
-        self, *ons: t.Optional[ExpOrStr], distinct: bool = True, copy: bool = True
+            self, *ons: t.Optional[ExpOrStr], distinct: bool = True, copy: bool = True
     ) -> Select:
         """
         Set the OFFSET expression.
@@ -3270,12 +3270,12 @@ class Select(Subqueryable):
         return instance
 
     def ctas(
-        self,
-        table: ExpOrStr,
-        properties: t.Optional[t.Dict] = None,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+            self,
+            table: ExpOrStr,
+            properties: t.Optional[t.Dict] = None,
+            dialect: DialectType = None,
+            copy: bool = True,
+            **opts,
     ) -> Create:
         """
         Convert this expression to a CREATE TABLE AS statement.
@@ -3668,11 +3668,11 @@ class DataType(Expression):
 
     @classmethod
     def build(
-        cls,
-        dtype: str | DataType | DataType.Type,
-        dialect: DialectType = None,
-        udt: bool = False,
-        **kwargs,
+            cls,
+            dtype: str | DataType | DataType.Type,
+            dialect: DialectType = None,
+            udt: bool = False,
+            **kwargs,
     ) -> DataType:
         """
         Constructs a DataType object.
@@ -3723,9 +3723,9 @@ class DataType(Expression):
             other = DataType.build(dtype, udt=True)
 
             if (
-                other.expressions
-                or self.this == DataType.Type.USERDEFINED
-                or other.this == DataType.Type.USERDEFINED
+                    other.expressions
+                    or self.this == DataType.Type.USERDEFINED
+                    or other.this == DataType.Type.USERDEFINED
             ):
                 matches = self == other
             else:
@@ -4365,6 +4365,10 @@ class Char(Func):
 class StAstext(Func):
     _sql_names = ["TO_GEOGRAPHY", "TRY_TO_GEOGRAPHY", "ST_GEOGRAPHYFROMWKB"]
     arg_types = {"this": True, "expression": False}
+
+
+class ArrayToString(Func):
+    arg_types = {"this": True, "sep": True, "null_replace": False}
 
 
 class ArrayAgg(AggFunc):
@@ -5320,38 +5324,38 @@ ALL_FUNCTIONS = subclasses(__name__, Func, (AggFunc, Anonymous, Func))
 # Helpers
 @t.overload
 def maybe_parse(
-    sql_or_expression: ExpOrStr,
-    *,
-    into: t.Type[E],
-    dialect: DialectType = None,
-    prefix: t.Optional[str] = None,
-    copy: bool = False,
-    **opts,
+        sql_or_expression: ExpOrStr,
+        *,
+        into: t.Type[E],
+        dialect: DialectType = None,
+        prefix: t.Optional[str] = None,
+        copy: bool = False,
+        **opts,
 ) -> E:
     ...
 
 
 @t.overload
 def maybe_parse(
-    sql_or_expression: str | E,
-    *,
-    into: t.Optional[IntoType] = None,
-    dialect: DialectType = None,
-    prefix: t.Optional[str] = None,
-    copy: bool = False,
-    **opts,
+        sql_or_expression: str | E,
+        *,
+        into: t.Optional[IntoType] = None,
+        dialect: DialectType = None,
+        prefix: t.Optional[str] = None,
+        copy: bool = False,
+        **opts,
 ) -> E:
     ...
 
 
 def maybe_parse(
-    sql_or_expression: ExpOrStr,
-    *,
-    into: t.Optional[IntoType] = None,
-    dialect: DialectType = None,
-    prefix: t.Optional[str] = None,
-    copy: bool = False,
-    **opts,
+        sql_or_expression: ExpOrStr,
+        *,
+        into: t.Optional[IntoType] = None,
+        dialect: DialectType = None,
+        prefix: t.Optional[str] = None,
+        copy: bool = False,
+        **opts,
 ) -> Expression:
     """Gracefully handle a possible string or expression.
 
@@ -5411,15 +5415,15 @@ def _is_wrong_expression(expression, into):
 
 
 def _apply_builder(
-    expression,
-    instance,
-    arg,
-    copy=True,
-    prefix=None,
-    into=None,
-    dialect=None,
-    into_arg="this",
-    **opts,
+        expression,
+        instance,
+        arg,
+        copy=True,
+        prefix=None,
+        into=None,
+        dialect=None,
+        into_arg="this",
+        **opts,
 ):
     if _is_wrong_expression(expression, into):
         expression = into(**{into_arg: expression})
@@ -5436,16 +5440,16 @@ def _apply_builder(
 
 
 def _apply_child_list_builder(
-    *expressions,
-    instance,
-    arg,
-    append=True,
-    copy=True,
-    prefix=None,
-    into=None,
-    dialect=None,
-    properties=None,
-    **opts,
+        *expressions,
+        instance,
+        arg,
+        append=True,
+        copy=True,
+        prefix=None,
+        into=None,
+        dialect=None,
+        properties=None,
+        **opts,
 ):
     instance = maybe_copy(instance, copy)
     parsed = []
@@ -5476,15 +5480,15 @@ def _apply_child_list_builder(
 
 
 def _apply_list_builder(
-    *expressions,
-    instance,
-    arg,
-    append=True,
-    copy=True,
-    prefix=None,
-    into=None,
-    dialect=None,
-    **opts,
+        *expressions,
+        instance,
+        arg,
+        append=True,
+        copy=True,
+        prefix=None,
+        into=None,
+        dialect=None,
+        **opts,
 ):
     inst = maybe_copy(instance, copy)
 
@@ -5509,14 +5513,14 @@ def _apply_list_builder(
 
 
 def _apply_conjunction_builder(
-    *expressions,
-    instance,
-    arg,
-    into=None,
-    append=True,
-    copy=True,
-    dialect=None,
-    **opts,
+        *expressions,
+        instance,
+        arg,
+        into=None,
+        append=True,
+        copy=True,
+        dialect=None,
+        **opts,
 ):
     expressions = [exp for exp in expressions if exp is not None and exp != ""]
     if not expressions:
@@ -5535,14 +5539,14 @@ def _apply_conjunction_builder(
 
 
 def _apply_cte_builder(
-    instance: E,
-    alias: ExpOrStr,
-    as_: ExpOrStr,
-    recursive: t.Optional[bool] = None,
-    append: bool = True,
-    dialect: DialectType = None,
-    copy: bool = True,
-    **opts,
+        instance: E,
+        alias: ExpOrStr,
+        as_: ExpOrStr,
+        recursive: t.Optional[bool] = None,
+        append: bool = True,
+        dialect: DialectType = None,
+        copy: bool = True,
+        **opts,
 ) -> E:
     alias_expression = maybe_parse(alias, dialect=dialect, into=TableAlias, **opts)
     as_expression = maybe_parse(as_, dialect=dialect, **opts)
@@ -5559,11 +5563,11 @@ def _apply_cte_builder(
 
 
 def _combine(
-    expressions: t.Sequence[t.Optional[ExpOrStr]],
-    operator: t.Type[Connector],
-    dialect: DialectType = None,
-    copy: bool = True,
-    **opts,
+        expressions: t.Sequence[t.Optional[ExpOrStr]],
+        operator: t.Type[Connector],
+        dialect: DialectType = None,
+        copy: bool = True,
+        **opts,
 ) -> Expression:
     conditions = [
         condition(expression, dialect=dialect, copy=copy, **opts)
@@ -5585,7 +5589,7 @@ def _wrap(expression: E, kind: t.Type[Expression]) -> E | Paren:
 
 
 def union(
-    left: ExpOrStr, right: ExpOrStr, distinct: bool = True, dialect: DialectType = None, **opts
+        left: ExpOrStr, right: ExpOrStr, distinct: bool = True, dialect: DialectType = None, **opts
 ) -> Union:
     """
     Initializes a syntax tree from one UNION expression.
@@ -5613,7 +5617,7 @@ def union(
 
 
 def intersect(
-    left: ExpOrStr, right: ExpOrStr, distinct: bool = True, dialect: DialectType = None, **opts
+        left: ExpOrStr, right: ExpOrStr, distinct: bool = True, dialect: DialectType = None, **opts
 ) -> Intersect:
     """
     Initializes a syntax tree from one INTERSECT expression.
@@ -5641,7 +5645,7 @@ def intersect(
 
 
 def except_(
-    left: ExpOrStr, right: ExpOrStr, distinct: bool = True, dialect: DialectType = None, **opts
+        left: ExpOrStr, right: ExpOrStr, distinct: bool = True, dialect: DialectType = None, **opts
 ) -> Except:
     """
     Initializes a syntax tree from one EXCEPT expression.
@@ -5713,12 +5717,12 @@ def from_(expression: ExpOrStr, dialect: DialectType = None, **opts) -> Select:
 
 
 def update(
-    table: str | Table,
-    properties: dict,
-    where: t.Optional[ExpOrStr] = None,
-    from_: t.Optional[ExpOrStr] = None,
-    dialect: DialectType = None,
-    **opts,
+        table: str | Table,
+        properties: dict,
+        where: t.Optional[ExpOrStr] = None,
+        from_: t.Optional[ExpOrStr] = None,
+        dialect: DialectType = None,
+        **opts,
 ) -> Update:
     """
     Creates an update statement.
@@ -5762,11 +5766,11 @@ def update(
 
 
 def delete(
-    table: ExpOrStr,
-    where: t.Optional[ExpOrStr] = None,
-    returning: t.Optional[ExpOrStr] = None,
-    dialect: DialectType = None,
-    **opts,
+        table: ExpOrStr,
+        where: t.Optional[ExpOrStr] = None,
+        returning: t.Optional[ExpOrStr] = None,
+        dialect: DialectType = None,
+        **opts,
 ) -> Delete:
     """
     Builds a delete statement.
@@ -5793,13 +5797,13 @@ def delete(
 
 
 def insert(
-    expression: ExpOrStr,
-    into: ExpOrStr,
-    columns: t.Optional[t.Sequence[ExpOrStr]] = None,
-    overwrite: t.Optional[bool] = None,
-    dialect: DialectType = None,
-    copy: bool = True,
-    **opts,
+        expression: ExpOrStr,
+        into: ExpOrStr,
+        columns: t.Optional[t.Sequence[ExpOrStr]] = None,
+        overwrite: t.Optional[bool] = None,
+        dialect: DialectType = None,
+        copy: bool = True,
+        **opts,
 ) -> Insert:
     """
     Builds an INSERT statement.
@@ -5838,7 +5842,7 @@ def insert(
 
 
 def condition(
-    expression: ExpOrStr, dialect: DialectType = None, copy: bool = True, **opts
+        expression: ExpOrStr, dialect: DialectType = None, copy: bool = True, **opts
 ) -> Condition:
     """
     Initialize a logical condition expression.
@@ -5875,7 +5879,7 @@ def condition(
 
 
 def and_(
-    *expressions: t.Optional[ExpOrStr], dialect: DialectType = None, copy: bool = True, **opts
+        *expressions: t.Optional[ExpOrStr], dialect: DialectType = None, copy: bool = True, **opts
 ) -> Condition:
     """
     Combine multiple conditions with an AND logical operator.
@@ -5898,7 +5902,7 @@ def and_(
 
 
 def or_(
-    *expressions: t.Optional[ExpOrStr], dialect: DialectType = None, copy: bool = True, **opts
+        *expressions: t.Optional[ExpOrStr], dialect: DialectType = None, copy: bool = True, **opts
 ) -> Condition:
     """
     Combine multiple conditions with an OR logical operator.
@@ -5976,7 +5980,7 @@ def to_identifier(name: None, quoted: t.Optional[bool] = None, copy: bool = True
 
 @t.overload
 def to_identifier(
-    name: str | Identifier, quoted: t.Optional[bool] = None, copy: bool = True
+        name: str | Identifier, quoted: t.Optional[bool] = None, copy: bool = True
 ) -> Identifier:
     ...
 
@@ -6041,7 +6045,7 @@ def to_table(sql_path: None, **kwargs) -> None:
 
 
 def to_table(
-    sql_path: t.Optional[str | Table], dialect: DialectType = None, **kwargs
+        sql_path: t.Optional[str | Table], dialect: DialectType = None, **kwargs
 ) -> t.Optional[Table]:
     """
     Create a table expression from a `[catalog].[schema].[table]` sql path. Catalog and schema are optional.
@@ -6087,14 +6091,14 @@ def to_column(sql_path: str | Column, **kwargs) -> Column:
 
 
 def alias_(
-    expression: ExpOrStr,
-    alias: str | Identifier,
-    table: bool | t.Sequence[str | Identifier] = False,
-    quoted: t.Optional[bool] = None,
-    dialect: DialectType = None,
-    copy: bool = True,
-    case_sensitive: t.Optional[bool] = None,
-    **opts,
+        expression: ExpOrStr,
+        alias: str | Identifier,
+        table: bool | t.Sequence[str | Identifier] = False,
+        quoted: t.Optional[bool] = None,
+        dialect: DialectType = None,
+        copy: bool = True,
+        case_sensitive: t.Optional[bool] = None,
+        **opts,
 ):
     """Create an Alias expression.
 
@@ -6151,10 +6155,10 @@ def alias_(
 
 
 def subquery(
-    expression: ExpOrStr,
-    alias: t.Optional[Identifier | str] = None,
-    dialect: DialectType = None,
-    **opts,
+        expression: ExpOrStr,
+        alias: t.Optional[Identifier | str] = None,
+        dialect: DialectType = None,
+        **opts,
 ) -> Select:
     """
     Build a subquery expression.
@@ -6179,11 +6183,11 @@ def subquery(
 
 
 def column(
-    col: str | Identifier,
-    table: t.Optional[str | Identifier] = None,
-    db: t.Optional[str | Identifier] = None,
-    catalog: t.Optional[str | Identifier] = None,
-    quoted: t.Optional[bool] = None,
+        col: str | Identifier,
+        table: t.Optional[str | Identifier] = None,
+        db: t.Optional[str | Identifier] = None,
+        catalog: t.Optional[str | Identifier] = None,
+        quoted: t.Optional[bool] = None,
 ) -> Column:
     """
     Build a Column.
@@ -6228,11 +6232,11 @@ def cast(expression: ExpOrStr, to: str | DataType | DataType.Type, **opts) -> Ca
 
 
 def table_(
-    table: Identifier | str,
-    db: t.Optional[Identifier | str] = None,
-    catalog: t.Optional[Identifier | str] = None,
-    quoted: t.Optional[bool] = None,
-    alias: t.Optional[Identifier | str] = None,
+        table: Identifier | str,
+        db: t.Optional[Identifier | str] = None,
+        catalog: t.Optional[Identifier | str] = None,
+        quoted: t.Optional[bool] = None,
+        alias: t.Optional[Identifier | str] = None,
 ) -> Table:
     """Build a Table.
 
@@ -6255,9 +6259,9 @@ def table_(
 
 
 def values(
-    values: t.Iterable[t.Tuple[t.Any, ...]],
-    alias: t.Optional[str] = None,
-    columns: t.Optional[t.Iterable[str] | t.Dict[str, DataType]] = None,
+        values: t.Iterable[t.Tuple[t.Any, ...]],
+        alias: t.Optional[str] = None,
+        columns: t.Optional[t.Iterable[str] | t.Dict[str, DataType]] = None,
 ) -> Values:
     """Build VALUES statement.
 
@@ -6514,7 +6518,7 @@ def replace_placeholders(expression: Expression, *args, **kwargs) -> Expression:
 
 
 def expand(
-    expression: Expression, sources: t.Dict[str, Subqueryable], copy: bool = True
+        expression: Expression, sources: t.Dict[str, Subqueryable], copy: bool = True
 ) -> Expression:
     """Transforms an expression by expanding all referenced sources into subqueries.
 
