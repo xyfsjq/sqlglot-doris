@@ -249,6 +249,7 @@ class TestDuckDB(Validator):
             "SELECT ARRAY_LENGTH([0], 1) AS x",
             write={"duckdb": "SELECT ARRAY_LENGTH([0], 1) AS x"},
         )
+        self.validate_identity("REGEXP_REPLACE(this, pattern, replacement, modifiers)")
         self.validate_all(
             "REGEXP_MATCHES(x, y)",
             write={
@@ -788,5 +789,13 @@ class TestDuckDB(Validator):
             write={
                 "snowflake": "ALTER TABLE db.t1 RENAME TO db.t2",
                 "duckdb": "ALTER TABLE db.t1 RENAME TO t2",
+            },
+        )
+
+    def test_timestamps_with_units(self):
+        self.validate_all(
+            "SELECT w::TIMESTAMP_S, x::TIMESTAMP_MS, y::TIMESTAMP_US, z::TIMESTAMP_NS",
+            write={
+                "duckdb": "SELECT CAST(w AS TIMESTAMP_S), CAST(x AS TIMESTAMP_MS), CAST(y AS TIMESTAMP), CAST(z AS TIMESTAMP_NS)",
             },
         )

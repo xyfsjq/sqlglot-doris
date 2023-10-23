@@ -11,6 +11,9 @@ from sqlglot.helper import apply_index_offset, csv, seq_get
 from sqlglot.time import format_time
 from sqlglot.tokens import Tokenizer, TokenType
 
+if t.TYPE_CHECKING:
+    from sqlglot._typing import E
+
 logger = logging.getLogger("sqlglot")
 
 
@@ -140,6 +143,9 @@ class Generator:
 
     # Whether or not limit and fetch are supported (possible values: "ALL", "LIMIT", "FETCH")
     LIMIT_FETCH = "ALL"
+
+    # Whether or not limit and fetch allows expresions or just limits
+    LIMIT_ONLY_LITERALS = False
 
     # Whether or not a table is allowed to be renamed with a db
     RENAME_TABLE_WITH_DB = True
@@ -341,6 +347,12 @@ class Generator:
         exp.With,
     )
 
+    # Expressions that should not have their comments generated in maybe_comment
+    EXCLUDE_COMMENTS: t.Tuple[t.Type[exp.Expression], ...] = (
+        exp.Binary,
+        exp.Union,
+    )
+
     # Expressions that can remain unwrapped when appearing in the context of an INTERVAL
     UNWRAPPED_INTERVAL_VALUES: t.Tuple[t.Type[exp.Expression], ...] = (
         exp.Column,
@@ -501,7 +513,7 @@ class Generator:
             else None
         )
 
-        if not comments or isinstance(expression, exp.Binary):
+        if not comments or isinstance(expression, self.EXCLUDE_COMMENTS):
             return sql
 
         comments_sql = " ".join(
@@ -1226,9 +1238,10 @@ class Generator:
         kind = expression.args.get("kind")
         this = f" {self.sql(expression, 'this')}" if expression.this else ""
         for_or_in = expression.args.get("for_or_in")
+        for_or_in = f" {for_or_in}" if for_or_in else ""
         lock_type = expression.args.get("lock_type")
         override = " OVERRIDE" if expression.args.get("override") else ""
-        return f"LOCKING {kind}{this} {for_or_in} {lock_type}{override}"
+        return f"LOCKING {kind}{this}{for_or_in} {lock_type}{override}"
 
     def withdataproperty_sql(self, expression: exp.WithDataProperty) -> str:
         data_sql = f"WITH {'NO ' if expression.args.get('no') else ''}DATA"
@@ -1610,9 +1623,6 @@ class Generator:
     def lateral_sql(self, expression: exp.Lateral) -> str:
         this = self.sql(expression, "this")
 
-        if isinstance(expression.this, exp.Subquery):
-            return f"LATERAL {this}"
-
         if expression.args.get("view"):
             alias = expression.args["alias"]
             columns = self.expressions(alias, key="columns", flat=True)
@@ -1628,18 +1638,19 @@ class Generator:
     def limit_sql(self, expression: exp.Limit, top: bool = False) -> str:
         this = self.sql(expression, "this")
         args = ", ".join(
-            sql
-            for sql in (
-                self.sql(expression, "offset"),
-                self.sql(expression, "expression"),
-            )
-            if sql
+            self.sql(self._simplify_unless_literal(e) if self.LIMIT_ONLY_LITERALS else e)
+            for e in (expression.args.get(k) for k in ("offset", "expression"))
+            if e
         )
         return f"{this}{self.seg('TOP' if top else 'LIMIT')} {args}"
 
     def offset_sql(self, expression: exp.Offset) -> str:
         this = self.sql(expression, "this")
-        return f"{this}{self.seg('OFFSET')} {self.sql(expression, 'expression')}"
+        expression = expression.expression
+        expression = (
+            self._simplify_unless_literal(expression) if self.LIMIT_ONLY_LITERALS else expression
+        )
+        return f"{this}{self.seg('OFFSET')} {self.sql(expression)}"
 
     def setitem_sql(self, expression: exp.SetItem) -> str:
         kind = self.sql(expression, "kind")
@@ -1894,12 +1905,13 @@ class Generator:
 
     def schema_sql(self, expression: exp.Schema) -> str:
         this = self.sql(expression, "this")
-        this = f"{this} " if this else ""
         sql = self.schema_columns_sql(expression)
-        return f"{this}{sql}"
+        return f"{this} {sql}" if this and sql else this or sql
 
     def schema_columns_sql(self, expression: exp.Schema) -> str:
-        return f"({self.sep('')}{self.expressions(expression)}{self.seg(')', sep='')}"
+        if expression.expressions:
+            return f"({self.sep('')}{self.expressions(expression)}{self.seg(')', sep='')}"
+        return ""
 
     def star_sql(self, expression: exp.Star) -> str:
         except_ = self.expressions(expression, key="except", flat=True)
@@ -2707,8 +2719,8 @@ class Generator:
             self.unsupported(f"Unsupported property {expression.__class__.__name__}")
         return f"{property_name} {self.sql(expression, 'this')}"
 
-    def set_operation(self, expression: exp.Expression, op: str) -> str:
-        this = self.sql(expression, "this")
+    def set_operation(self, expression: exp.Union, op: str) -> str:
+        this = self.maybe_comment(self.sql(expression, "this"), comments=expression.comments)
         op = self.seg(op)
         return self.query_modifiers(
             expression, f"{this}{op}{self.sep()}{self.sql(expression, 'expression')}"
@@ -2910,6 +2922,14 @@ class Generator:
         table = f"TABLE {table}" if not isinstance(expression.expression, exp.Subquery) else table
         parameters = self.sql(expression, "params_struct")
         return self.func("PREDICT", model, table, parameters or None)
+
+    def _simplify_unless_literal(self, expression: E) -> E:
+        if not isinstance(expression, exp.Literal):
+            from sqlglot.optimizer.simplify import simplify
+
+            expression = simplify(expression.copy())
+
+        return expression
 
 
 def cached_generator(

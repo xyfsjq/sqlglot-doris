@@ -18,9 +18,9 @@ from sqlglot.dialects.dialect import (
     no_comment_column_constraint_sql,
     no_properties_sql,
     no_safe_divide_sql,
+    no_timestamp_sql,
     pivot_column_names,
     regexp_extract_sql,
-    regexp_replace_sql,
     rename_func,
     str_position_sql,
     str_to_time_sql,
@@ -133,6 +133,10 @@ class DuckDB(Dialect):
             "UINTEGER": TokenType.UINT,
             "USMALLINT": TokenType.USMALLINT,
             "UTINYINT": TokenType.UTINYINT,
+            "TIMESTAMP_S": TokenType.TIMESTAMP_S,
+            "TIMESTAMP_MS": TokenType.TIMESTAMP_MS,
+            "TIMESTAMP_NS": TokenType.TIMESTAMP_NS,
+            "TIMESTAMP_US": TokenType.TIMESTAMP,
         }
 
     class Parser(parser.Parser):
@@ -168,6 +172,12 @@ class DuckDB(Dialect):
                 this=seq_get(args, 0), expression=seq_get(args, 1), group=seq_get(args, 2)
             ),
             "REGEXP_MATCHES": exp.RegexpLike.from_arg_list,
+            "REGEXP_REPLACE": lambda args: exp.RegexpReplace(
+                this=seq_get(args, 0),
+                expression=seq_get(args, 1),
+                replacement=seq_get(args, 2),
+                modifiers=seq_get(args, 3),
+            ),
             "STRFTIME": format_time_lambda(exp.TimeToStr, "duckdb"),
             "STRING_SPLIT": exp.Split.from_arg_list,
             "STRING_SPLIT_REGEX": exp.RegexpSplit.from_arg_list,
@@ -283,7 +293,13 @@ class DuckDB(Dialect):
             exp.PercentileDisc: rename_func("QUANTILE_DISC"),
             exp.Properties: no_properties_sql,
             exp.RegexpExtract: regexp_extract_sql,
-            exp.RegexpReplace: regexp_replace_sql,
+            exp.RegexpReplace: lambda self, e: self.func(
+                "REGEXP_REPLACE",
+                e.this,
+                e.expression,
+                e.args.get("replacement"),
+                e.args.get("modifiers"),
+            ),
             exp.RegexpLike: rename_func("REGEXP_MATCHES"),
             exp.RegexpSplit: rename_func("STR_SPLIT_REGEX"),
             exp.SafeDivide: no_safe_divide_sql,
@@ -294,6 +310,7 @@ class DuckDB(Dialect):
             exp.StrToTime: str_to_time_sql,
             exp.StrToUnix: lambda self, e: f"EPOCH(STRPTIME({self.sql(e, 'this')}, {self.format_time(e)}))",
             exp.Struct: _struct_sql,
+            exp.Timestamp: no_timestamp_sql,
             exp.TimestampTrunc: timestamptrunc_sql,
             exp.TimeStrToDate: lambda self, e: f"CAST({self.sql(e, 'this')} AS DATE)",
             exp.TimeStrToTime: timestrtotime_sql,
@@ -321,6 +338,9 @@ class DuckDB(Dialect):
             exp.DataType.Type.UINT: "UINTEGER",
             exp.DataType.Type.VARBINARY: "BLOB",
             exp.DataType.Type.VARCHAR: "TEXT",
+            exp.DataType.Type.TIMESTAMP_S: "TIMESTAMP_S",
+            exp.DataType.Type.TIMESTAMP_MS: "TIMESTAMP_MS",
+            exp.DataType.Type.TIMESTAMP_NS: "TIMESTAMP_NS",
         }
 
         STAR_MAPPING = {**generator.Generator.STAR_MAPPING, "except": "EXCLUDE"}

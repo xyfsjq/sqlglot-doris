@@ -436,6 +436,9 @@ class BigQuery(Dialect):
             exp.ApproxDistinct: rename_func("APPROX_COUNT_DISTINCT"),
             exp.ArraySize: rename_func("ARRAY_LENGTH"),
             exp.Cast: transforms.preprocess([transforms.remove_precision_parameterized_types]),
+            exp.CollateProperty: lambda self, e: f"DEFAULT COLLATE {self.sql(e, 'this')}"
+            if e.args.get("default")
+            else f"COLLATE {self.sql(e, 'this')}",
             exp.Create: _create_sql,
             exp.CTE: transforms.preprocess([_pushdown_cte_column_names]),
             exp.DateAdd: date_add_interval_sql("DATE", "ADD"),
@@ -631,6 +634,13 @@ class BigQuery(Dialect):
             "with",
             "within",
         }
+
+        def eq_sql(self, expression: exp.EQ) -> str:
+            # Operands of = cannot be NULL in BigQuery
+            if isinstance(expression.left, exp.Null) or isinstance(expression.right, exp.Null):
+                return "NULL"
+
+            return self.binary(expression, "=")
 
         def attimezone_sql(self, expression: exp.AtTimeZone) -> str:
             parent = expression.parent

@@ -10,7 +10,7 @@ from sqlglot.errors import ParseError
 from sqlglot.generator import Generator
 from sqlglot.helper import flatten, seq_get
 from sqlglot.parser import Parser
-from sqlglot.time import format_time
+from sqlglot.time import TIMEZONES, format_time
 from sqlglot.tokens import Token, Tokenizer, TokenType
 from sqlglot.trie import new_trie
 
@@ -601,6 +601,19 @@ def timestamptrunc_sql(self: Generator, expression: exp.TimestampTrunc) -> str:
     )
 
 
+def no_timestamp_sql(self: Generator, expression: exp.Timestamp) -> str:
+    if not expression.expression:
+        return self.sql(exp.cast(expression.this, to=exp.DataType.Type.TIMESTAMP))
+    if expression.text("expression").lower() in TIMEZONES:
+        return self.sql(
+            exp.AtTimeZone(
+                this=exp.cast(expression.this, to=exp.DataType.Type.TIMESTAMP),
+                zone=expression.expression,
+            )
+        )
+    return self.function_fallback_sql(expression)
+
+
 def locate_to_strposition(args: t.List) -> exp.Expression:
     return exp.StrPosition(
         this=seq_get(args, 1), substr=seq_get(args, 0), position=seq_get(args, 2)
@@ -697,9 +710,13 @@ def ts_or_ds_to_date_sql(dialect: str) -> t.Callable:
         _dialect = Dialect.get_or_raise(dialect)
         time_format = self.format_time(expression)
         if time_format and time_format not in (_dialect.TIME_FORMAT, _dialect.DATE_FORMAT):
-            return self.sql(exp.cast(str_to_time_sql(self, expression), "date"))
-
-        return self.sql(exp.cast(self.sql(expression, "this"), "date"))
+            return self.sql(
+                exp.cast(
+                    exp.StrToTime(this=expression.this, format=expression.args["format"]),
+                    "date",
+                )
+            )
+        return self.sql(exp.cast(expression.this, "date"))
 
     return _ts_or_ds_to_date_sql
 
@@ -731,7 +748,9 @@ def regexp_extract_sql(self: Generator, expression: exp.RegexpExtract) -> str:
 
 
 def regexp_replace_sql(self: Generator, expression: exp.RegexpReplace) -> str:
-    bad_args = list(filter(expression.args.get, ("position", "occurrence", "parameters")))
+    bad_args = list(
+        filter(expression.args.get, ("position", "occurrence", "parameters", "modifiers"))
+    )
     if bad_args:
         self.unsupported(f"REGEXP_REPLACE does not support the following arg(s): {bad_args}")
 
@@ -760,15 +779,6 @@ def pivot_column_names(aggregations: t.List[exp.Expression], dialect: DialectTyp
             names.append(agg_all_unquoted.sql(dialect=dialect, normalize_functions="lower"))
 
     return names
-
-
-def simplify_literal(expression: E) -> E:
-    if not isinstance(expression.expression, exp.Literal):
-        from sqlglot.optimizer.simplify import simplify
-
-        simplify(expression.expression)
-
-    return expression
 
 
 def binary_from_function(expr_type: t.Type[B]) -> t.Callable[[t.List], B]:
@@ -810,3 +820,11 @@ def move_insert_cte_sql(self: Generator, expression: exp.Insert) -> str:
         expression = expression.copy()
         expression.set("with", expression.expression.args["with"].pop())
     return self.insert_sql(expression)
+
+
+def generatedasidentitycolumnconstraint_sql(
+    self: Generator, expression: exp.GeneratedAsIdentityColumnConstraint
+) -> str:
+    start = self.sql(expression, "start") or "1"
+    increment = self.sql(expression, "increment") or "1"
+    return f"IDENTITY({start}, {increment})"
