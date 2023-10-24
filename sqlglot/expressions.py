@@ -4170,6 +4170,10 @@ class Abs(Func):
     pass
 
 
+class ApproxTopK(AggFunc):
+    arg_types = {"this": True, "expression": False, "counters": False}
+
+
 class Flatten(Func):
     pass
 
@@ -4961,6 +4965,16 @@ class Lower(Func):
 
 class Map(Func):
     arg_types = {"keys": False, "values": False}
+
+    @property
+    def keys(self) -> t.List[Expression]:
+        keys = self.args.get("keys")
+        return keys.expressions if keys else []
+
+    @property
+    def values(self) -> t.List[Expression]:
+        values = self.args.get("values")
+        return values.expressions if values else []
 
 
 class MapFromEntries(Func):

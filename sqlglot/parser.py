@@ -313,6 +313,7 @@ class Parser(metaclass=_Parser):
         TokenType.UNIQUE,
         TokenType.UNPIVOT,
         TokenType.UPDATE,
+        TokenType.USE,
         TokenType.VOLATILE,
         TokenType.WINDOW,
         *CREATABLES,
@@ -3621,6 +3622,32 @@ class Parser(metaclass=_Parser):
         )
 
     def _parse_function(
+        self,
+        functions: t.Optional[t.Dict[str, t.Callable]] = None,
+        anonymous: bool = False,
+        optional_parens: bool = True,
+    ) -> t.Optional[exp.Expression]:
+        # This allows us to also parse {fn <function>} syntax (Snowflake, MySQL support this)
+        # See: https://community.snowflake.com/s/article/SQL-Escape-Sequences
+        fn_syntax = False
+        if (
+            self._match(TokenType.L_BRACE, advance=False)
+            and self._next
+            and self._next.text.upper() == "FN"
+        ):
+            self._advance(2)
+            fn_syntax = True
+
+        func = self._parse_function_call(
+            functions=functions, anonymous=anonymous, optional_parens=optional_parens
+        )
+
+        if fn_syntax:
+            self._match(TokenType.R_BRACE)
+
+        return func
+
+    def _parse_function_call(
         self,
         functions: t.Optional[t.Dict[str, t.Callable]] = None,
         anonymous: bool = False,

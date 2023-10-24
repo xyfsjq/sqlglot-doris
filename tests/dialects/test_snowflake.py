@@ -9,6 +9,10 @@ class TestSnowflake(Validator):
     dialect = "snowflake"
 
     def test_snowflake(self):
+        expr = parse_one("SELECT APPROX_TOP_K(C4, 3, 5) FROM t")
+        expr.selects[0].assert_is(exp.AggFunc)
+        self.assertEqual(expr.sql(dialect="snowflake"), "SELECT APPROX_TOP_K(C4, 3, 5) FROM t")
+
         self.validate_identity("SELECT DAYOFMONTH(CURRENT_TIMESTAMP())")
         self.validate_identity("SELECT DAYOFYEAR(CURRENT_TIMESTAMP())")
         self.validate_identity("LISTAGG(data['some_field'], ',')")
@@ -60,6 +64,18 @@ class TestSnowflake(Validator):
         self.validate_identity(
             "SELECT {'test': 'best'}::VARIANT",
             "SELECT CAST(OBJECT_CONSTRUCT('test', 'best') AS VARIANT)",
+        )
+        self.validate_identity(
+            "SELECT {fn DAYNAME('2022-5-13')}",
+            "SELECT DAYNAME('2022-5-13')",
+        )
+        self.validate_identity(
+            "SELECT {fn LOG(5)}",
+            "SELECT LN(5)",
+        )
+        self.validate_identity(
+            "SELECT {fn CEILING(5.3)}",
+            "SELECT CEIL(5.3)",
         )
 
         self.validate_all("CAST(x AS BYTEINT)", write={"snowflake": "CAST(x AS INT)"})
