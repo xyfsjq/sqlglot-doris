@@ -15,6 +15,7 @@ from sqlglot.dialects.dialect import (
     no_ilike_sql,
     no_pivot_sql,
     no_safe_divide_sql,
+    no_timestamp_sql,
     regexp_extract_sql,
     rename_func,
     right_to_substring_sql,
@@ -69,9 +70,10 @@ def _schema_sql(self: Presto.Generator, expression: exp.Schema) -> str:
 
     if expression.parent:
         for schema in expression.parent.find_all(exp.Schema):
-            if isinstance(schema.parent, exp.Property):
+            column_defs = schema.find_all(exp.ColumnDef)
+            if column_defs and isinstance(schema.parent, exp.Property):
                 expression = expression.copy()
-                expression.expressions.extend(schema.expressions)
+                expression.expressions.extend(column_defs)
 
     return self.schema_sql(expression)
 
@@ -276,6 +278,7 @@ class Presto(Dialect):
         TZ_TO_WITH_TIME_ZONE = True
         NVL2_SUPPORTED = False
         STRUCT_DELIMITER = ("(", ")")
+        LIMIT_ONLY_LITERALS = True
 
         PROPERTIES_LOCATION = {
             **generator.Generator.PROPERTIES_LOCATION,
@@ -372,6 +375,7 @@ class Presto(Dialect):
             exp.StrToUnix: lambda self, e: f"TO_UNIXTIME(DATE_PARSE({self.sql(e, 'this')}, {self.format_time(e)}))",
             exp.StructExtract: struct_extract_sql,
             exp.Table: transforms.preprocess([_unnest_sequence]),
+            exp.Timestamp: no_timestamp_sql,
             exp.TimestampTrunc: timestamptrunc_sql,
             exp.TimeStrToDate: timestrtotime_sql,
             exp.TimeStrToTime: timestrtotime_sql,
@@ -391,7 +395,6 @@ class Presto(Dialect):
             exp.WithinGroup: transforms.preprocess(
                 [transforms.remove_within_group_for_percentiles]
             ),
-            exp.Timestamp: transforms.preprocess([transforms.timestamp_to_cast]),
             exp.Xor: bool_xor_sql,
         }
 
@@ -442,3 +445,15 @@ class Presto(Dialect):
                 self.sql(expression, "offset"),
                 self.sql(limit),
             ]
+
+        def create_sql(self, expression: exp.Create) -> str:
+            """
+            Presto doesn't support CREATE VIEW with expressions (ex: `CREATE VIEW x (cola)` then `(cola)` is the expression),
+            so we need to remove them
+            """
+            kind = expression.args["kind"]
+            schema = expression.this
+            if kind == "VIEW" and schema.expressions:
+                expression = expression.copy()
+                expression.this.set("expressions", None)
+            return super().create_sql(expression)

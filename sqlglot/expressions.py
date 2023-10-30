@@ -23,7 +23,7 @@ from enum import auto
 from functools import reduce
 
 from sqlglot._typing import E
-from sqlglot.errors import ParseError
+from sqlglot.errors import ErrorLevel, ParseError
 from sqlglot.helper import (
     AutoName,
     camel_to_snake_case,
@@ -120,14 +120,14 @@ class Expression(metaclass=_Expression):
         return hash((self.__class__, self.hashable_args))
 
     @property
-    def this(self):
+    def this(self) -> t.Any:
         """
         Retrieves the argument with key "this".
         """
         return self.args.get("this")
 
     @property
-    def expression(self):
+    def expression(self) -> t.Any:
         """
         Retrieves the argument with key "expression".
         """
@@ -1235,6 +1235,10 @@ class RenameTable(Expression):
     pass
 
 
+class SwapTable(Expression):
+    pass
+
+
 class Comment(Expression):
     arg_types = {"this": True, "kind": True, "expression": True, "exists": False}
 
@@ -1979,7 +1983,7 @@ class ChecksumProperty(Property):
 
 
 class CollateProperty(Property):
-    arg_types = {"this": True}
+    arg_types = {"this": True, "default": False}
 
 
 class CopyGrantsProperty(Property):
@@ -2107,7 +2111,7 @@ class LockingProperty(Property):
     arg_types = {
         "this": False,
         "kind": True,
-        "for_or_in": True,
+        "for_or_in": False,
         "lock_type": True,
         "override": False,
     }
@@ -2607,11 +2611,11 @@ class Union(Subqueryable):
         return self.this.unnest().selects
 
     @property
-    def left(self):
+    def left(self) -> Expression:
         return self.this
 
     @property
-    def right(self):
+    def right(self) -> Expression:
         return self.expression
 
 
@@ -3605,6 +3609,9 @@ class DataType(Expression):
         TIMESTAMP = auto()
         TIMESTAMPLTZ = auto()
         TIMESTAMPTZ = auto()
+        TIMESTAMP_S = auto()
+        TIMESTAMP_MS = auto()
+        TIMESTAMP_NS = auto()
         TINYINT = auto()
         TSMULTIRANGE = auto()
         TSRANGE = auto()
@@ -3661,6 +3668,9 @@ class DataType(Expression):
         Type.TIMESTAMP,
         Type.TIMESTAMPTZ,
         Type.TIMESTAMPLTZ,
+        Type.TIMESTAMP_S,
+        Type.TIMESTAMP_MS,
+        Type.TIMESTAMP_NS,
         Type.DATE,
         Type.DATETIME,
         Type.DATETIME64,
@@ -3694,7 +3704,9 @@ class DataType(Expression):
                 return DataType(this=DataType.Type.UNKNOWN, **kwargs)
 
             try:
-                data_type_exp = parse_one(dtype, read=dialect, into=DataType)
+                data_type_exp = parse_one(
+                    dtype, read=dialect, into=DataType, error_level=ErrorLevel.IGNORE
+                )
             except ParseError:
                 if udt:
                     return DataType(this=DataType.Type.USERDEFINED, kind=dtype, **kwargs)
@@ -3798,11 +3810,11 @@ class Binary(Condition):
     arg_types = {"this": True, "expression": True}
 
     @property
-    def left(self):
+    def left(self) -> Expression:
         return self.this
 
     @property
-    def right(self):
+    def right(self) -> Expression:
         return self.expression
 
 
@@ -4155,6 +4167,14 @@ class ParameterizedAgg(AggFunc):
 
 
 class Abs(Func):
+    pass
+
+
+class ApproxTopK(AggFunc):
+    arg_types = {"this": True, "expression": False, "counters": False}
+
+
+class Flatten(Func):
     pass
 
 
@@ -4724,8 +4744,10 @@ class Exp(Func):
     pass
 
 
+# https://docs.snowflake.com/en/sql-reference/functions/flatten
 class Explode(Func):
-    pass
+    arg_types = {"this": True, "expressions": False}
+    is_var_len_args = True
 
 
 class ExplodeOuter(Explode):
@@ -4882,6 +4904,8 @@ class JSONArrayContains(Binary, Predicate, Func):
 class ParseJSON(Func):
     # BigQuery, Snowflake have PARSE_JSON, Presto has JSON_PARSE
     _sql_names = ["PARSE_JSON", "JSON_PARSE"]
+    arg_types = {"this": True, "expressions": False}
+    is_var_len_args = True
 
 
 class Least(Func):
@@ -4941,6 +4965,16 @@ class Lower(Func):
 
 class Map(Func):
     arg_types = {"keys": False, "values": False}
+
+    @property
+    def keys(self) -> t.List[Expression]:
+        keys = self.args.get("keys")
+        return keys.expressions if keys else []
+
+    @property
+    def values(self) -> t.List[Expression]:
+        values = self.args.get("values")
+        return values.expressions if values else []
 
 
 class MapFromEntries(Func):
@@ -5054,6 +5088,7 @@ class RegexpReplace(Func):
         "position": False,
         "occurrence": False,
         "parameters": False,
+        "modifiers": False,
     }
 
 
@@ -5061,7 +5096,7 @@ class RegexpLike(Binary, Func):
     arg_types = {"this": True, "expression": True, "flag": False}
 
 
-class RegexpILike(Func):
+class RegexpILike(Binary, Func):
     arg_types = {"this": True, "expression": True, "flag": False}
 
 

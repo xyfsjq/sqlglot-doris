@@ -121,6 +121,9 @@ class TokenType(AutoName):
     TIMESTAMP = auto()
     TIMESTAMPTZ = auto()
     TIMESTAMPLTZ = auto()
+    TIMESTAMP_S = auto()
+    TIMESTAMP_MS = auto()
+    TIMESTAMP_NS = auto()
     DATETIME = auto()
     DATETIME64 = auto()
     DATE = auto()
@@ -1074,10 +1077,10 @@ class Tokenizer(metaclass=_Tokenizer):
                 literal = ""
 
                 while self._peek.strip() and self._peek not in self.SINGLE_TOKENS:
-                    literal += self._peek.upper()
+                    literal += self._peek
                     self._advance()
 
-                token_type = self.KEYWORDS.get(self.NUMERIC_LITERALS.get(literal, ""))
+                token_type = self.KEYWORDS.get(self.NUMERIC_LITERALS.get(literal.upper(), ""))
 
                 if token_type:
                     self._add(TokenType.NUMBER, number_text)

@@ -9,6 +9,10 @@ class TestBigQuery(Validator):
     maxDiff = None
 
     def test_bigquery(self):
+        self.validate_identity("CREATE SCHEMA x DEFAULT COLLATE 'en'")
+        self.validate_identity("CREATE TABLE x (y INT64) DEFAULT COLLATE 'en'")
+        self.validate_identity("PARSE_JSON('{}', wide_number_mode => 'exact')")
+
         with self.assertRaises(TokenError):
             transpile("'\\'", read="bigquery")
 
@@ -138,6 +142,13 @@ class TestBigQuery(Validator):
         self.validate_all('x <> """"""', write={"bigquery": "x <> ''"})
         self.validate_all("x <> ''''''", write={"bigquery": "x <> ''"})
         self.validate_all("CAST(x AS DATETIME)", read={"": "x::timestamp"})
+        self.validate_all(
+            "NULL",
+            read={
+                "duckdb": "NULL = a",
+                "postgres": "a = NULL",
+            },
+        )
         self.validate_all(
             "SELECT '\\n'",
             read={

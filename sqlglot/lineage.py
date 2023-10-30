@@ -123,6 +123,17 @@ def lineage(
 
             return upstream
 
+        subquery = select.unalias()
+
+        if isinstance(subquery, exp.Subquery):
+            upstream = upstream or Node(name="SUBQUERY", source=scope.expression, expression=select)
+            scope = t.cast(Scope, build_scope(subquery.unnest()))
+
+            for select in subquery.named_selects:
+                to_node(select, scope=scope, upstream=upstream)
+
+            return upstream
+
         if isinstance(scope.expression, exp.Select):
             # For better ergonomics in our node labels, replace the full select with
             # a version that has only the column we care about.
@@ -143,7 +154,13 @@ def lineage(
             upstream.downstream.append(node)
 
         # Find all columns that went into creating this one to list their lineage nodes.
-        for c in set(select.find_all(exp.Column)):
+        source_columns = set(select.find_all(exp.Column))
+
+        # If the source is a UDTF find columns used in the UTDF to generate the table
+        if isinstance(source, exp.UDTF):
+            source_columns |= set(source.find_all(exp.Column))
+
+        for c in source_columns:
             table = c.table
             source = scope.sources.get(table)
 

@@ -9,7 +9,7 @@ import sqlglot
 from sqlglot import exp
 from sqlglot.generator import cached_generator
 from sqlglot.helper import first, merge_ranges, while_changing
-from sqlglot.optimizer.scope import find_all_in_scope
+from sqlglot.optimizer.scope import find_all_in_scope, walk_in_scope
 
 # Final means that an expression should not be simplified
 FINAL = "final"
@@ -70,6 +70,7 @@ def simplify(expression, constant_propagation=False):
         node = uniq_sort(node, generate, root)
         node = absorb_and_eliminate(node, root)
         node = simplify_concat(node)
+        node = simplify_conditionals(node)
 
         if constant_propagation:
             node = propagate_constants(node, root)
@@ -392,19 +393,20 @@ def propagate_constants(expression, root=True):
         and sqlglot.optimizer.normalize.normalized(expression, dnf=True)
     ):
         constant_mapping = {}
-        for eq in find_all_in_scope(expression, exp.EQ):
-            l, r = eq.left, eq.right
+        for expr, *_ in walk_in_scope(expression, prune=lambda node, *_: isinstance(node, exp.If)):
+            if isinstance(expr, exp.EQ):
+                l, r = expr.left, expr.right
 
-            # TODO: create a helper that can be used to detect nested literal expressions such
-            # as CAST(123456 AS BIGINT), since we usually want to treat those as literals too
-            if isinstance(l, exp.Column) and isinstance(r, exp.Literal):
-                pass
-            elif isinstance(r, exp.Column) and isinstance(l, exp.Literal):
-                l, r = r, l
-            else:
-                continue
+                # TODO: create a helper that can be used to detect nested literal expressions such
+                # as CAST(123456 AS BIGINT), since we usually want to treat those as literals too
+                if isinstance(l, exp.Column) and isinstance(r, exp.Literal):
+                    pass
+                elif isinstance(r, exp.Column) and isinstance(l, exp.Literal):
+                    l, r = r, l
+                else:
+                    continue
 
-            constant_mapping[l] = (id(l), r)
+                constant_mapping[l] = (id(l), r)
 
         if constant_mapping:
             for column in find_all_in_scope(expression, exp.Column):
@@ -476,9 +478,11 @@ def simplify_equality(expression: exp.Expression) -> exp.Expression:
             return expression
 
         if l.__class__ in INVERSE_DATE_OPS:
+            l = t.cast(exp.IntervalOp, l)
             a = l.this
             b = l.interval()
         else:
+            l = t.cast(exp.Binary, l)
             a, b = l.left, l.right
 
         if not a_predicate(a) and b_predicate(b):
@@ -694,6 +698,32 @@ def simplify_concat(expression):
     return concat_type(expressions=new_args)
 
 
+def simplify_conditionals(expression):
+    """Simplifies expressions like IF, CASE if their condition is statically known."""
+    if isinstance(expression, exp.Case):
+        this = expression.this
+        for case in expression.args["ifs"]:
+            cond = case.this
+            if this:
+                # Convert CASE x WHEN matching_value ... to CASE WHEN x = matching_value ...
+                cond = cond.replace(this.pop().eq(cond))
+
+            if always_true(cond):
+                return case.args["true"]
+
+            if always_false(cond):
+                case.pop()
+                if not expression.args["ifs"]:
+                    return expression.args.get("default") or exp.null()
+    elif isinstance(expression, exp.If) and not isinstance(expression.parent, exp.Case):
+        if always_true(expression.this):
+            return expression.args["true"]
+        if always_false(expression.this):
+            return expression.args.get("false") or exp.null()
+
+    return expression
+
+
 DateRange = t.Tuple[datetime.date, datetime.date]
 
 
@@ -785,6 +815,7 @@ def simplify_datetrunc_predicate(expression: exp.Expression) -> exp.Expression:
         else:
             return expression
 
+        l = t.cast(exp.DateTrunc, l)
         unit = l.unit.name.lower()
         date = extract_date(r)
 
@@ -797,6 +828,7 @@ def simplify_datetrunc_predicate(expression: exp.Expression) -> exp.Expression:
         rs = expression.expressions
 
         if rs and all(_is_datetrunc_predicate(l, r) for r in rs):
+            l = t.cast(exp.DateTrunc, l)
             unit = l.unit.name.lower()
 
             ranges = []
@@ -849,6 +881,10 @@ def always_true(expression):
     return (isinstance(expression, exp.Boolean) and expression.this) or isinstance(
         expression, exp.Literal
     )
+
+
+def always_false(expression):
+    return is_false(expression) or is_null(expression)
 
 
 def is_complement(a, b):

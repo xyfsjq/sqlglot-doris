@@ -6,6 +6,7 @@ from sqlglot import exp, transforms
 from sqlglot.dialects.dialect import (
     concat_to_dpipe_sql,
     concat_ws_to_dpipe_sql,
+    generatedasidentitycolumnconstraint_sql,
     rename_func,
     ts_or_ds_to_date_sql,
 )
@@ -58,6 +59,11 @@ class Redshift(Postgres):
             "STRTOL": exp.FromBase.from_arg_list,
         }
 
+        NO_PAREN_FUNCTION_PARSERS = {
+            **Postgres.Parser.NO_PAREN_FUNCTION_PARSERS,
+            "APPROXIMATE": lambda self: self._parse_approximate_count(),
+        }
+
         def _parse_table(
             self,
             schema: bool = False,
@@ -100,6 +106,15 @@ class Redshift(Postgres):
             self._match(TokenType.COMMA)
             this = self._parse_bitwise()
             return self.expression(exp.TryCast, this=this, to=to, safe=safe)
+
+        def _parse_approximate_count(self) -> t.Optional[exp.ApproxDistinct]:
+            index = self._index - 1
+            func = self._parse_function()
+
+            if isinstance(func, exp.Count) and isinstance(func.this, exp.Distinct):
+                return self.expression(exp.ApproxDistinct, this=seq_get(func.this.expressions, 0))
+            self._retreat(index)
+            return None
 
     class Tokenizer(Postgres.Tokenizer):
         BIT_STRINGS = []
@@ -146,6 +161,7 @@ class Redshift(Postgres):
             **Postgres.Generator.TRANSFORMS,
             exp.Concat: concat_to_dpipe_sql,
             exp.ConcatWs: concat_ws_to_dpipe_sql,
+            exp.ApproxDistinct: lambda self, e: f"APPROXIMATE COUNT(DISTINCT {self.sql(e, 'this')})",
             exp.CurrentTimestamp: lambda self, e: "SYSDATE",
             exp.DateAdd: lambda self, e: self.func(
                 "DATEADD", exp.var(e.text("unit") or "day"), e.expression, e.this
@@ -156,8 +172,10 @@ class Redshift(Postgres):
             exp.DistKeyProperty: lambda self, e: f"DISTKEY({e.name})",
             exp.DistStyleProperty: lambda self, e: self.naked_property(e),
             exp.FromBase: rename_func("STRTOL"),
+            exp.GeneratedAsIdentityColumnConstraint: generatedasidentitycolumnconstraint_sql,
             exp.JSONExtract: _json_sql,
             exp.JSONExtractScalar: _json_sql,
+            exp.ParseJSON: rename_func("JSON_PARSE"),
             exp.SafeConcat: concat_to_dpipe_sql,
             exp.Select: transforms.preprocess(
                 [transforms.eliminate_distinct_on, transforms.eliminate_semi_and_anti_joins]
