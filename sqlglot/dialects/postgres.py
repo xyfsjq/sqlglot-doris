@@ -333,6 +333,7 @@ class Postgres(Dialect):
             "BIT_OR": exp.GroupBitOr.from_arg_list,
             "BIT_XOR": exp.GroupBitXor.from_arg_list,
             "ARRAY_TO_STRING": exp.ArrayToString.from_arg_list,
+            "JSON_EXTRACT_PATH": exp.JSONExtractScalar.from_arg_list,
         }
 
         FUNCTION_PARSERS = {
