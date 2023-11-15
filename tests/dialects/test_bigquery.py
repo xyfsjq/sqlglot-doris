@@ -1,6 +1,13 @@
 from unittest import mock
 
-from sqlglot import ErrorLevel, ParseError, TokenError, UnsupportedError, transpile
+from sqlglot import (
+    ErrorLevel,
+    ParseError,
+    TokenError,
+    UnsupportedError,
+    parse,
+    transpile,
+)
 from tests.dialects.test_dialect import Validator
 
 
@@ -9,6 +16,10 @@ class TestBigQuery(Validator):
     maxDiff = None
 
     def test_bigquery(self):
+        self.validate_identity(
+            "select array_contains([1, 2, 3], 1)",
+            "SELECT EXISTS(SELECT 1 FROM UNNEST([1, 2, 3]) AS _col WHERE _col = 1)",
+        )
         self.validate_identity("CREATE SCHEMA x DEFAULT COLLATE 'en'")
         self.validate_identity("CREATE TABLE x (y INT64) DEFAULT COLLATE 'en'")
         self.validate_identity("PARSE_JSON('{}', wide_number_mode => 'exact')")
@@ -36,6 +47,15 @@ class TestBigQuery(Validator):
 
         with self.assertRaises(ParseError):
             transpile("DATE_ADD(x, day)", read="bigquery")
+
+        for_in_stmts = parse(
+            "FOR record IN (SELECT word FROM shakespeare) DO SELECT record.word; END FOR;",
+            read="bigquery",
+        )
+        self.assertEqual(
+            [s.sql(dialect="bigquery") for s in for_in_stmts],
+            ["FOR record IN (SELECT word FROM shakespeare) DO SELECT record.word", "END FOR"],
+        )
 
         self.validate_identity("SELECT test.Unknown FROM test")
         self.validate_identity(r"SELECT '\n\r\a\v\f\t'")
@@ -90,6 +110,9 @@ class TestBigQuery(Validator):
         self.validate_identity("CAST(x AS BIGNUMERIC)")
         self.validate_identity("SELECT y + 1 FROM x GROUP BY y + 1 ORDER BY 1")
         self.validate_identity(
+            "FOR record IN (SELECT word, word_count FROM bigquery-public-data.samples.shakespeare LIMIT 5) DO SELECT record.word, record.word_count"
+        )
+        self.validate_identity(
             "DATE(CAST('2016-12-25 05:30:00+07' AS DATETIME), 'America/Los_Angeles')"
         )
         self.validate_identity(
@@ -142,6 +165,13 @@ class TestBigQuery(Validator):
         self.validate_all('x <> """"""', write={"bigquery": "x <> ''"})
         self.validate_all("x <> ''''''", write={"bigquery": "x <> ''"})
         self.validate_all("CAST(x AS DATETIME)", read={"": "x::timestamp"})
+        self.validate_all(
+            "SELECT * FROM t WHERE EXISTS(SELECT * FROM unnest(nums) AS x WHERE x > 1)",
+            write={
+                "bigquery": "SELECT * FROM t WHERE EXISTS(SELECT * FROM UNNEST(nums) AS x WHERE x > 1)",
+                "duckdb": "SELECT * FROM t WHERE EXISTS(SELECT * FROM UNNEST(nums) AS _t(x) WHERE x > 1)",
+            },
+        )
         self.validate_all(
             "NULL",
             read={
@@ -476,9 +506,8 @@ class TestBigQuery(Validator):
             },
             write={
                 "bigquery": "SELECT * FROM UNNEST(['7', '14']) AS x",
-                "presto": "SELECT * FROM UNNEST(ARRAY['7', '14']) AS (x)",
-                "hive": "SELECT * FROM UNNEST(ARRAY('7', '14')) AS (x)",
-                "spark": "SELECT * FROM UNNEST(ARRAY('7', '14')) AS (x)",
+                "presto": "SELECT * FROM UNNEST(ARRAY['7', '14']) AS _t(x)",
+                "spark": "SELECT * FROM UNNEST(ARRAY('7', '14')) AS _t(x)",
             },
         )
         self.validate_all(

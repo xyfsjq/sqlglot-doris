@@ -8,6 +8,7 @@ from sqlglot import exp, generator, parser, tokens, transforms
 from sqlglot._typing import E
 from sqlglot.dialects.dialect import (
     Dialect,
+    arg_max_or_min_no_count,
     binary_from_function,
     date_add_interval_sql,
     datestrtodate_sql,
@@ -68,7 +69,6 @@ def _create_sql(self: BigQuery.Generator, expression: exp.Create) -> str:
     returns = expression.find(exp.ReturnsProperty)
 
     if kind.upper() == "FUNCTION" and returns and returns.args.get("is_table"):
-        expression = expression.copy()
         expression.set("kind", "TABLE FUNCTION")
 
         if isinstance(expression.expression, (exp.Subquery, exp.Literal)):
@@ -174,6 +174,16 @@ def _parse_to_hex(args: t.List) -> exp.Hex | exp.MD5:
     return exp.MD5(this=arg.this) if isinstance(arg, exp.MD5Digest) else exp.Hex(this=arg)
 
 
+def _array_contains_sql(self: BigQuery.Generator, expression: exp.ArrayContains) -> str:
+    return self.sql(
+        exp.Exists(
+            this=exp.select("1")
+            .from_(exp.Unnest(expressions=[expression.left]).as_("_unnest", table=["_col"]))
+            .where(exp.column("_col").eq(expression.right))
+        )
+    )
+
+
 class BigQuery(Dialect):
     UNNEST_COLUMN_ONLY = True
     SUPPORTS_USER_DEFINED_TYPES = False
@@ -265,7 +275,6 @@ class BigQuery(Dialect):
             "DECLARE": TokenType.COMMAND,
             "FLOAT64": TokenType.DOUBLE,
             "FOR SYSTEM_TIME": TokenType.TIMESTAMP_SNAPSHOT,
-            "INT64": TokenType.BIGINT,
             "MODEL": TokenType.MODEL,
             "NOT DETERMINISTIC": TokenType.VOLATILE,
             "RECORD": TokenType.STRUCT,
@@ -358,6 +367,17 @@ class BigQuery(Dialect):
 
         NULL_TOKENS = {TokenType.NULL, TokenType.UNKNOWN}
 
+        STATEMENT_PARSERS = {
+            **parser.Parser.STATEMENT_PARSERS,
+            TokenType.END: lambda self: self._parse_as_command(self._prev),
+            TokenType.FOR: lambda self: self._parse_for_in(),
+        }
+
+        def _parse_for_in(self) -> exp.ForIn:
+            this = self._parse_range()
+            self._match_text_seq("DO")
+            return self.expression(exp.ForIn, this=this, expression=self._parse_statement())
+
         def _parse_table_part(self, schema: bool = False) -> t.Optional[exp.Expression]:
             this = super()._parse_table_part(schema=schema) or self._parse_number()
 
@@ -434,6 +454,9 @@ class BigQuery(Dialect):
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
             exp.ApproxDistinct: rename_func("APPROX_COUNT_DISTINCT"),
+            exp.ArgMax: arg_max_or_min_no_count("MAX_BY"),
+            exp.ArgMin: arg_max_or_min_no_count("MIN_BY"),
+            exp.ArrayContains: _array_contains_sql,
             exp.ArraySize: rename_func("ARRAY_LENGTH"),
             exp.Cast: transforms.preprocess([transforms.remove_precision_parameterized_types]),
             exp.CollateProperty: lambda self, e: f"DEFAULT COLLATE {self.sql(e, 'this')}"
@@ -696,6 +719,5 @@ class BigQuery(Dialect):
 
         def version_sql(self, expression: exp.Version) -> str:
             if expression.name == "TIMESTAMP":
-                expression = expression.copy()
                 expression.set("this", "SYSTEM_TIME")
             return super().version_sql(expression)

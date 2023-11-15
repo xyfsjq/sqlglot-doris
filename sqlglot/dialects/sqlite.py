@@ -50,7 +50,7 @@ def _transform_create(expression: exp.Expression) -> exp.Expression:
         else:
             for column in defs.values():
                 auto_increment = None
-                for constraint in column.constraints.copy():
+                for constraint in column.constraints:
                     if isinstance(constraint.kind, exp.PrimaryKeyColumnConstraint):
                         break
                     if isinstance(constraint.kind, exp.AutoIncrementColumnConstraint):
@@ -65,6 +65,8 @@ class SQLite(Dialect):
     # https://sqlite.org/forum/forumpost/5e575586ac5c711b?raw
     RESOLVES_IDENTIFIERS_AS_UPPERCASE = None
     SUPPORTS_SEMI_ANTI_JOIN = False
+    TYPED_DIVISION = True
+    SAFE_DIVISION = True
 
     class Tokenizer(tokens.Tokenizer):
         IDENTIFIERS = ['"', ("[", "]"), "`"]

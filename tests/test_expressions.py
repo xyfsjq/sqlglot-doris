@@ -443,7 +443,7 @@ class TestExpressions(unittest.TestCase):
                 return None
             return node
 
-        self.assertEqual(expression.transform(remove_non_list_arg).sql(), "CAST(x AS )")
+        self.assertEqual(expression.transform(remove_non_list_arg).sql(), "CAST(x AS)")
 
         expression = parse_one("SELECT a, b FROM x")
 
@@ -631,6 +631,11 @@ class TestExpressions(unittest.TestCase):
         self.assertIsNotNone(unit.find(exp.CurrentTimestamp))
         week = unit.find(exp.Week)
         self.assertEqual(week.this, exp.var("thursday"))
+
+        for abbreviated_unit, unnabreviated_unit in exp.TimeUnit.UNABBREVIATED_UNIT_NAME.items():
+            interval = parse_one(f"interval '500 {abbreviated_unit}'")
+            self.assertIsInstance(interval.unit, exp.Var)
+            self.assertEqual(interval.unit.name, unnabreviated_unit)
 
     def test_identifier(self):
         self.assertTrue(exp.to_identifier('"x"').quoted)

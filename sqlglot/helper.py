@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import inspect
 import logging
 import re
@@ -184,9 +185,7 @@ def apply_index_offset(
         annotate_types(expression)
     if t.cast(exp.DataType, expression.type).this in exp.DataType.INTEGER_TYPES:
         logger.warning("Applying array index offset (%s)", offset)
-        expression = simplify(
-            exp.Add(this=expression.copy(), expression=exp.Literal.number(offset))
-        )
+        expression = simplify(exp.Add(this=expression, expression=exp.Literal.number(offset)))
         return [expression]
 
     return expressions
@@ -285,7 +284,7 @@ def csv_reader(read_csv: exp.ReadCSV) -> t.Any:
     file = open_file(read_csv.name)
 
     delimiter = ","
-    args = iter(arg.name for arg in args)
+    args = iter(arg.name for arg in args)  # type: ignore
     for k, v in zip(args, args):
         if k == "delimiter":
             delimiter = v
@@ -465,3 +464,27 @@ def merge_ranges(ranges: t.List[t.Tuple[A, A]]) -> t.List[t.Tuple[A, A]]:
             merged.append((start, end))
 
     return merged
+
+
+def is_iso_date(text: str) -> bool:
+    try:
+        datetime.date.fromisoformat(text)
+        return True
+    except ValueError:
+        return False
+
+
+def is_iso_datetime(text: str) -> bool:
+    try:
+        datetime.datetime.fromisoformat(text)
+        return True
+    except ValueError:
+        return False
+
+
+# Interval units that operate on date components
+DATE_UNITS = {"day", "week", "month", "quarter", "year", "year_month"}
+
+
+def is_date_unit(expression: t.Optional[exp.Expression]) -> bool:
+    return expression is not None and expression.name.lower() in DATE_UNITS

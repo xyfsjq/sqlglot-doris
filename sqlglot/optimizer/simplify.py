@@ -7,8 +7,7 @@ from decimal import Decimal
 
 import sqlglot
 from sqlglot import exp
-from sqlglot.generator import cached_generator
-from sqlglot.helper import first, merge_ranges, while_changing
+from sqlglot.helper import first, is_iterable, merge_ranges, while_changing
 from sqlglot.optimizer.scope import find_all_in_scope, walk_in_scope
 
 # Final means that an expression should not be simplified
@@ -36,8 +35,6 @@ def simplify(expression, constant_propagation=False):
     Returns:
         sqlglot.Expression: simplified expression
     """
-
-    generate = cached_generator()
 
     # group by expressions cannot be simplified, for example
     # select x + 1 + 1 FROM y GROUP BY x + 1 + 1
@@ -67,7 +64,7 @@ def simplify(expression, constant_propagation=False):
         # Pre-order transformations
         node = expression
         node = rewrite_between(node)
-        node = uniq_sort(node, generate, root)
+        node = uniq_sort(node, root)
         node = absorb_and_eliminate(node, root)
         node = simplify_concat(node)
         node = simplify_conditionals(node)
@@ -311,7 +308,7 @@ def remove_complements(expression, root=True):
     return expression
 
 
-def uniq_sort(expression, generate, root=True):
+def uniq_sort(expression, root=True):
     """
     Uniq and sort a connector.
 
@@ -320,7 +317,7 @@ def uniq_sort(expression, generate, root=True):
     if isinstance(expression, exp.Connector) and (root or not expression.same_parent):
         result_func = exp.and_ if isinstance(expression, exp.And) else exp.or_
         flattened = tuple(expression.flatten())
-        deduped = {generate(e): e for e in flattened}
+        deduped = {gen(e): e for e in flattened}
         arr = tuple(deduped.items())
 
         # check if the operands are already sorted, if not sort them
@@ -510,6 +507,9 @@ def simplify_literals(expression, root=True):
                 return exp.Literal.number(value[1:])
             return exp.Literal.number(f"-{value}")
 
+    if type(expression) in INVERSE_DATE_OPS:
+        return _simplify_binary(expression, expression.this, expression.interval()) or expression
+
     return expression
 
 
@@ -560,15 +560,21 @@ def _simplify_binary(expression, a, b):
     elif _is_date_literal(a) and isinstance(b, exp.Interval):
         a, b = extract_date(a), extract_interval(b)
         if a and b:
-            if isinstance(expression, exp.Add):
+            if isinstance(expression, (exp.Add, exp.DateAdd, exp.DatetimeAdd)):
                 return date_literal(a + b)
-            if isinstance(expression, exp.Sub):
+            if isinstance(expression, (exp.Sub, exp.DateSub, exp.DatetimeSub)):
                 return date_literal(a - b)
     elif isinstance(a, exp.Interval) and _is_date_literal(b):
         a, b = extract_interval(a), extract_date(b)
         # you cannot subtract a date from an interval
         if a and b and isinstance(expression, exp.Add):
             return date_literal(a + b)
+    elif _is_date_literal(a) and _is_date_literal(b):
+        if isinstance(expression, exp.Predicate):
+            a, b = extract_date(a), extract_date(b)
+            boolean = eval_boolean(expression, a, b)
+            if boolean:
+                return boolean
 
     return None
 
@@ -593,6 +599,11 @@ def simplify_parens(expression):
     return expression
 
 
+NONNULL_CONSTANTS = (
+    exp.Literal,
+    exp.Boolean,
+)
+
 CONSTANTS = (
     exp.Literal,
     exp.Boolean,
@@ -600,11 +611,19 @@ CONSTANTS = (
 )
 
 
+def _is_nonnull_constant(expression: exp.Expression) -> bool:
+    return isinstance(expression, NONNULL_CONSTANTS) or _is_date_literal(expression)
+
+
+def _is_constant(expression: exp.Expression) -> bool:
+    return isinstance(expression, CONSTANTS) or _is_date_literal(expression)
+
+
 def simplify_coalesce(expression):
     # COALESCE(x) -> x
     if (
         isinstance(expression, exp.Coalesce)
-        and not expression.expressions
+        and (not expression.expressions or _is_nonnull_constant(expression.this))
         # COALESCE is also used as a Spark partitioning hint
         and not isinstance(expression.parent, exp.Hint)
     ):
@@ -624,12 +643,12 @@ def simplify_coalesce(expression):
 
     # This transformation is valid for non-constants,
     # but it really only does anything if they are both constants.
-    if not isinstance(other, CONSTANTS):
+    if not _is_constant(other):
         return expression
 
     # Find the first constant arg
     for arg_index, arg in enumerate(coalesce.expressions):
-        if isinstance(arg, CONSTANTS):
+        if _is_constant(other):
             break
     else:
         return expression
@@ -950,7 +969,7 @@ def cast_value(value: t.Any, to: exp.DataType) -> t.Optional[t.Union[datetime.da
 def extract_date(cast: exp.Expression) -> t.Optional[t.Union[datetime.date, datetime.date]]:
     if isinstance(cast, exp.Cast):
         to = cast.to
-    elif isinstance(cast, exp.TsOrDsToDate):
+    elif isinstance(cast, exp.TsOrDsToDate) and not cast.args.get("format"):
         to = exp.DataType.build(exp.DataType.Type.DATE)
     else:
         return None
@@ -1070,3 +1089,69 @@ def _flat_simplify(expression, simplifier, root=True):
                 lambda a, b: expression.__class__(this=a, expression=b), operands
             )
     return expression
+
+
+def gen(expression: t.Any) -> str:
+    """Simple pseudo sql generator for quickly generating sortable and uniq strings.
+
+    Sorting and deduping sql is a necessary step for optimization. Calling the actual
+    generator is expensive so we have a bare minimum sql generator here.
+    """
+    if expression is None:
+        return "_"
+    if is_iterable(expression):
+        return ",".join(gen(e) for e in expression)
+    if not isinstance(expression, exp.Expression):
+        return str(expression)
+
+    etype = type(expression)
+    if etype in GEN_MAP:
+        return GEN_MAP[etype](expression)
+    return f"{expression.key} {gen(expression.args.values())}"
+
+
+GEN_MAP = {
+    exp.Add: lambda e: _binary(e, "+"),
+    exp.And: lambda e: _binary(e, "AND"),
+    exp.Anonymous: lambda e: f"{e.this} {','.join(gen(e) for e in e.expressions)}",
+    exp.Between: lambda e: f"{gen(e.this)} BETWEEN {gen(e.args.get('low'))} AND {gen(e.args.get('high'))}",
+    exp.Boolean: lambda e: "TRUE" if e.this else "FALSE",
+    exp.Bracket: lambda e: f"{gen(e.this)}[{gen(e.expressions)}]",
+    exp.Column: lambda e: ".".join(gen(p) for p in e.parts),
+    exp.DataType: lambda e: f"{e.this.name} {gen(tuple(e.args.values())[1:])}",
+    exp.Div: lambda e: _binary(e, "/"),
+    exp.Dot: lambda e: _binary(e, "."),
+    exp.DPipe: lambda e: _binary(e, "||"),
+    exp.SafeDPipe: lambda e: _binary(e, "||"),
+    exp.EQ: lambda e: _binary(e, "="),
+    exp.GT: lambda e: _binary(e, ">"),
+    exp.GTE: lambda e: _binary(e, ">="),
+    exp.Identifier: lambda e: f'"{e.name}"' if e.quoted else e.name,
+    exp.ILike: lambda e: _binary(e, "ILIKE"),
+    exp.In: lambda e: f"{gen(e.this)} IN ({gen(tuple(e.args.values())[1:])})",
+    exp.Is: lambda e: _binary(e, "IS"),
+    exp.Like: lambda e: _binary(e, "LIKE"),
+    exp.Literal: lambda e: f"'{e.name}'" if e.is_string else e.name,
+    exp.LT: lambda e: _binary(e, "<"),
+    exp.LTE: lambda e: _binary(e, "<="),
+    exp.Mod: lambda e: _binary(e, "%"),
+    exp.Mul: lambda e: _binary(e, "*"),
+    exp.Neg: lambda e: _unary(e, "-"),
+    exp.NEQ: lambda e: _binary(e, "<>"),
+    exp.Not: lambda e: _unary(e, "NOT"),
+    exp.Null: lambda e: "NULL",
+    exp.Or: lambda e: _binary(e, "OR"),
+    exp.Paren: lambda e: f"({gen(e.this)})",
+    exp.Sub: lambda e: _binary(e, "-"),
+    exp.Subquery: lambda e: f"({gen(e.args.values())})",
+    exp.Table: lambda e: gen(e.args.values()),
+    exp.Var: lambda e: e.name,
+}
+
+
+def _binary(e: exp.Binary, op: str) -> str:
+    return f"{gen(e.left)} {op} {gen(e.right)}"
+
+
+def _unary(e: exp.Unary, op: str) -> str:
+    return f"{op} {gen(e.this)}"

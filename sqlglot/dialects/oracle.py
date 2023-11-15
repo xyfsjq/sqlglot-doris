@@ -3,7 +3,13 @@ from __future__ import annotations
 import typing as t
 
 from sqlglot import exp, generator, parser, tokens, transforms
-from sqlglot.dialects.dialect import Dialect, no_ilike_sql, rename_func, trim_sql
+from sqlglot.dialects.dialect import (
+    Dialect,
+    format_time_lambda,
+    no_ilike_sql,
+    rename_func,
+    trim_sql,
+)
 from sqlglot.helper import seq_get
 from sqlglot.tokens import TokenType
 
@@ -36,6 +42,7 @@ class Oracle(Dialect):
 
     # See section 8: https://docs.oracle.com/cd/A97630_01/server.920/a96540/sql_elements9a.htm
     RESOLVES_IDENTIFIERS_AS_UPPERCASE = True
+    ALTER_TABLE_ADD_COLUMN_KEYWORD = False
 
     # https://docs.oracle.com/database/121/SQLRF/sql_elements004.htm#SQLRF00212
     # https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes
@@ -69,6 +76,7 @@ class Oracle(Dialect):
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
             "SQUARE": lambda args: exp.Pow(this=seq_get(args, 0), expression=exp.Literal.number(2)),
+            "TO_CHAR": format_time_lambda(exp.TimeToStr, "oracle", default=True),
             "TRUNC": exp.DateTrunc_oracle.from_arg_list,
             "SUBSTR": exp.Substring.from_arg_list,
             "TO_DATE": exp.TsOrDsToDate.from_arg_list,
@@ -133,6 +141,7 @@ class Oracle(Dialect):
         TABLE_HINTS = False
         COLUMN_JOIN_MARKS_SUPPORTED = True
         DATA_TYPE_SPECIFIERS_ALLOWED = True
+        ALTER_TABLE_ADD_COLUMN_KEYWORD = False
 
         LIMIT_FETCH = "FETCH"
 
@@ -194,6 +203,12 @@ class Oracle(Dialect):
                 f"{self.sep()}RETURNING SEQUENCE BY REF" if expression.args.get("by_ref") else ""
             )
             return f"XMLTABLE({self.sep('')}{self.indent(this + passing + by_ref + columns)}{self.seg(')', sep='')}"
+
+        def add_column_sql(self, expression: exp.AlterTable) -> str:
+            actions = self.expressions(expression, key="actions", flat=True)
+            if len(expression.args.get("actions", [])) > 1:
+                return f"ADD ({actions})"
+            return f"ADD {actions}"
 
     class Tokenizer(tokens.Tokenizer):
         VAR_SINGLE_TOKENS = {"@", "$", "#"}

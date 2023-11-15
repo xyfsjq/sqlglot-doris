@@ -22,6 +22,7 @@ from sqlglot.expressions import (
     Expression as Expression,
     alias_ as alias,
     and_ as and_,
+    case as case,
     cast as cast,
     column as column,
     condition as condition,
@@ -158,6 +159,6 @@ def transpile(
     """
     write = (read if write is None else write) if identity else write
     return [
-        Dialect.get_or_raise(write)().generate(expression, **opts)
+        Dialect.get_or_raise(write)().generate(expression, copy=False, **opts) if expression else ""
         for expression in parse(sql, read, error_level=error_level)
     ]

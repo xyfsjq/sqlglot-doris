@@ -114,6 +114,13 @@ class TestMySQL(Validator):
                 "mysql": "CREATE TABLE test (ts DATETIME, ts_tz TIMESTAMP, ts_ltz TIMESTAMP)",
             },
         )
+        self.validate_all(
+            "ALTER TABLE test_table ALTER COLUMN test_column SET DATA TYPE LONGTEXT",
+            write={
+                "mysql": "ALTER TABLE test_table MODIFY COLUMN test_column LONGTEXT",
+            },
+        )
+        self.validate_identity("ALTER TABLE test_table ALTER COLUMN test_column SET DEFAULT 1")
 
     def test_identity(self):
         self.validate_identity("UNLOCK TABLES")
@@ -564,8 +571,22 @@ class TestMySQL(Validator):
             "STR_TO_DATE(x, '%M')",
             read={"": "TS_OR_DS_TO_DATE(x, '%B')"},
         )
+        self.validate_all(
+            "STR_TO_DATE(x, '%Y-%m-%d')",
+            write={"presto": "CAST(DATE_PARSE(x, '%Y-%m-%d') AS DATE)"},
+        )
+        self.validate_all(
+            "STR_TO_DATE(x, '%Y-%m-%dT%T')", write={"presto": "DATE_PARSE(x, '%Y-%m-%dT%T')"}
+        )
 
     def test_mysql(self):
+        self.validate_all(
+            # MySQL doesn't support FULL OUTER joins
+            "WITH t1 AS (SELECT 1) SELECT * FROM t1 LEFT OUTER JOIN t2 ON t1.x = t2.x UNION SELECT * FROM t1 RIGHT OUTER JOIN t2 ON t1.x = t2.x",
+            read={
+                "postgres": "WITH t1 AS (SELECT 1) SELECT * FROM t1 FULL OUTER JOIN t2 ON t1.x = t2.x",
+            },
+        )
         self.validate_all(
             "a XOR b",
             read={
@@ -968,5 +989,30 @@ COMMENT='客户账户表'"""
             write={
                 "": "TIME_TO_STR(TS_OR_DS_TO_DATE(x), '%B')",
                 "mysql": "DATE_FORMAT(x, '%M')",
+            },
+        )
+
+    def test_safe_div(self):
+        self.validate_all(
+            "a / b",
+            write={
+                "bigquery": "a / NULLIF(b, 0)",
+                "clickhouse": "a / b",
+                "databricks": "a / NULLIF(b, 0)",
+                "duckdb": "a / b",
+                "hive": "a / b",
+                "mysql": "a / b",
+                "oracle": "a / NULLIF(b, 0)",
+                "snowflake": "a / NULLIF(b, 0)",
+                "spark": "a / b",
+                "starrocks": "a / b",
+                "drill": "CAST(a AS DOUBLE) / NULLIF(b, 0)",
+                "postgres": "CAST(a AS DOUBLE PRECISION) / NULLIF(b, 0)",
+                "presto": "CAST(a AS DOUBLE) / NULLIF(b, 0)",
+                "redshift": "CAST(a AS DOUBLE PRECISION) / NULLIF(b, 0)",
+                "sqlite": "CAST(a AS REAL) / b",
+                "teradata": "CAST(a AS DOUBLE) / NULLIF(b, 0)",
+                "trino": "CAST(a AS DOUBLE) / NULLIF(b, 0)",
+                "tsql": "CAST(a AS FLOAT) / NULLIF(b, 0)",
             },
         )

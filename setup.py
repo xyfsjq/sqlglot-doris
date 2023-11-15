@@ -1,8 +1,9 @@
 from setuptools import find_packages, setup
 
 setup(
-    name="sqlglot",
+    name="sqlglot-doris",
     description="An easily customizable SQL parser and transpiler",
+    version="1.0.8.4",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     url="https://github.com/tobymao/sqlglot",
@@ -11,11 +12,11 @@ setup(
     license="MIT",
     packages=find_packages(include=["sqlglot", "sqlglot.*"]),
     package_data={"sqlglot": ["py.typed"]},
-    use_scm_version={
-        "write_to": "sqlglot/_version.py",
-        "fallback_version": "0.0.0",
-        "local_scheme": "no-local-version",
-    },
+    # use_scm_version={
+    #     "write_to": "sqlglot/_version.py",
+    #     "fallback_version": "0.0.0",
+    #     "local_scheme": "no-local-version",
+    # },
     setup_requires=["setuptools_scm"],
     python_requires=">=3.7",
     extras_require={

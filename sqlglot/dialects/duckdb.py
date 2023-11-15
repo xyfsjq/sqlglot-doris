@@ -6,6 +6,7 @@ from sqlglot import exp, generator, parser, tokens
 from sqlglot.dialects.dialect import (
     Dialect,
     approx_count_distinct_sql,
+    arg_max_or_min_no_count,
     arrow_json_extract_scalar_sql,
     arrow_json_extract_sql,
     binary_from_function,
@@ -35,14 +36,14 @@ from sqlglot.tokens import TokenType
 def _ts_or_ds_add_sql(self: DuckDB.Generator, expression: exp.TsOrDsAdd) -> str:
     this = self.sql(expression, "this")
     unit = self.sql(expression, "unit").strip("'") or "DAY"
-    return f"CAST({this} AS DATE) + {self.sql(exp.Interval(this=expression.expression.copy(), unit=unit))}"
+    return f"CAST({this} AS DATE) + {self.sql(exp.Interval(this=expression.expression, unit=unit))}"
 
 
 def _date_delta_sql(self: DuckDB.Generator, expression: exp.DateAdd | exp.DateSub) -> str:
     this = self.sql(expression, "this")
     unit = self.sql(expression, "unit").strip("'") or "DAY"
     op = "+" if isinstance(expression, exp.DateAdd) else "-"
-    return f"{this} {op} {self.sql(exp.Interval(this=expression.expression.copy(), unit=unit))}"
+    return f"{this} {op} {self.sql(exp.Interval(this=expression.expression, unit=unit))}"
 
 
 # BigQuery -> DuckDB conversion for the DATE function
@@ -83,7 +84,8 @@ def _parse_date_diff(args: t.List) -> exp.Expression:
 
 def _struct_sql(self: DuckDB.Generator, expression: exp.Struct) -> str:
     args = [
-        f"'{e.name or e.this.name}': {self.sql(e, 'expression')}" for e in expression.expressions
+        f"'{e.name or e.this.name}': {self.sql(e.expressions[0]) if isinstance(e, exp.Bracket) else self.sql(e, 'expression')}"
+        for e in expression.expressions
     ]
     return f"{{{', '.join(args)}}}"
 
@@ -107,6 +109,7 @@ def _json_format_sql(self: DuckDB.Generator, expression: exp.JSONFormat) -> str:
 class DuckDB(Dialect):
     NULL_ORDERING = "nulls_are_last"
     SUPPORTS_USER_DEFINED_TYPES = False
+    SAFE_DIVISION = True
 
     # https://duckdb.org/docs/sql/introduction.html#creating-a-new-table
     RESOLVES_IDENTIFIERS_AS_UPPERCASE = None
@@ -114,7 +117,7 @@ class DuckDB(Dialect):
     class Tokenizer(tokens.Tokenizer):
         KEYWORDS = {
             **tokens.Tokenizer.KEYWORDS,
-            ":=": TokenType.EQ,
+            ":=": TokenType.COLON_EQ,
             "//": TokenType.DIV,
             "ATTACH": TokenType.COMMAND,
             "BINARY": TokenType.VARBINARY,
@@ -123,8 +126,6 @@ class DuckDB(Dialect):
             "CHAR": TokenType.TEXT,
             "CHARACTER VARYING": TokenType.TEXT,
             "EXCLUDE": TokenType.EXCEPT,
-            "HUGEINT": TokenType.INT128,
-            "INT1": TokenType.TINYINT,
             "LOGICAL": TokenType.BOOLEAN,
             "PIVOT_WIDER": TokenType.PIVOT,
             "SIGNED": TokenType.INT,
@@ -249,6 +250,8 @@ class DuckDB(Dialect):
             if e.expressions and e.expressions[0].find(exp.Select)
             else inline_array_sql(self, e),
             exp.ArraySize: rename_func("ARRAY_LENGTH"),
+            exp.ArgMax: arg_max_or_min_no_count("ARG_MAX"),
+            exp.ArgMin: arg_max_or_min_no_count("ARG_MIN"),
             exp.ArraySort: _array_sort_sql,
             exp.ArraySum: rename_func("LIST_SUM"),
             exp.BitwiseXor: rename_func("XOR"),
@@ -274,6 +277,7 @@ class DuckDB(Dialect):
             exp.Encode: lambda self, e: encode_decode_sql(self, e, "ENCODE", replace=False),
             exp.Explode: rename_func("UNNEST"),
             exp.IntDiv: lambda self, e: self.binary(e, "//"),
+            exp.IsInf: rename_func("ISINF"),
             exp.IsNan: rename_func("ISNAN"),
             exp.JSONExtract: arrow_json_extract_sql,
             exp.JSONExtractScalar: arrow_json_extract_scalar_sql,
@@ -352,6 +356,9 @@ class DuckDB(Dialect):
             exp.VolatileProperty: exp.Properties.Location.UNSUPPORTED,
         }
 
+        def propertyeq_sql(self, expression: exp.PropertyEQ) -> str:
+            return self.binary(expression, ":=")
+
         def interval_sql(self, expression: exp.Interval) -> str:
             multiplier: t.Optional[int] = None
             unit = expression.text("unit").lower()
@@ -362,7 +369,7 @@ class DuckDB(Dialect):
                 multiplier = 90
 
             if multiplier:
-                return f"({multiplier} * {super().interval_sql(exp.Interval(this=expression.this.copy(), unit=exp.var('day')))})"
+                return f"({multiplier} * {super().interval_sql(exp.Interval(this=expression.this, unit=exp.var('day')))})"
 
             return super().interval_sql(expression)
 

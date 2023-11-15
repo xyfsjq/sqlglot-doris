@@ -6,6 +6,7 @@ from sqlglot import exp, generator, parser, tokens, transforms
 from sqlglot.dialects.dialect import (
     Dialect,
     approx_count_distinct_sql,
+    arg_max_or_min_no_count,
     create_with_partitions_sql,
     format_time_lambda,
     if_sql,
@@ -52,8 +53,6 @@ DIFF_MONTH_SWITCH = ("YEAR", "QUARTER", "MONTH")
 
 
 def _create_sql(self, expression: exp.Create) -> str:
-    expression = expression.copy()
-
     # remove UNIQUE column constraints
     for constraint in expression.find_all(exp.UniqueColumnConstraint):
         if constraint.parent:
@@ -87,7 +86,7 @@ def _add_date_sql(self: Hive.Generator, expression: exp.DateAdd | exp.DateSub) -
     if expression.expression.is_number:
         modified_increment = exp.Literal.number(int(expression.text("expression")) * multiplier)
     else:
-        modified_increment = expression.expression.copy()
+        modified_increment = expression.expression
         if multiplier != 1:
             modified_increment = exp.Mul(  # type: ignore
                 this=modified_increment, expression=exp.Literal.number(multiplier)
@@ -121,16 +120,21 @@ def _date_diff_sql(self: Hive.Generator, expression: exp.DateDiff) -> str:
 
 def _json_format_sql(self: Hive.Generator, expression: exp.JSONFormat) -> str:
     this = expression.this
-    if is_parse_json(this) and this.this.is_string:
-        # Since FROM_JSON requires a nested type, we always wrap the json string with
-        # an array to ensure that "naked" strings like "'a'" will be handled correctly
-        wrapped_json = exp.Literal.string(f"[{this.this.name}]")
 
-        from_json = self.func("FROM_JSON", wrapped_json, self.func("SCHEMA_OF_JSON", wrapped_json))
-        to_json = self.func("TO_JSON", from_json)
+    if is_parse_json(this):
+        if this.this.is_string:
+            # Since FROM_JSON requires a nested type, we always wrap the json string with
+            # an array to ensure that "naked" strings like "'a'" will be handled correctly
+            wrapped_json = exp.Literal.string(f"[{this.this.name}]")
 
-        # This strips the [, ] delimiters of the dummy array printed by TO_JSON
-        return self.func("REGEXP_EXTRACT", to_json, "'^.(.*).$'", "1")
+            from_json = self.func(
+                "FROM_JSON", wrapped_json, self.func("SCHEMA_OF_JSON", wrapped_json)
+            )
+            to_json = self.func("TO_JSON", from_json)
+
+            # This strips the [, ] delimiters of the dummy array printed by TO_JSON
+            return self.func("REGEXP_EXTRACT", to_json, "'^.(.*).$'", "1")
+        return self.sql(this)
 
     return self.func("TO_JSON", this, expression.args.get("options"))
 
@@ -183,6 +187,7 @@ class Hive(Dialect):
     ALIAS_POST_TABLESAMPLE = True
     IDENTIFIERS_CAN_START_WITH_DIGIT = True
     SUPPORTS_USER_DEFINED_TYPES = False
+    SAFE_DIVISION = True
 
     # https://spark.apache.org/docs/latest/sql-ref-identifier.html#description
     RESOLVES_IDENTIFIERS_AS_UPPERCASE = None
@@ -228,6 +233,11 @@ class Hive(Dialect):
         STRING_ESCAPES = ["\\"]
         ENCODE = "utf-8"
 
+        SINGLE_TOKENS = {
+            **tokens.Tokenizer.SINGLE_TOKENS,
+            "$": TokenType.PARAMETER,
+        }
+
         KEYWORDS = {
             **tokens.Tokenizer.KEYWORDS,
             "ADD ARCHIVE": TokenType.COMMAND,
@@ -237,10 +247,10 @@ class Hive(Dialect):
             "ADD JAR": TokenType.COMMAND,
             "ADD JARS": TokenType.COMMAND,
             "MSCK REPAIR": TokenType.COMMAND,
-            "REFRESH": TokenType.COMMAND,
-            "WITH SERDEPROPERTIES": TokenType.SERDE_PROPERTIES,
+            "REFRESH": TokenType.REFRESH,
             "TIMESTAMP AS OF": TokenType.TIMESTAMP_SNAPSHOT,
             "VERSION AS OF": TokenType.VERSION_SNAPSHOT,
+            "WITH SERDEPROPERTIES": TokenType.SERDE_PROPERTIES,
             "SYSDATE": TokenType.CURRENT_TIMESTAMP,
         }
 
@@ -262,7 +272,7 @@ class Hive(Dialect):
             **parser.Parser.FUNCTIONS,
             "BASE64": exp.ToBase64.from_arg_list,
             "COLLECT_LIST": exp.ArrayAgg.from_arg_list,
-            "COLLECT_SET": exp.SetAgg.from_arg_list,
+            "COLLECT_SET": exp.ArrayUniqueAgg.from_arg_list,
             "DATE_ADD": lambda args: exp.TsOrDsAdd(
                 this=seq_get(args, 0), expression=seq_get(args, 1), unit=exp.Literal.string("DAY")
             ),
@@ -411,6 +421,13 @@ class Hive(Dialect):
         EXTRACT_ALLOWS_QUOTES = False
         NVL2_SUPPORTED = False
 
+        EXPRESSIONS_WITHOUT_NESTED_CTES = {
+            exp.Insert,
+            exp.Select,
+            exp.Subquery,
+            exp.Union,
+        }
+
         TYPE_MAPPING = {
             **generator.Generator.TYPE_MAPPING,
             exp.DataType.Type.BIT: "BOOLEAN",
@@ -434,6 +451,8 @@ class Hive(Dialect):
             exp.Property: _property_sql,
             exp.AnyValue: rename_func("FIRST"),
             exp.ApproxDistinct: approx_count_distinct_sql,
+            exp.ArgMax: arg_max_or_min_no_count("MAX_BY"),
+            exp.ArgMin: arg_max_or_min_no_count("MIN_BY"),
             exp.ArrayConcat: rename_func("CONCAT"),
             exp.ArrayJoin: lambda self, e: self.func("CONCAT_WS", e.expression, e.this),
             exp.ArraySize: rename_func("SIZE"),
@@ -473,7 +492,7 @@ class Hive(Dialect):
             exp.Right: right_to_substring_sql,
             exp.SafeDivide: no_safe_divide_sql,
             exp.SchemaCommentProperty: lambda self, e: self.naked_property(e),
-            exp.SetAgg: rename_func("COLLECT_SET"),
+            exp.ArrayUniqueAgg: rename_func("COLLECT_SET"),
             exp.Split: lambda self, e: f"SPLIT({self.sql(e, 'this')}, CONCAT('\\\\Q', {self.sql(e, 'expression')}))",
             exp.StrPosition: strposition_to_locate_sql,
             exp.StrToDate: _str_to_date_sql,
@@ -521,7 +540,10 @@ class Hive(Dialect):
 
         def parameter_sql(self, expression: exp.Parameter) -> str:
             this = self.sql(expression, "this")
+            expression_sql = self.sql(expression, "expression")
+
             parent = expression.parent
+            this = f"{this}:{expression_sql}" if expression_sql else this
 
             if isinstance(parent, exp.EQ) and isinstance(parent.parent, exp.SetItem):
                 # We need to produce SET key = value instead of SET ${key} = value
@@ -530,8 +552,6 @@ class Hive(Dialect):
             return f"${{{this}}}"
 
         def schema_sql(self, expression: exp.Schema) -> str:
-            expression = expression.copy()
-
             for ordered in expression.find_all(exp.Ordered):
                 if ordered.args.get("desc") is False:
                     ordered.set("desc", None)
@@ -539,8 +559,6 @@ class Hive(Dialect):
             return super().schema_sql(expression)
 
         def constraint_sql(self, expression: exp.Constraint) -> str:
-            expression = expression.copy()
-
             for prop in list(expression.find_all(exp.Properties)):
                 prop.pop()
 
@@ -568,6 +586,8 @@ class Hive(Dialect):
                 and not expression.expressions
             ):
                 expression = exp.DataType.build("text")
+            elif expression.is_type(exp.DataType.Type.TEXT) and expression.expressions:
+                expression.set("this", exp.DataType.Type.VARCHAR)
             elif expression.this in exp.DataType.TEMPORAL_TYPES:
                 expression = exp.DataType.build(expression.this)
             elif expression.is_type("float"):

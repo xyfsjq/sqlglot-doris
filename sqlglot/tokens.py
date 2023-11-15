@@ -34,6 +34,7 @@ class TokenType(AutoName):
     EQ = auto()
     NEQ = auto()
     NULLSAFE_EQ = auto()
+    COLON_EQ = auto()
     AND = auto()
     OR = auto()
     AMP = auto()
@@ -56,6 +57,7 @@ class TokenType(AutoName):
     SESSION_PARAMETER = auto()
     DAMP = auto()
     XOR = auto()
+    DSTAR = auto()
 
     BLOCK_START = auto()
     BLOCK_END = auto()
@@ -295,6 +297,7 @@ class TokenType(AutoName):
     QUOTE = auto()
     RANGE = auto()
     RECURSIVE = auto()
+    REFRESH = auto()
     REPLACE = auto()
     RETURNING = auto()
     REFERENCES = auto()
@@ -371,7 +374,7 @@ class Token:
         col: int = 1,
         start: int = 0,
         end: int = 0,
-        comments: t.List[str] = [],
+        comments: t.Optional[t.List[str]] = None,
     ) -> None:
         """Token initializer.
 
@@ -390,7 +393,7 @@ class Token:
         self.col = col
         self.start = start
         self.end = end
-        self.comments = comments
+        self.comments = [] if comments is None else comments
 
     def __repr__(self) -> str:
         attributes = ", ".join(f"{k}: {getattr(self, k)}" for k in self.__slots__)
@@ -689,17 +692,22 @@ class Tokenizer(metaclass=_Tokenizer):
         "BOOLEAN": TokenType.BOOLEAN,
         "BYTE": TokenType.TINYINT,
         "MEDIUMINT": TokenType.MEDIUMINT,
+        "INT1": TokenType.TINYINT,
         "TINYINT": TokenType.TINYINT,
+        "INT16": TokenType.SMALLINT,
         "SHORT": TokenType.SMALLINT,
         "SMALLINT": TokenType.SMALLINT,
         "INT128": TokenType.INT128,
+        "HUGEINT": TokenType.INT128,
         "INT2": TokenType.SMALLINT,
         "INTEGER": TokenType.INT,
         "INT": TokenType.INT,
         "INT4": TokenType.INT,
+        "INT32": TokenType.INT,
+        "INT64": TokenType.BIGINT,
         "LONG": TokenType.BIGINT,
         "BIGINT": TokenType.BIGINT,
-        "INT8": TokenType.BIGINT,
+        "INT8": TokenType.TINYINT,
         "DEC": TokenType.DECIMAL,
         "DECIMAL": TokenType.DECIMAL,
         "BIGDECIMAL": TokenType.BIGDECIMAL,

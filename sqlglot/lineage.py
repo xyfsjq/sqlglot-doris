@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from sqlglot import Schema, exp, maybe_parse
 from sqlglot.errors import SqlglotError
-from sqlglot.optimizer import Scope, build_scope, qualify
+from sqlglot.optimizer import Scope, build_scope, find_all_in_scope, qualify
 
 if t.TYPE_CHECKING:
     from sqlglot.dialects.dialect import DialectType
@@ -112,25 +112,20 @@ def lineage(
                 column
                 if isinstance(column, int)
                 else next(
-                    i
-                    for i, select in enumerate(scope.expression.selects)
-                    if select.alias_or_name == column
+                    (
+                        i
+                        for i, select in enumerate(scope.expression.selects)
+                        if select.alias_or_name == column or select.is_star
+                    ),
+                    -1,  # mypy will not allow a None here, but a negative index should never be returned
                 )
             )
 
+            if index == -1:
+                raise ValueError(f"Could not find {column} in {scope.expression}")
+
             for s in scope.union_scopes:
                 to_node(index, scope=s, upstream=upstream)
-
-            return upstream
-
-        subquery = select.unalias()
-
-        if isinstance(subquery, exp.Subquery):
-            upstream = upstream or Node(name="SUBQUERY", source=scope.expression, expression=select)
-            scope = t.cast(Scope, build_scope(subquery.unnest()))
-
-            for select in subquery.named_selects:
-                to_node(select, scope=scope, upstream=upstream)
 
             return upstream
 
@@ -150,11 +145,28 @@ def lineage(
             expression=select,
             alias=alias or "",
         )
+
         if upstream:
             upstream.downstream.append(node)
 
+        subquery_scopes = {
+            id(subquery_scope.expression): subquery_scope
+            for subquery_scope in scope.subquery_scopes
+        }
+
+        for subquery in find_all_in_scope(select, exp.Subqueryable):
+            subquery_scope = subquery_scopes[id(subquery)]
+
+            for name in subquery.named_selects:
+                to_node(name, scope=subquery_scope, upstream=node)
+
+        # if the select is a star add all scope sources as downstreams
+        if select.is_star:
+            for source in scope.sources.values():
+                node.downstream.append(Node(name=select.sql(), source=source, expression=source))
+
         # Find all columns that went into creating this one to list their lineage nodes.
-        source_columns = set(select.find_all(exp.Column))
+        source_columns = set(find_all_in_scope(select, exp.Column))
 
         # If the source is a UDTF find columns used in the UTDF to generate the table
         if isinstance(source, exp.UDTF):

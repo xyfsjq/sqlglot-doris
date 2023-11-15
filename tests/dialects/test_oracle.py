@@ -6,6 +6,10 @@ class TestOracle(Validator):
     dialect = "oracle"
 
     def test_oracle(self):
+        self.validate_identity(
+            "ALTER TABLE Payments ADD (Stock NUMBER NOT NULL, dropid VARCHAR2(500) NOT NULL)"
+        )
+        self.validate_identity("ALTER TABLE Payments ADD Stock NUMBER NOT NULL")
         self.validate_identity("SELECT x FROM t WHERE cond FOR UPDATE")
         self.validate_identity("SELECT JSON_OBJECT(k1: v1 FORMAT JSON, k2: v2 FORMAT JSON)")
         self.validate_identity("SELECT JSON_OBJECT('name': first_name || ' ' || last_name) FROM t")
@@ -58,6 +62,13 @@ class TestOracle(Validator):
             "SELECT * FROM t SAMPLE (0.25)",
         )
 
+        self.validate_all(
+            "SELECT TO_CHAR(TIMESTAMP '1999-12-01 10:00:00')",
+            write={
+                "oracle": "SELECT TO_CHAR(CAST('1999-12-01 10:00:00' AS TIMESTAMP), 'YYYY-MM-DD HH24:MI:SS')",
+                "postgres": "SELECT TO_CHAR(CAST('1999-12-01 10:00:00' AS TIMESTAMP), 'YYYY-MM-DD HH24:MI:SS')",
+            },
+        )
         self.validate_all(
             "SELECT CAST(NULL AS VARCHAR2(2328 CHAR)) AS COL1",
             write={

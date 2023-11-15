@@ -36,7 +36,6 @@ def _approx_distinct_sql(self: Presto.Generator, expression: exp.ApproxDistinct)
 
 def _explode_to_unnest_sql(self: Presto.Generator, expression: exp.Lateral) -> str:
     if isinstance(expression.this, exp.Explode):
-        expression = expression.copy()
         return self.sql(
             exp.Join(
                 this=exp.Unnest(
@@ -72,7 +71,6 @@ def _schema_sql(self: Presto.Generator, expression: exp.Schema) -> str:
         for schema in expression.parent.find_all(exp.Schema):
             column_defs = schema.find_all(exp.ColumnDef)
             if column_defs and isinstance(schema.parent, exp.Property):
-                expression = expression.copy()
                 expression.expressions.extend(column_defs)
 
     return self.schema_sql(expression)
@@ -177,6 +175,7 @@ class Presto(Dialect):
     TIME_MAPPING = MySQL.TIME_MAPPING
     STRICT_STRING_CONCAT = True
     SUPPORTS_SEMI_ANTI_JOIN = False
+    TYPED_DIVISION = True
 
     # https://github.com/trinodb/trino/issues/17
     # https://github.com/trinodb/trino/issues/12289
@@ -234,6 +233,7 @@ class Presto(Dialect):
             ),
             "ROW": exp.Struct.from_arg_list,
             "SEQUENCE": exp.GenerateSeries.from_arg_list,
+            "SET_AGG": exp.ArrayUniqueAgg.from_arg_list,
             "SPLIT_TO_MAP": exp.StrToMap.from_arg_list,
             "STRPOS": lambda args: exp.StrPosition(
                 this=seq_get(args, 0), substr=seq_get(args, 1), instance=seq_get(args, 2)
@@ -304,10 +304,13 @@ class Presto(Dialect):
             exp.AnyValue: rename_func("ARBITRARY"),
             exp.ApproxDistinct: _approx_distinct_sql,
             exp.ApproxQuantile: rename_func("APPROX_PERCENTILE"),
+            exp.ArgMax: rename_func("MAX_BY"),
+            exp.ArgMin: rename_func("MIN_BY"),
             exp.Array: lambda self, e: f"ARRAY[{self.expressions(e, flat=True)}]",
             exp.ArrayConcat: rename_func("CONCAT"),
             exp.ArrayContains: rename_func("CONTAINS"),
             exp.ArraySize: rename_func("CARDINALITY"),
+            exp.ArrayUniqueAgg: rename_func("SET_AGG"),
             exp.BitwiseAnd: lambda self, e: f"BITWISE_AND({self.sql(e, 'this')}, {self.sql(e, 'expression')})",
             exp.BitwiseLeftShift: lambda self, e: f"BITWISE_ARITHMETIC_SHIFT_LEFT({self.sql(e, 'this')}, {self.sql(e, 'expression')})",
             exp.BitwiseNot: lambda self, e: f"BITWISE_NOT({self.sql(e, 'this')})",
@@ -399,7 +402,7 @@ class Presto(Dialect):
         }
 
         def struct_sql(self, expression: exp.Struct) -> str:
-            if any(isinstance(arg, (exp.EQ, exp.Slice)) for arg in expression.expressions):
+            if any(isinstance(arg, self.KEY_VALUE_DEFINITONS) for arg in expression.expressions):
                 self.unsupported("Struct with key-value definitions is unsupported.")
                 return self.function_fallback_sql(expression)
 
@@ -429,12 +432,10 @@ class Presto(Dialect):
                 target_type = None
 
             if target_type and target_type.is_type("timestamp"):
-                to = target_type.copy()
-
                 if target_type is start.to:
-                    end = exp.cast(end, to)
+                    end = exp.cast(end, target_type)
                 else:
-                    start = exp.cast(start, to)
+                    start = exp.cast(start, target_type)
 
             return self.func("SEQUENCE", start, end, step)
 
@@ -454,6 +455,5 @@ class Presto(Dialect):
             kind = expression.args["kind"]
             schema = expression.this
             if kind == "VIEW" and schema.expressions:
-                expression = expression.copy()
                 expression.this.set("expressions", None)
             return super().create_sql(expression)

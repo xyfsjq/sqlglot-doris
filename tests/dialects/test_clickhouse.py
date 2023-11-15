@@ -102,6 +102,13 @@ class TestClickhouse(Validator):
         )
 
         self.validate_all(
+            "SELECT CAST('2020-01-01' AS TIMESTAMP) + INTERVAL '500' microsecond",
+            read={
+                "duckdb": "SELECT TIMESTAMP '2020-01-01' + INTERVAL '500 us'",
+                "postgres": "SELECT TIMESTAMP '2020-01-01' + INTERVAL '500 us'",
+            },
+        )
+        self.validate_all(
             "SELECT CURRENT_DATE()",
             read={
                 "clickhouse": "SELECT CURRENT_DATE()",
@@ -312,6 +319,10 @@ class TestClickhouse(Validator):
         self.validate_identity("WITH SUM(bytes) AS foo SELECT foo FROM system.parts")
         self.validate_identity("WITH (SELECT foo) AS bar SELECT bar + 5")
         self.validate_identity("WITH test1 AS (SELECT i + 1, j + 1 FROM test1) SELECT * FROM test1")
+
+        query = parse_one("""WITH (SELECT 1) AS y SELECT * FROM y""", read="clickhouse")
+        self.assertIsInstance(query.args["with"].expressions[0].this, exp.Subquery)
+        self.assertEqual(query.args["with"].expressions[0].alias, "y")
 
     def test_ternary(self):
         self.validate_all("x ? 1 : 2", write={"clickhouse": "CASE WHEN x THEN 1 ELSE 2 END"})

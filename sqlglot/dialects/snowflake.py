@@ -3,6 +3,7 @@ from __future__ import annotations
 import typing as t
 
 from sqlglot import exp, generator, parser, tokens, transforms
+from sqlglot._typing import E
 from sqlglot.dialects.dialect import (
     Dialect,
     binary_from_function,
@@ -32,7 +33,7 @@ def _check_int(s: str) -> bool:
 
 
 # from https://docs.snowflake.com/en/sql-reference/functions/to_timestamp.html
-def _parse_to_timestamp(args: t.List) -> t.Union[exp.StrToTime, exp.UnixToTime]:
+def _parse_to_timestamp(args: t.List) -> t.Union[exp.StrToTime, exp.UnixToTime, exp.TimeStrToTime]:
     if len(args) == 2:
         first_arg, second_arg = args
         if second_arg.is_string:
@@ -60,8 +61,8 @@ def _parse_to_timestamp(args: t.List) -> t.Union[exp.StrToTime, exp.UnixToTime]:
     # reduce it using `simplify_literals` first and then check if it's a Literal.
     first_arg = seq_get(args, 0)
     if not isinstance(simplify_literals(first_arg, root=True), Literal):
-        # case: <variant_expr>
-        return format_time_lambda(exp.StrToTime, "snowflake", default=True)(args)
+        # case: <variant_expr> or other expressions such as columns
+        return exp.TimeStrToTime.from_arg_list(args)
 
     if first_arg.is_string:
         if _check_int(first_arg.this):
@@ -236,6 +237,19 @@ class Snowflake(Dialect):
         "ff6": "%f",
     }
 
+    @classmethod
+    def quote_identifier(cls, expression: E, identify: bool = True) -> E:
+        # This disables quoting DUAL in SELECT ... FROM DUAL, because Snowflake treats an
+        # unquoted DUAL keyword in a special way and does not map it to a user-defined table
+        if (
+            isinstance(expression, exp.Identifier)
+            and isinstance(expression.parent, exp.Table)
+            and expression.name.lower() == "dual"
+        ):
+            return t.cast(E, expression)
+
+        return super().quote_identifier(expression, identify=identify)
+
     class Parser(parser.Parser):
         IDENTIFY_PIVOT_STRINGS = True
 
@@ -355,7 +369,7 @@ class Snowflake(Dialect):
             table: t.Optional[exp.Expression] = None
             if self._match_text_seq("@"):
                 table_name = "@"
-                while True:
+                while self._curr:
                     self._advance()
                     table_name += self._prev.text
                     if not self._match_set(self.STAGED_FILE_SINGLE_TOKENS, advance=False):
@@ -466,6 +480,8 @@ class Snowflake(Dialect):
 
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
+            exp.ArgMax: rename_func("MAX_BY"),
+            exp.ArgMin: rename_func("MIN_BY"),
             exp.Array: inline_array_sql,
             exp.ArrayConcat: rename_func("ARRAY_CAT"),
             exp.ArrayJoin: rename_func("ARRAY_TO_STRING"),
@@ -509,6 +525,7 @@ class Snowflake(Dialect):
                     transforms.eliminate_semi_and_anti_joins,
                 ]
             ),
+            exp.SHA: rename_func("SHA1"),
             exp.StarMap: rename_func("OBJECT_CONSTRUCT"),
             exp.StartsWith: rename_func("STARTSWITH"),
             exp.StrPosition: lambda self, e: self.func(
@@ -551,6 +568,20 @@ class Snowflake(Dialect):
             exp.VolatileProperty: exp.Properties.Location.UNSUPPORTED,
         }
 
+        def trycast_sql(self, expression: exp.TryCast) -> str:
+            value = expression.this
+
+            if value.type is None:
+                from sqlglot.optimizer.annotate_types import annotate_types
+
+                value = annotate_types(value)
+
+            if value.is_type(*exp.DataType.TEXT_TYPES, exp.DataType.Type.UNKNOWN):
+                return super().trycast_sql(expression)
+
+            # TRY_CAST only works for string values in Snowflake
+            return self.cast_sql(expression)
+
         def log_sql(self, expression: exp.Log) -> str:
             if not expression.expression:
                 return self.func("LN", expression.this)
@@ -564,7 +595,6 @@ class Snowflake(Dialect):
             offset = expression.args.get("offset")
             if offset:
                 if unnest_alias:
-                    expression = expression.copy()
                     unnest_alias.append("columns", offset.pop())
 
                 selects.append("index")

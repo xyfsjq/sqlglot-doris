@@ -5,6 +5,7 @@ import typing as t
 from sqlglot import exp, generator, parser, tokens, transforms
 from sqlglot.dialects.dialect import (
     Dialect,
+    arg_max_or_min_no_count,
     inline_array_sql,
     no_pivot_sql,
     rename_func,
@@ -36,6 +37,7 @@ class ClickHouse(Dialect):
     NULL_ORDERING = "nulls_are_last"
     STRICT_STRING_CONCAT = True
     SUPPORTS_USER_DEFINED_TYPES = False
+    SAFE_DIVISION = True
 
     ESCAPE_SEQUENCES = {
         "\\0": "\0",
@@ -62,11 +64,7 @@ class ClickHouse(Dialect):
             "FLOAT32": TokenType.FLOAT,
             "FLOAT64": TokenType.DOUBLE,
             "GLOBAL": TokenType.GLOBAL,
-            "INT16": TokenType.SMALLINT,
             "INT256": TokenType.INT256,
-            "INT32": TokenType.INT,
-            "INT64": TokenType.BIGINT,
-            "INT8": TokenType.TINYINT,
             "LOWCARDINALITY": TokenType.LOWCARDINALITY,
             "MAP": TokenType.MAP,
             "NESTED": TokenType.NESTED,
@@ -349,12 +347,13 @@ class ClickHouse(Dialect):
             except ParseError:
                 # WITH <expression> AS <identifier>
                 self._retreat(index)
-                statement = self._parse_statement()
 
-                if statement and isinstance(statement.this, exp.Alias):
-                    self.raise_error("Expected CTE to have alias")
-
-                return self.expression(exp.CTE, this=statement, alias=statement and statement.this)
+                return self.expression(
+                    exp.CTE,
+                    this=self._parse_field(),
+                    alias=self._parse_table_alias(),
+                    scalar=True,
+                )
 
         def _parse_join_parts(
             self,
@@ -500,6 +499,8 @@ class ClickHouse(Dialect):
             exp.Select: transforms.preprocess([transforms.eliminate_qualify]),
             exp.AnyValue: rename_func("any"),
             exp.ApproxDistinct: rename_func("uniq"),
+            exp.ArgMax: arg_max_or_min_no_count("argMax"),
+            exp.ArgMin: arg_max_or_min_no_count("argMin"),
             exp.Array: inline_array_sql,
             exp.CastToStrType: rename_func("CAST"),
             exp.CurrentDate: lambda self, e: self.func("CURRENT_DATE"),
@@ -512,6 +513,7 @@ class ClickHouse(Dialect):
             exp.Final: lambda self, e: f"{self.sql(e, 'this')} FINAL",
             exp.IsNan: rename_func("isNaN"),
             exp.Map: lambda self, e: _lower_func(var_map_sql(self, e)),
+            exp.Nullif: rename_func("nullIf"),
             exp.PartitionedByProperty: lambda self, e: f"PARTITION BY {self.sql(e, 'this')}",
             exp.Pivot: no_pivot_sql,
             exp.Quantile: _quantile_sql,
@@ -585,7 +587,6 @@ class ClickHouse(Dialect):
 
         def safeconcat_sql(self, expression: exp.SafeConcat) -> str:
             # Clickhouse errors out if we try to cast a NULL value to TEXT
-            expression = expression.copy()
             return self.func(
                 "CONCAT",
                 *[
@@ -595,8 +596,10 @@ class ClickHouse(Dialect):
             )
 
         def cte_sql(self, expression: exp.CTE) -> str:
-            if isinstance(expression.this, exp.Alias):
-                return self.sql(expression, "this")
+            if expression.args.get("scalar"):
+                this = self.sql(expression, "this")
+                alias = self.sql(expression, "alias")
+                return f"{this} AS {alias}"
 
             return super().cte_sql(expression)
 
