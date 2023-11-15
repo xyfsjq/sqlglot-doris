@@ -140,3 +140,5 @@ spark_warehouse
 
 # Version file
 sqlglot/_version.py
+
+sqlglot/dialects/test.py
