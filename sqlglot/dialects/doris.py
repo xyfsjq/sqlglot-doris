@@ -288,7 +288,6 @@ class Doris(MySQL):
             exp.TimeStrToDate: rename_func("TO_DATE"),
             exp.ToChar: handle_to_char,
             exp.TsOrDsAdd: lambda self, e: f"DATE_ADD({self.sql(e, 'this')}, INTERVAL {self.sql(e, 'expression')} {self.sql(e, 'unit')})",
-            # Only for day level
             exp.TsOrDsToDate: lambda self, e: f"CAST({self.sql(e, 'this')} AS DATE)",
             exp.TimeStrToUnix: rename_func("UNIX_TIMESTAMP"),
             exp.TimeToUnix: rename_func("UNIX_TIMESTAMP"),
@@ -315,30 +314,6 @@ class Doris(MySQL):
             exp.QuartersAdd: lambda self, e: f"MONTHS_ADD({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
             exp.QuartersSub: lambda self, e: f"MONTHS_SUB({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
         }
-
-        # def sub_sql(self, expression: exp.Sub) -> str:
-        #     if re.search(r'date', self.sql(expression, 'this'), re.IGNORECASE):
-        #         this = self.sql(expression, 'this')
-        #         expr = self.sql(expression, 'expression')
-        #         return f"{this} - INTERVAL {expr} DAY"
-        #     return self.binary(expression, "-")
-        #
-        # def add_sql(self, expression: exp.Add) -> str:
-        #     if re.search(r'date', self.sql(expression, 'this'), re.IGNORECASE):
-        #         this = self.sql(expression, 'this')
-        #         expr = self.sql(expression,'expression')
-        #         # letters = re.findall(r'[a-zA-Z]+', expr)
-        #         # unit = letters[0] if letters else 'day'
-        #         return f"{this} + INTERVAL {expr} DAY"
-        #     return self.binary(expression, "+")
-
-        # def where_sql(self, expression: exp.Where) -> str:
-        #     this = self.indent(self.sql(expression, "this"))
-        #     numbers = re.findall(r"\d+", this)
-        #     letters = re.findall(r"[a-zA-Z]+", this)
-        #     if letters[0] == "rownum":
-        #         return f"{self.seg('LIMIT')} {numbers[0]}"
-        #     return f"{self.seg('WHERE')}{self.sep()}{this}"
 
         def currentdate_sql(self, expression: exp.CurrentDate) -> str:
             zone = self.sql(expression, "this")
