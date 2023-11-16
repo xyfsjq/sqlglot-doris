@@ -668,6 +668,10 @@ class TestExecutor(unittest.TestCase):
             ("DATEDIFF('2022-01-03'::date, '2022-01-01'::TIMESTAMP::DATE)", 2),
             ("TRIM(' foo ')", "foo"),
             ("TRIM('afoob', 'ab')", "foo"),
+            ("ARRAY_JOIN(['foo', 'bar'], ':')", "foo:bar"),
+            ("ARRAY_JOIN(['hello', null ,'world'], ' ', ',')", "hello , world"),
+            ("ARRAY_JOIN(['', null ,'world'], ' ', ',')", " , world"),
+            ("STRUCT('foo', 'bar', null, null)", {"foo": "bar"}),
         ]:
             with self.subTest(sql):
                 result = execute(f"SELECT {sql}")
