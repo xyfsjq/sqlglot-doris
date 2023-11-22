@@ -3,7 +3,7 @@ from setuptools import find_packages, setup
 setup(
     name="sqlglot-doris",
     description="An easily customizable SQL parser and transpiler",
-    version="1.0.8.4",
+    version="1.0.8.6",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     url="https://github.com/tobymao/sqlglot",

@@ -526,6 +526,7 @@ class Tokenizer(metaclass=_Tokenizer):
         "<=": TokenType.LTE,
         "<>": TokenType.NEQ,
         "!=": TokenType.NEQ,
+        ":=": TokenType.COLON_EQ,
         "<=>": TokenType.NULLSAFE_EQ,
         "->": TokenType.ARROW,
         "->>": TokenType.DARROW,
@@ -858,13 +859,26 @@ class Tokenizer(metaclass=_Tokenizer):
 
     def _scan(self, until: t.Optional[t.Callable] = None) -> None:
         while self.size and not self._end:
-            self._start = self._current
-            self._advance()
+            current = self._current
+
+            # skip spaces inline rather than iteratively call advance()
+            # for performance reasons
+            while current < self.size:
+                char = self.sql[current]
+
+                if char.isspace() and (char == " " or char == "\t"):
+                    current += 1
+                else:
+                    break
+
+            n = current - self._current
+            self._start = current
+            self._advance(n if n > 1 else 1)
 
             if self._char is None:
                 break
 
-            if self._char not in self.WHITE_SPACE:
+            if not self._char.isspace():
                 if self._char.isdigit():
                     self._scan_number()
                 elif self._char in self._IDENTIFIERS:
@@ -990,7 +1004,7 @@ class Tokenizer(metaclass=_Tokenizer):
             if end < self.size:
                 char = self.sql[end]
                 single_token = single_token or char in self.SINGLE_TOKENS
-                is_space = char in self.WHITE_SPACE
+                is_space = char.isspace()
 
                 if not is_space or not prev_space:
                     if is_space:
@@ -1002,7 +1016,7 @@ class Tokenizer(metaclass=_Tokenizer):
                     skip = True
             else:
                 char = ""
-                chars = " "
+                break
 
         if word:
             if self._scan_string(word):

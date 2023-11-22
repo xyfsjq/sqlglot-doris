@@ -8,6 +8,7 @@ from sqlglot.dialects.dialect import (
     approx_count_distinct_sql,
     arg_max_or_min_no_count,
     create_with_partitions_sql,
+    datestrtodate_sql,
     format_time_lambda,
     if_sql,
     is_parse_json,
@@ -315,6 +316,7 @@ class Hive(Dialect):
             "UNIX_TIMESTAMP": format_time_lambda(exp.StrToUnix, "hive", True),
             "YEAR": lambda args: exp.Year(this=exp.TsOrDsToDate.from_arg_list(args)),
             "TRUNC": exp.DateTrunc_oracle.from_arg_list,
+            "LATERAL_VIEW_EXPLODE": exp.Explode.from_arg_list,
         }
 
         NO_PAREN_FUNCTION_PARSERS = {
@@ -460,7 +462,7 @@ class Hive(Dialect):
             exp.With: no_recursive_cte_sql,
             exp.DateAdd: _add_date_sql,
             exp.DateDiff: _date_diff_sql,
-            exp.DateStrToDate: rename_func("TO_DATE"),
+            exp.DateStrToDate: datestrtodate_sql,
             exp.DateSub: _add_date_sql,
             exp.DateToDi: lambda self, e: f"CAST(DATE_FORMAT({self.sql(e, 'this')}, {Hive.DATEINT_FORMAT}) AS INT)",
             exp.DiToDate: lambda self, e: f"TO_DATE(CAST({self.sql(e, 'this')} AS STRING), {Hive.DATEINT_FORMAT})",
