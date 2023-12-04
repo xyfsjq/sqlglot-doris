@@ -13,6 +13,28 @@ class TestSnowflake(Validator):
         expr.selects[0].assert_is(exp.AggFunc)
         self.assertEqual(expr.sql(dialect="snowflake"), "SELECT APPROX_TOP_K(C4, 3, 5) FROM t")
 
+        self.assertEqual(
+            exp.select(exp.Explode(this=exp.column("x")).as_("y", quoted=True)).sql(
+                "snowflake", pretty=True
+            ),
+            """SELECT
+  IFF(_u.pos = _u_2.pos_2, _u_2."y", NULL) AS "y"
+FROM TABLE(FLATTEN(INPUT => ARRAY_GENERATE_RANGE(0, (
+  GREATEST(ARRAY_SIZE(x)) - 1
+) + 1))) AS _u(seq, key, path, index, pos, this)
+CROSS JOIN TABLE(FLATTEN(INPUT => x)) AS _u_2(seq, key, path, pos_2, "y", this)
+WHERE
+  _u.pos = _u_2.pos_2
+  OR (
+    _u.pos > (
+      ARRAY_SIZE(x) - 1
+    ) AND _u_2.pos_2 = (
+      ARRAY_SIZE(x) - 1
+    )
+  )""",
+        )
+
+        self.validate_identity("SELECT user_id, value FROM table_name sample ($s) SEED (0)")
         self.validate_identity("SELECT ARRAY_UNIQUE_AGG(x)")
         self.validate_identity("SELECT OBJECT_CONSTRUCT()")
         self.validate_identity("SELECT DAYOFMONTH(CURRENT_TIMESTAMP())")
@@ -47,6 +69,10 @@ class TestSnowflake(Validator):
         self.validate_identity("ALTER TABLE a SWAP WITH b")
         self.validate_identity(
             'DESCRIBE TABLE "SNOWFLAKE_SAMPLE_DATA"."TPCDS_SF100TCL"."WEB_SITE" type=stage'
+        )
+        self.validate_identity(
+            "SELECT * FROM unnest(x) with ordinality",
+            "SELECT * FROM TABLE(FLATTEN(INPUT => x)) AS _u(seq, key, path, index, value, this)",
         )
         self.validate_identity(
             "CREATE TABLE foo (ID INT COMMENT $$some comment$$)",
@@ -92,6 +118,13 @@ class TestSnowflake(Validator):
         self.validate_all("CAST(x AS CHAR VARYING)", write={"snowflake": "CAST(x AS VARCHAR)"})
         self.validate_all("CAST(x AS CHARACTER VARYING)", write={"snowflake": "CAST(x AS VARCHAR)"})
         self.validate_all("CAST(x AS NCHAR VARYING)", write={"snowflake": "CAST(x AS VARCHAR)"})
+        self.validate_all(
+            # We need to qualify the columns in this query because "value" would be ambiguous
+            'WITH t(x, "value") AS (SELECT [1, 2, 3], 1) SELECT IFF(_u.pos = _u_2.pos_2, _u_2."value", NULL) AS "value" FROM t, TABLE(FLATTEN(INPUT => ARRAY_GENERATE_RANGE(0, (GREATEST(ARRAY_SIZE(t.x)) - 1) + 1))) AS _u(seq, key, path, index, pos, this) CROSS JOIN TABLE(FLATTEN(INPUT => t.x)) AS _u_2(seq, key, path, pos_2, "value", this) WHERE _u.pos = _u_2.pos_2 OR (_u.pos > (ARRAY_SIZE(t.x) - 1) AND _u_2.pos_2 = (ARRAY_SIZE(t.x) - 1))',
+            read={
+                "duckdb": 'WITH t(x, "value") AS (SELECT [1,2,3], 1) SELECT UNNEST(t.x) AS "value" FROM t',
+            },
+        )
         self.validate_all(
             "SELECT { 'Manitoba': 'Winnipeg', 'foo': 'bar' } AS province_capital",
             write={
@@ -369,7 +402,7 @@ class TestSnowflake(Validator):
         self.validate_all(
             "SELECT TO_TIMESTAMP(1659981729)",
             write={
-                "bigquery": "SELECT UNIX_TO_TIME(1659981729)",
+                "bigquery": "SELECT TIMESTAMP_SECONDS(1659981729)",
                 "snowflake": "SELECT TO_TIMESTAMP(1659981729)",
                 "spark": "SELECT CAST(FROM_UNIXTIME(1659981729) AS TIMESTAMP)",
             },
@@ -377,7 +410,7 @@ class TestSnowflake(Validator):
         self.validate_all(
             "SELECT TO_TIMESTAMP(1659981729000, 3)",
             write={
-                "bigquery": "SELECT UNIX_TO_TIME(1659981729000, 'millis')",
+                "bigquery": "SELECT TIMESTAMP_MILLIS(1659981729000)",
                 "snowflake": "SELECT TO_TIMESTAMP(1659981729000, 3)",
                 "spark": "SELECT TIMESTAMP_MILLIS(1659981729000)",
             },
@@ -385,7 +418,6 @@ class TestSnowflake(Validator):
         self.validate_all(
             "SELECT TO_TIMESTAMP('1659981729')",
             write={
-                "bigquery": "SELECT UNIX_TO_TIME('1659981729')",
                 "snowflake": "SELECT TO_TIMESTAMP('1659981729')",
                 "spark": "SELECT CAST(FROM_UNIXTIME('1659981729') AS TIMESTAMP)",
             },
@@ -393,9 +425,11 @@ class TestSnowflake(Validator):
         self.validate_all(
             "SELECT TO_TIMESTAMP(1659981729000000000, 9)",
             write={
-                "bigquery": "SELECT UNIX_TO_TIME(1659981729000000000, 'micros')",
+                "bigquery": "SELECT TIMESTAMP_MICROS(CAST(1659981729000000000 / 1000 AS INT64))",
+                "duckdb": "SELECT TO_TIMESTAMP(1659981729000000000 / 1000000000)",
+                "presto": "SELECT FROM_UNIXTIME(CAST(1659981729000000000 AS DOUBLE) / 1000000000)",
                 "snowflake": "SELECT TO_TIMESTAMP(1659981729000000000, 9)",
-                "spark": "SELECT TIMESTAMP_MICROS(1659981729000000000)",
+                "spark": "SELECT TIMESTAMP_SECONDS(1659981729000000000 / 1000000000)",
             },
         )
         self.validate_all(
@@ -418,7 +452,6 @@ class TestSnowflake(Validator):
                 "spark": "SELECT TO_TIMESTAMP('04/05/2013 01:02:03', 'MM/dd/yyyy HH:mm:ss')",
             },
         )
-
         self.validate_all(
             "SELECT IFF(TRUE, 'true', 'false')",
             write={

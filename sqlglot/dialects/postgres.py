@@ -4,6 +4,7 @@ import typing as t
 
 from sqlglot import exp, generator, parser, tokens, transforms
 from sqlglot.dialects.dialect import (
+    DATE_ADD_OR_SUB,
     Dialect,
     any_value_to_max_sql,
     arrow_json_extract_scalar_sql,
@@ -25,6 +26,7 @@ from sqlglot.dialects.dialect import (
     timestamptrunc_sql,
     timestrtotime_sql,
     trim_sql,
+    ts_or_ds_add_cast,
     ts_or_ds_to_date_sql,
 )
 from sqlglot.helper import seq_get
@@ -41,8 +43,11 @@ DATE_DIFF_FACTOR = {
 }
 
 
-def _date_add_sql(kind: str) -> t.Callable[[Postgres.Generator, exp.DateAdd | exp.DateSub], str]:
-    def func(self: Postgres.Generator, expression: exp.DateAdd | exp.DateSub) -> str:
+def _date_add_sql(kind: str) -> t.Callable[[Postgres.Generator, DATE_ADD_OR_SUB], str]:
+    def func(self: Postgres.Generator, expression: DATE_ADD_OR_SUB) -> str:
+        if isinstance(expression, exp.TsOrDsAdd):
+            expression = ts_or_ds_add_cast(expression)
+
         this = self.sql(expression, "this")
         unit = expression.args.get("unit")
 
@@ -60,8 +65,8 @@ def _date_diff_sql(self: Postgres.Generator, expression: exp.DateDiff) -> str:
     unit = expression.text("unit").upper()
     factor = DATE_DIFF_FACTOR.get(unit)
 
-    end = f"CAST({expression.this} AS TIMESTAMP)"
-    start = f"CAST({expression.expression} AS TIMESTAMP)"
+    end = f"CAST({self.sql(expression, 'this')} AS TIMESTAMP)"
+    start = f"CAST({self.sql(expression, 'expression')} AS TIMESTAMP)"
 
     if factor is not None:
         return f"CAST(EXTRACT(epoch FROM {end} - {start}){factor} AS BIGINT)"
@@ -69,7 +74,7 @@ def _date_diff_sql(self: Postgres.Generator, expression: exp.DateDiff) -> str:
     age = f"AGE({end}, {start})"
 
     if unit == "WEEK":
-        unit = f"EXTRACT(year FROM {age}) * 48 + EXTRACT(month FROM {age}) * 4 + EXTRACT(day FROM {age}) / 7"
+        unit = f"EXTRACT(days FROM ({end} - {start})) / 7"
     elif unit == "MONTH":
         unit = f"EXTRACT(year FROM {age}) * 12 + EXTRACT(month FROM {age})"
     elif unit == "QUARTER":
@@ -279,6 +284,7 @@ class Postgres(Dialect):
             "TEMP": TokenType.TEMPORARY,
             "CSTRING": TokenType.PSEUDO_TYPE,
             "OID": TokenType.OBJECT_IDENTIFIER,
+            "OPERATOR": TokenType.OPERATOR,
             "REGCLASS": TokenType.OBJECT_IDENTIFIER,
             "REGCOLLATION": TokenType.OBJECT_IDENTIFIER,
             "REGCONFIG": TokenType.OBJECT_IDENTIFIER,
@@ -350,18 +356,42 @@ class Postgres(Dialect):
 
         RANGE_PARSERS = {
             **parser.Parser.RANGE_PARSERS,
+            TokenType.AT_GT: binary_range_parser(exp.ArrayContains),
             TokenType.DAMP: binary_range_parser(exp.ArrayOverlaps),
             TokenType.DAT: lambda self, this: self.expression(
                 exp.MatchAgainst, this=self._parse_bitwise(), expressions=[this]
             ),
-            TokenType.AT_GT: binary_range_parser(exp.ArrayContains),
             TokenType.LT_AT: binary_range_parser(exp.ArrayContained),
+            TokenType.OPERATOR: lambda self, this: self._parse_operator(this),
         }
 
         STATEMENT_PARSERS = {
             **parser.Parser.STATEMENT_PARSERS,
             TokenType.END: lambda self: self._parse_commit_or_rollback(),
         }
+
+        def _parse_operator(self, this: t.Optional[exp.Expression]) -> t.Optional[exp.Expression]:
+            while True:
+                if not self._match(TokenType.L_PAREN):
+                    break
+
+                op = ""
+                while self._curr and not self._match(TokenType.R_PAREN):
+                    op += self._curr.text
+                    self._advance()
+
+                this = self.expression(
+                    exp.Operator,
+                    comments=self._prev_comments,
+                    this=this,
+                    operator=op,
+                    expression=self._parse_bitwise(),
+                )
+
+                if not self._match(TokenType.OPERATOR):
+                    break
+
+            return this
 
         def _parse_date_part(self) -> exp.Expression:
             part = self._parse_type()
@@ -452,6 +482,8 @@ class Postgres(Dialect):
             exp.ToChar: lambda self, e: self.function_fallback_sql(e),
             exp.Trim: trim_sql,
             exp.TryCast: no_trycast_sql,
+            exp.TsOrDsAdd: _date_add_sql("+"),
+            exp.TsOrDsDiff: _date_diff_sql,
             exp.TsOrDsToDate: ts_or_ds_to_date_sql("postgres"),
             exp.UnixToTime: lambda self, e: f"TO_TIMESTAMP({self.sql(e, 'this')})",
             exp.VariancePop: rename_func("VAR_POP"),

@@ -123,6 +123,7 @@ class TestMySQL(Validator):
         self.validate_identity("ALTER TABLE test_table ALTER COLUMN test_column SET DEFAULT 1")
 
     def test_identity(self):
+        self.validate_identity("SELECT DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:00.0000')")
         self.validate_identity("SELECT @var1 := 1, @var2")
         self.validate_identity("UNLOCK TABLES")
         self.validate_identity("LOCK TABLES `app_fields` WRITE")
@@ -531,7 +532,15 @@ class TestMySQL(Validator):
         )
         self.validate_all(
             "SELECT DATEDIFF(x, y)",
-            write={"mysql": "SELECT DATEDIFF(x, y)", "presto": "SELECT DATE_DIFF('day', y, x)"},
+            read={
+                "presto": "SELECT DATE_DIFF('day', y, x)",
+                "redshift": "SELECT DATEDIFF(day, y, x)",
+            },
+            write={
+                "mysql": "SELECT DATEDIFF(x, y)",
+                "presto": "SELECT DATE_DIFF('day', y, x)",
+                "redshift": "SELECT DATEDIFF(day, y, x)",
+            },
         )
         self.validate_all(
             "DAYOFYEAR(x)",
@@ -581,6 +590,12 @@ class TestMySQL(Validator):
         )
 
     def test_mysql(self):
+        self.validate_all(
+            "SELECT * FROM x LEFT JOIN y ON x.id = y.id UNION SELECT * FROM x RIGHT JOIN y ON x.id = y.id LIMIT 0",
+            read={
+                "postgres": "SELECT * FROM x FULL JOIN y ON x.id = y.id LIMIT 0",
+            },
+        )
         self.validate_all(
             # MySQL doesn't support FULL OUTER joins
             "WITH t1 AS (SELECT 1) SELECT * FROM t1 LEFT OUTER JOIN t2 ON t1.x = t2.x UNION SELECT * FROM t1 RIGHT OUTER JOIN t2 ON t1.x = t2.x",

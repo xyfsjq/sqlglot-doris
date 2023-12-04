@@ -15,8 +15,6 @@ if t.TYPE_CHECKING:
 
     ColumnMapping = t.Union[t.Dict, str, StructType, t.List]
 
-TABLE_ARGS = ("this", "db", "catalog")
-
 
 class Schema(abc.ABC):
     """Abstract base class for database schemas"""
@@ -147,7 +145,7 @@ class AbstractMappingSchema:
             if not depth:  # None
                 self._supported_table_args = tuple()
             elif 1 <= depth <= 3:
-                self._supported_table_args = TABLE_ARGS[:depth]
+                self._supported_table_args = exp.TABLE_PARTS[:depth]
             else:
                 raise SchemaError(f"Invalid mapping shape. Depth: {depth}")
 
@@ -156,7 +154,7 @@ class AbstractMappingSchema:
     def table_parts(self, table: exp.Table) -> t.List[str]:
         if isinstance(table.this, exp.ReadCSV):
             return [table.this.name]
-        return [table.text(part) for part in TABLE_ARGS if table.text(part)]
+        return [table.text(part) for part in exp.TABLE_PARTS if table.text(part)]
 
     def find(
         self, table: exp.Table, trie: t.Optional[t.Dict] = None, raise_on_missing: bool = True
@@ -365,13 +363,11 @@ class MappingSchema(AbstractMappingSchema, Schema):
                     f"Table {'.'.join(keys[:-1])} must match the schema's nesting level: {len(flattened_schema[0])}."
                 )
 
-            normalized_keys = [
-                self._normalize_name(key, dialect=self.dialect, is_table=True) for key in keys
-            ]
+            normalized_keys = [self._normalize_name(key, is_table=True) for key in keys]
             for column_name, column_type in columns.items():
                 nested_set(
                     normalized_mapping,
-                    normalized_keys + [self._normalize_name(column_name, dialect=self.dialect)],
+                    normalized_keys + [self._normalize_name(column_name)],
                     column_type,
                 )
 
@@ -383,21 +379,19 @@ class MappingSchema(AbstractMappingSchema, Schema):
         dialect: DialectType = None,
         normalize: t.Optional[bool] = None,
     ) -> exp.Table:
-        normalized_table = exp.maybe_parse(
-            table, into=exp.Table, dialect=dialect or self.dialect, copy=True
-        )
+        dialect = dialect or self.dialect
+        normalize = self.normalize if normalize is None else normalize
 
-        for arg in TABLE_ARGS:
-            value = normalized_table.args.get(arg)
-            if isinstance(value, (str, exp.Identifier)):
-                normalized_table.set(
-                    arg,
-                    exp.to_identifier(
-                        self._normalize_name(
-                            value, dialect=dialect, is_table=True, normalize=normalize
-                        )
-                    ),
-                )
+        normalized_table = exp.maybe_parse(table, into=exp.Table, dialect=dialect, copy=normalize)
+
+        if normalize:
+            for arg in exp.TABLE_PARTS:
+                value = normalized_table.args.get(arg)
+                if isinstance(value, exp.Identifier):
+                    normalized_table.set(
+                        arg,
+                        normalize_name(value, dialect=dialect, is_table=True, normalize=normalize),
+                    )
 
         return normalized_table
 
@@ -413,7 +407,7 @@ class MappingSchema(AbstractMappingSchema, Schema):
             dialect=dialect or self.dialect,
             is_table=is_table,
             normalize=self.normalize if normalize is None else normalize,
-        )
+        ).name
 
     def depth(self) -> int:
         if not self.empty and not self._depth:
@@ -451,16 +445,16 @@ def normalize_name(
     dialect: DialectType = None,
     is_table: bool = False,
     normalize: t.Optional[bool] = True,
-) -> str:
+) -> exp.Identifier:
     if isinstance(identifier, str):
         identifier = exp.parse_identifier(identifier, dialect=dialect)
 
     if not normalize:
-        return identifier.name
+        return identifier
 
-    # This can be useful for normalize_identifier
+    # this is used for normalize_identifier, bigquery has special rules pertaining tables
     identifier.meta["is_table"] = is_table
-    return Dialect.get_or_raise(dialect).normalize_identifier(identifier).name
+    return Dialect.get_or_raise(dialect).normalize_identifier(identifier)
 
 
 def ensure_schema(schema: Schema | t.Optional[t.Dict], **kwargs: t.Any) -> Schema:

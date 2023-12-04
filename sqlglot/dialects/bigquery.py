@@ -23,6 +23,7 @@ from sqlglot.dialects.dialect import (
     regexp_replace_sql,
     rename_func,
     timestrtotime_sql,
+    ts_or_ds_add_cast,
     ts_or_ds_to_date_sql,
 )
 from sqlglot.helper import seq_get, split_num_words
@@ -184,6 +185,34 @@ def _array_contains_sql(self: BigQuery.Generator, expression: exp.ArrayContains)
     )
 
 
+def _ts_or_ds_add_sql(self: BigQuery.Generator, expression: exp.TsOrDsAdd) -> str:
+    return date_add_interval_sql("DATE", "ADD")(self, ts_or_ds_add_cast(expression))
+
+
+def _ts_or_ds_diff_sql(self: BigQuery.Generator, expression: exp.TsOrDsDiff) -> str:
+    expression.this.replace(exp.cast(expression.this, "TIMESTAMP", copy=True))
+    expression.expression.replace(exp.cast(expression.expression, "TIMESTAMP", copy=True))
+    unit = expression.args.get("unit") or "DAY"
+    return self.func("DATE_DIFF", expression.this, expression.expression, unit)
+
+
+def _unix_to_time_sql(self: BigQuery.Generator, expression: exp.UnixToTime) -> str:
+    scale = expression.args.get("scale")
+    timestamp = self.sql(expression, "this")
+    if scale in (None, exp.UnixToTime.SECONDS):
+        return f"TIMESTAMP_SECONDS({timestamp})"
+    if scale == exp.UnixToTime.MILLIS:
+        return f"TIMESTAMP_MILLIS({timestamp})"
+    if scale == exp.UnixToTime.MICROS:
+        return f"TIMESTAMP_MICROS({timestamp})"
+    if scale == exp.UnixToTime.NANOS:
+        # We need to cast to INT64 because that's what BQ expects
+        return f"TIMESTAMP_MICROS(CAST({timestamp} / 1000 AS INT64))"
+
+    self.unsupported(f"Unsupported scale for timestamp: {scale}.")
+    return ""
+
+
 class BigQuery(Dialect):
     UNNEST_COLUMN_ONLY = True
     SUPPORTS_USER_DEFINED_TYPES = False
@@ -325,6 +354,15 @@ class BigQuery(Dialect):
             "TIME_SUB": parse_date_delta_with_interval(exp.TimeSub),
             "TIMESTAMP_ADD": parse_date_delta_with_interval(exp.TimestampAdd),
             "TIMESTAMP_SUB": parse_date_delta_with_interval(exp.TimestampSub),
+            "TIMESTAMP_MICROS": lambda args: exp.UnixToTime(
+                this=seq_get(args, 0), scale=exp.UnixToTime.MICROS
+            ),
+            "TIMESTAMP_MILLIS": lambda args: exp.UnixToTime(
+                this=seq_get(args, 0), scale=exp.UnixToTime.MILLIS
+            ),
+            "TIMESTAMP_SECONDS": lambda args: exp.UnixToTime(
+                this=seq_get(args, 0), scale=exp.UnixToTime.SECONDS
+            ),
             "TO_JSON_STRING": exp.JSONFormat.from_arg_list,
         }
 
@@ -520,10 +558,13 @@ class BigQuery(Dialect):
             exp.TimestampAdd: date_add_interval_sql("TIMESTAMP", "ADD"),
             exp.TimestampSub: date_add_interval_sql("TIMESTAMP", "SUB"),
             exp.TimeStrToTime: timestrtotime_sql,
+            exp.TimeToStr: lambda self, e: f"FORMAT_DATE({self.format_time(e)}, {self.sql(e, 'this')})",
             exp.Trim: lambda self, e: self.func(f"TRIM", e.this, e.expression),
-            exp.TsOrDsAdd: date_add_interval_sql("DATE", "ADD"),
+            exp.TsOrDsAdd: _ts_or_ds_add_sql,
+            exp.TsOrDsDiff: _ts_or_ds_diff_sql,
             exp.TsOrDsToDate: ts_or_ds_to_date_sql("bigquery"),
             exp.Unhex: rename_func("FROM_HEX"),
+            exp.UnixToTime: _unix_to_time_sql,
             exp.Values: _derived_table_values_to_unnest,
             exp.VariancePop: rename_func("VAR_POP"),
         }
