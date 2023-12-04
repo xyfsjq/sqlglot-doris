@@ -4028,8 +4028,8 @@ class Sub(Binary):
     pass
 
 
-class ArrayOverlaps(Binary):
-    pass
+# class ArrayOverlaps(Binary):
+#     pass
 
 
 # Unary Expressions
@@ -5029,6 +5029,9 @@ class ParseJSON(Func):
     arg_types = {"this": True, "expressions": False}
     is_var_len_args = True
 
+class JsonArrayLength(Func):
+    _sql_names = ["JSON_ARRAY_LENGTH"]
+    arg_types = {"this": True, "expressions": False}
 
 class Least(Func):
     arg_types = {"this": True, "expressions": False}
@@ -5251,6 +5254,11 @@ class SHA(Func):
 class SHA2(Func):
     _sql_names = ["SHA2"]
     arg_types = {"this": True, "length": False}
+
+
+class SHA256(Func):
+    _sql_names = ["SHA256"]
+    arg_types = {"this": True}
 
 
 class SortArray(Func):
@@ -7034,6 +7042,11 @@ class ToStartOfSecond(Func):
 
 
 class Shuffle(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class Random(Func):
+    _sql_names = ["RAND", "RANDOM"]
     arg_types = {"this": False, "expression": False}
 
 

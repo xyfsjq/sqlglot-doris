@@ -25,7 +25,7 @@ def qualify(
     infer_schema: t.Optional[bool] = None,
     isolate_tables: bool = False,
     qualify_columns: bool = True,
-    validate_qualify_columns: bool = True,
+    validate_qualify_columns: bool = False,
     quote_identifiers: bool = True,
     identify: bool = True,
 ) -> exp.Expression:

@@ -215,6 +215,7 @@ class Presto(Dialect):
                 this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
             ),
             "DATE_FORMAT": format_time_lambda(exp.TimeToStr, "presto"),
+            "FORMAT_DATETIME": format_time_lambda(exp.TimeToStr, "presto"),
             "DATE_PARSE": format_time_lambda(exp.StrToTime, "presto"),
             "DATE_TRUNC": date_trunc_to_time,
             "ELEMENT_AT": _parse_element_at,
@@ -233,6 +234,8 @@ class Presto(Dialect):
                 replacement=seq_get(args, 2) or exp.Literal.string(""),
             ),
             "ROW": exp.Struct.from_arg_list,
+            "RAND": exp.Random.from_arg_list,
+            "RANDOM": exp.Random.from_arg_list,
             "SEQUENCE": exp.GenerateSeries.from_arg_list,
             "SET_AGG": exp.ArrayUniqueAgg.from_arg_list,
             "SPLIT_TO_MAP": exp.StrToMap.from_arg_list,

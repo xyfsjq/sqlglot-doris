@@ -111,9 +111,18 @@ def handle_replace(self, expression: exp.Replace) -> str:
         return f"REPLACE({this},{old},'')"
     return f"REPLACE({this},{old},{new})"
 
+def extract_value_from_string(expression):
+    # 匹配字符串中的数值或字符串值
+    match = re.search(r'(\b\d+\b|\b\w+(?:\.\w+)*\b)', expression)
+
+    if match:
+        return match.group(0)
+    else:
+        return None
 
 def arrow_json_extract_sql(self, expression: exp.JSONExtract) -> str:
     expr = self.sql(expression, "expression").strip("\"'")
+    expr = extract_value_from_string(expr)
     if expr.isdigit():
         return f"jsonb_extract({self.sql(expression, 'this')},'$[{expr}]')"
     return f"jsonb_extract({self.sql(expression, 'this')},'$.{expr}')"
@@ -133,7 +142,9 @@ def arrow_jsonb_extract_sql(self, expression: exp.JSONBExtract) -> str:
 
 
 def arrow_json_extract_scalar_sql(self, expression: exp.JSONExtractScalar) -> str:
+    # 将其中的数值或者字符串，提取出来
     expr = self.sql(expression, "expression").strip("\"'")
+    expr = extract_value_from_string(expr)
     if expr.isdigit():
         return f"json_extract({self.sql(expression, 'this')},'$.[{expr}]')"
     return f"json_extract({self.sql(expression, 'this')},'$.{expr}')"
@@ -186,6 +197,18 @@ def handle_concat_ws(self, expression: exp.ConcatWs) -> str:
     return f"CONCAT_WS({rest_args[0]},{delim})"
 
 
+def handle_rand(self, expr: exp.Random) -> str:
+    min = self.sql(expr, "this")
+    max = self.sql(expr, "expression")
+    if min == "" and max == "":
+        return f"RANDOM()"
+    elif max == "":
+        return f"FLOOR(RANDOM()*{min}.0)"
+    else:
+        temp = int(max) - int(min)
+        return f"FLOOR(RANDOM()*{temp}.0+{min}.0)"
+
+
 class Doris(MySQL):
     DATE_FORMAT = "'yyyy-MM-dd'"
     DATEINT_FORMAT = "'yyyyMMdd'"
@@ -195,8 +218,11 @@ class Doris(MySQL):
     TIME_MAPPING = {
         **MySQL.TIME_MAPPING,
         "%Y": "yyyy",
-        "%m": "mm",
+        "%m": "MM",
         "%d": "dd",
+        "%H": "HH",
+        "%i": "mm",
+        "%s": "ss",
     }
 
     class Tokenizer(MySQL.Tokenizer):
@@ -240,9 +266,12 @@ class Doris(MySQL):
         TRANSFORMS = {
             **MySQL.Generator.TRANSFORMS,
             exp.ApproxDistinct: approx_count_distinct_sql,
+            exp.ApproxQuantile: rename_func("PERCENTILE_APPROX"),
             exp.ArrayAgg: rename_func("COLLECT_LIST"),
             exp.ArrayStringConcat: handle_array_concat,
-            exp.ArrayToString: lambda self, e: f"ARRAY_JOIN({self.sql(e, 'this')},{self.sql(e, 'sep')}" + (f",{self.sql(e, 'null_replace')}" if self.sql(e, 'null_replace') else "") + ")",
+            exp.ArrayToString: lambda self, e: f"ARRAY_JOIN({self.sql(e, 'this')},{self.sql(e, 'sep')}"
+            + (f",{self.sql(e, 'null_replace')}" if self.sql(e, "null_replace") else "")
+            + ")",
             exp.ArrayFilter: lambda self, e: f"ARRAY_FILTER({self.sql(e, 'expression')},{self.sql(e, 'this')})",
             exp.ArrayUniq: lambda self, e: f"SIZE(ARRAY_DISTINCT({self.sql(e, 'this')}))",
             exp.ArrayOverlaps: rename_func("ARRAYS_OVERLAP"),
@@ -268,7 +297,9 @@ class Doris(MySQL):
             exp.JSONBExtract: arrow_jsonb_extract_sql,
             exp.JSONBExtractScalar: arrow_jsonb_extract_scalar_sql,
             exp.JSON_EXISTS_PATH: rename_func("JSON_EXISTS_PATH"),
+            exp.JSONArrayContains: lambda self, e: f"JSON_CONTAINS({self.sql(e, 'this')},'{self.sql(e,'expression')}')",
             exp.ParseJSON: rename_func("JSON_PARSE"),
+            exp.JsonArrayLength: rename_func("JSON_LENGTH"),
             exp.LastDateOfMonth: rename_func("LAST_DAY"),
             exp.LTrim: rename_func("LTRIM"),
             exp.MICROSECONDS_ADD: rename_func("MICROSECONDS_ADD"),
@@ -276,6 +307,7 @@ class Doris(MySQL):
             exp.MULTI_DISTINCT_SUM: lambda self, e: f"SUM(DISTINCT({self.sql(e, 'this')}))",
             exp.RTrim: rename_func("RTRIM"),
             exp.Range: rename_func("ARRAY_RANGE"),
+            exp.Random: handle_rand,
             exp.RegexpExtract: handle_regexp_extract,
             exp.RegexpLike: rename_func("REGEXP"),
             exp.RegexpSplit: rename_func("SPLIT_BY_STRING"),
@@ -284,6 +316,7 @@ class Doris(MySQL):
             exp.ArrayUniqueAgg: rename_func("COLLECT_SET"),
             exp.PERCENTILE_APPROX: rename_func("PERCENTILE_APPROX"),
             exp.RETENTION: rename_func("RETENTION"),
+            exp.SHA256: lambda self, e: f"SHA2({self.sql(e, 'this')},256)",
             exp.SortArray: rename_func("ARRAY_SORT"),
             exp.StrPosition: lambda self, e: f"LOCATE({self.sql(e, 'substr')}, {self.sql(e, 'this')})",
             exp.StrToUnix: _str_to_unix_sql,
