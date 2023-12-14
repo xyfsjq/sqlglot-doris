@@ -97,3 +97,21 @@ ORDER BY
             result_5 == expected_result_5
         ), f"Transpile result doesn't match expected result. Expected: {expected_result_5}, Actual: {result_5}"
         print("Test5 passed!")
+
+    def test_json(self):
+        expected_result_6 = "SELECT JSON_CONTAINS('[1, 2, 3]','2')"
+        input_sql_6 = """SELECT json_array_contains('[1, 2, 3]', 2)"""
+        result_6 = sqlglot.transpile(input_sql_6, read="presto", write="doris")[0]
+        assert (
+            result_6 == expected_result_6
+        ), f"Transpile result doesn't match expected result. Expected: {expected_result_6}, Actual: {result_6}"
+        print("Test6 passed!")
+
+    def test_filter(self):
+        expected_result_1 = "SELECT aa, sum(CASE WHEN index_name = 'ceshi' THEN score ELSE 0 END) AS avg_score FROM table GROUP BY aa"
+        input_sql_1 = """select aa,sum(score) filter(where index_name='ceshi') as avg_score from table group by aa"""
+        result_1 = sqlglot.transpile(input_sql_1, read="presto", write="doris")[0]
+        assert (
+            result_1 == expected_result_1
+        ), f"Transpile result doesn't match expected result. Expected: {expected_result_1}, Actual: {result_1}"
+        print("Test6 passed!")

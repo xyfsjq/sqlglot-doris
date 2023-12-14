@@ -210,6 +210,7 @@ class Presto(Dialect):
             "ROW": TokenType.STRUCT,
             "IPADDRESS": TokenType.IPADDRESS,
             "IPPREFIX": TokenType.IPPREFIX,
+            "$": TokenType.PARAMETER,
         }
 
     class Parser(parser.Parser):
