@@ -268,6 +268,7 @@ class Presto(Dialect):
             ),
             "CODEPOINT": exp.Ascii.from_arg_list,
             "LAST_DAY_OF_MONTH": exp.LastDateOfMonth.from_arg_list,
+            "CHAR2HEXINT": exp.Hex.from_arg_list,
         }
 
         FUNCTION_PARSERS = parser.Parser.FUNCTION_PARSERS.copy()
