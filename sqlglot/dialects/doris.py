@@ -234,6 +234,7 @@ class Doris(MySQL):
     DATEINT_FORMAT = "'yyyyMMdd'"
     # 后面考虑改成doris的默认格式，暂时doris的2.0.0由于str_to_date对yyyy-MM-dd这些格式有点问题，已修复https://github.com/apache/doris/pull/22981
     TIME_FORMAT = "'yyyy-MM-dd HH:mm:ss'"
+    NULL_ORDERING = "nulls_are_frist"
 
     TIME_MAPPING = {
         **MySQL.TIME_MAPPING,
