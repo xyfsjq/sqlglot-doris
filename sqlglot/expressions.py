@@ -53,6 +53,7 @@ class _Expression(type):
 
 
 SQLGLOT_META = "sqlglot.meta"
+TABLE_PARTS = ("this", "db", "catalog")
 
 
 class Expression(metaclass=_Expression):
@@ -3722,7 +3723,7 @@ class DataType(Expression):
     @classmethod
     def build(
         cls,
-        dtype: str | DataType | DataType.Type,
+        dtype: DATA_TYPE,
         dialect: DialectType = None,
         udt: bool = False,
         **kwargs,
@@ -3763,7 +3764,7 @@ class DataType(Expression):
 
         return DataType(**{**data_type_exp.args, **kwargs})
 
-    def is_type(self, *dtypes: str | DataType | DataType.Type) -> bool:
+    def is_type(self, *dtypes: DATA_TYPE) -> bool:
         """
         Checks whether this DataType matches one of the provided data types. Nested types or precision
         will be compared using "structural equivalence" semantics, so e.g. array<int> != array<float>.
@@ -3789,6 +3790,9 @@ class DataType(Expression):
             if matches:
                 return True
         return False
+
+
+DATA_TYPE = t.Union[str, DataType, DataType.Type]
 
 
 # https://www.postgresql.org/docs/15/datatype-pseudo.html
@@ -3922,6 +3926,22 @@ class Dot(Binary):
 
         return t.cast(Dot, reduce(lambda x, y: Dot(this=x, expression=y), expressions))
 
+    @property
+    def parts(self) -> t.List[Expression]:
+        """Return the parts of a table / column in order catalog, db, table."""
+        this, *parts = self.flatten()
+
+        parts.reverse()
+
+        for arg in ("this", "table", "db", "catalog"):
+            part = this.args.get(arg)
+
+            if isinstance(part, Expression):
+                parts.append(part)
+
+        parts.reverse()
+        return parts
+
 
 class DPipe(Binary):
     pass
@@ -4014,6 +4034,11 @@ class Mul(Binary):
 
 class NEQ(Binary, Predicate):
     pass
+
+
+# https://www.postgresql.org/docs/current/ddl-schemas.html#DDL-SCHEMAS-PATH
+class Operator(Binary):
+    arg_types = {"this": True, "operator": True, "expression": True}
 
 
 class SimilarTo(Binary, Predicate):
@@ -4288,8 +4313,9 @@ class Array(Func):
 
 
 # https://docs.snowflake.com/en/sql-reference/functions/to_char
+# https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/TO_CHAR-number.html
 class ToChar(Func):
-    arg_types = {"this": True, "format": False}
+    arg_types = {"this": True, "format": False, "nlsparam": False}
 
 
 class GenerateSeries(Func):
@@ -4615,7 +4641,7 @@ class Cast(Func):
     def output_name(self) -> str:
         return self.name
 
-    def is_type(self, *dtypes: str | DataType | DataType.Type) -> bool:
+    def is_type(self, *dtypes: DATA_TYPE) -> bool:
         """
         Checks whether this Cast's DataType matches one of the provided data types. Nested types
         like arrays or structs will be compared using "structural equivalence" semantics, so e.g.
@@ -5398,6 +5424,15 @@ class Trim(Func):
 
 
 class TsOrDsAdd(Func, TimeUnit):
+    # return_type is used to correctly cast the arguments of this expression when transpiling it
+    arg_types = {"this": True, "expression": True, "unit": False, "return_type": False}
+
+    @property
+    def return_type(self) -> DataType:
+        return DataType.build(self.args.get("return_type") or DataType.Type.DATE)
+
+
+class TsOrDsDiff(Func, TimeUnit):
     arg_types = {"this": True, "expression": True, "unit": False}
 
 
@@ -5429,6 +5464,7 @@ class UnixToTime(Func):
     SECONDS = Literal.string("seconds")
     MILLIS = Literal.string("millis")
     MICROS = Literal.string("micros")
+    NANOS = Literal.string("nanos")
 
 
 class UnixToTimeStr(Func):
@@ -6254,7 +6290,7 @@ def to_table(sql_path: None, **kwargs) -> None:
 
 
 def to_table(
-    sql_path: t.Optional[str | Table], dialect: DialectType = None, **kwargs
+    sql_path: t.Optional[str | Table], dialect: DialectType = None, copy: bool = True, **kwargs
 ) -> t.Optional[Table]:
     """
     Create a table expression from a `[catalog].[schema].[table]` sql path. Catalog and schema are optional.
@@ -6263,13 +6299,14 @@ def to_table(
     Args:
         sql_path: a `[catalog].[schema].[table]` string.
         dialect: the source dialect according to which the table name will be parsed.
+        copy: Whether or not to copy a table if it is passed in.
         kwargs: the kwargs to instantiate the resulting `Table` expression with.
 
     Returns:
         A table expression.
     """
     if sql_path is None or isinstance(sql_path, Table):
-        return sql_path
+        return maybe_copy(sql_path, copy=copy)
     if not isinstance(sql_path, str):
         raise ValueError(f"Invalid type provided for a table: {type(sql_path)}")
 
@@ -6419,7 +6456,7 @@ def column(
     )
 
 
-def cast(expression: ExpOrStr, to: str | DataType | DataType.Type, **opts) -> Cast:
+def cast(expression: ExpOrStr, to: DATA_TYPE, **opts) -> Cast:
     """Cast an expression to a data type.
 
     Example:
@@ -6660,12 +6697,37 @@ def table_name(table: Table | str, dialect: DialectType = None) -> str:
     )
 
 
-def replace_tables(expression: E, mapping: t.Dict[str, str], copy: bool = True) -> E:
+def normalize_table_name(table: str | Table, dialect: DialectType = None, copy: bool = True) -> str:
+    """Returns a case normalized table name without quotes.
+
+    Args:
+        table: the table to normalize
+        dialect: the dialect to use for normalization rules
+        copy: whether or not to copy the expression.
+
+    Examples:
+        >>> normalize_table_name("`A-B`.c", dialect="bigquery")
+        'A-B.c'
+    """
+    from sqlglot.optimizer.normalize_identifiers import normalize_identifiers
+
+    return ".".join(
+        p.name
+        for p in normalize_identifiers(
+            to_table(table, dialect=dialect, copy=copy), dialect=dialect
+        ).parts
+    )
+
+
+def replace_tables(
+    expression: E, mapping: t.Dict[str, str], dialect: DialectType = None, copy: bool = True
+) -> E:
     """Replace all tables in expression according to the mapping.
 
     Args:
         expression: expression node to be transformed and replaced.
         mapping: mapping of table names.
+        dialect: the dialect of the mapping table
         copy: whether or not to copy the expression.
 
     Examples:
@@ -6677,13 +6739,16 @@ def replace_tables(expression: E, mapping: t.Dict[str, str], copy: bool = True) 
         The mapped expression.
     """
 
+    mapping = {normalize_table_name(k, dialect=dialect): v for k, v in mapping.items()}
+
     def _replace_tables(node: Expression) -> Expression:
         if isinstance(node, Table):
-            new_name = mapping.get(table_name(node))
+            new_name = mapping.get(normalize_table_name(node, dialect=dialect))
+
             if new_name:
                 return to_table(
                     new_name,
-                    **{k: v for k, v in node.args.items() if k not in ("this", "db", "catalog")},
+                    **{k: v for k, v in node.args.items() if k not in TABLE_PARTS},
                 )
         return node
 
@@ -6727,7 +6792,10 @@ def replace_placeholders(expression: Expression, *args, **kwargs) -> Expression:
 
 
 def expand(
-    expression: Expression, sources: t.Dict[str, Subqueryable], copy: bool = True
+    expression: Expression,
+    sources: t.Dict[str, Subqueryable],
+    dialect: DialectType = None,
+    copy: bool = True,
 ) -> Expression:
     """Transforms an expression by expanding all referenced sources into subqueries.
 
@@ -6742,15 +6810,17 @@ def expand(
     Args:
         expression: The expression to expand.
         sources: A dictionary of name to Subqueryables.
+        dialect: The dialect of the sources dict.
         copy: Whether or not to copy the expression during transformation. Defaults to True.
 
     Returns:
         The transformed expression.
     """
+    sources = {normalize_table_name(k, dialect=dialect): v for k, v in sources.items()}
 
     def _expand(node: Expression):
         if isinstance(node, Table):
-            name = table_name(node)
+            name = normalize_table_name(node, dialect=dialect)
             source = sources.get(name)
             if source:
                 subquery = source.subquery(node.alias or name)

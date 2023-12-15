@@ -293,6 +293,7 @@ class Parser(metaclass=_Parser):
         TokenType.NATURAL,
         TokenType.NEXT,
         TokenType.OFFSET,
+        TokenType.OPERATOR,
         TokenType.ORDINALITY,
         TokenType.OVERLAPS,
         TokenType.OVERWRITE,
@@ -2685,7 +2686,7 @@ class Parser(metaclass=_Parser):
     def _parse_table_parts(self, schema: bool = False) -> exp.Table:
         catalog = None
         db = None
-        table = self._parse_table_part(schema=schema)
+        table: t.Optional[exp.Expression | str] = self._parse_table_part(schema=schema)
 
         while self._match(TokenType.DOT):
             if catalog:
@@ -2696,7 +2697,7 @@ class Parser(metaclass=_Parser):
             else:
                 catalog = db
                 db = table
-                table = self._parse_table_part(schema=schema)
+                table = self._parse_table_part(schema=schema) or ""
 
         if not table:
             self.raise_error(f"Expected table name but got {self._curr}")
@@ -2880,7 +2881,7 @@ class Parser(metaclass=_Parser):
             num = (
                 self._parse_factor()
                 if self._match(TokenType.NUMBER, advance=False)
-                else self._parse_primary()
+                else self._parse_primary() or self._parse_placeholder()
             )
 
         if self._match_text_seq("BUCKET"):
@@ -3336,7 +3337,7 @@ class Parser(metaclass=_Parser):
 
         return this
 
-    def _parse_between(self, this: exp.Expression) -> exp.Between:
+    def _parse_between(self, this: t.Optional[exp.Expression]) -> exp.Between:
         low = self._parse_bitwise()
         self._match(TokenType.AND)
         high = self._parse_bitwise()
@@ -5362,7 +5363,9 @@ class Parser(metaclass=_Parser):
         self._match_r_paren()
         return self.expression(exp.DictRange, this=this, min=min, max=max)
 
-    def _parse_comprehension(self, this: exp.Expression) -> t.Optional[exp.Comprehension]:
+    def _parse_comprehension(
+        self, this: t.Optional[exp.Expression]
+    ) -> t.Optional[exp.Comprehension]:
         index = self._index
         expression = self._parse_column()
         if not self._match(TokenType.IN):

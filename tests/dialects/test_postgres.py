@@ -1,6 +1,5 @@
-from unittest import mock
-
 from sqlglot import ParseError, exp, parse_one, transpile
+from sqlglot.helper import logger as helper_logger
 from tests.dialects.test_dialect import Validator
 
 
@@ -154,7 +153,7 @@ class TestPostgres(Validator):
             write={
                 "hive": "SELECT EXPLODE(c) FROM t",
                 "postgres": "SELECT UNNEST(c) FROM t",
-                "presto": "SELECT IF(pos = pos_2, col) AS col FROM t, UNNEST(SEQUENCE(1, GREATEST(CARDINALITY(c)))) AS _u(pos) CROSS JOIN UNNEST(c) WITH ORDINALITY AS _u_2(col, pos_2) WHERE pos = pos_2 OR (pos > CARDINALITY(c) AND pos_2 = CARDINALITY(c))",
+                "presto": "SELECT IF(_u.pos = _u_2.pos_2, _u_2.col) AS col FROM t, UNNEST(SEQUENCE(1, GREATEST(CARDINALITY(c)))) AS _u(pos) CROSS JOIN UNNEST(c) WITH ORDINALITY AS _u_2(col, pos_2) WHERE _u.pos = _u_2.pos_2 OR (_u.pos > CARDINALITY(c) AND _u_2.pos_2 = CARDINALITY(c))",
             },
         )
         self.validate_all(
@@ -162,20 +161,46 @@ class TestPostgres(Validator):
             write={
                 "hive": "SELECT EXPLODE(ARRAY(1))",
                 "postgres": "SELECT UNNEST(ARRAY[1])",
-                "presto": "SELECT IF(pos = pos_2, col) AS col FROM UNNEST(SEQUENCE(1, GREATEST(CARDINALITY(ARRAY[1])))) AS _u(pos) CROSS JOIN UNNEST(ARRAY[1]) WITH ORDINALITY AS _u_2(col, pos_2) WHERE pos = pos_2 OR (pos > CARDINALITY(ARRAY[1]) AND pos_2 = CARDINALITY(ARRAY[1]))",
+                "presto": "SELECT IF(_u.pos = _u_2.pos_2, _u_2.col) AS col FROM UNNEST(SEQUENCE(1, GREATEST(CARDINALITY(ARRAY[1])))) AS _u(pos) CROSS JOIN UNNEST(ARRAY[1]) WITH ORDINALITY AS _u_2(col, pos_2) WHERE _u.pos = _u_2.pos_2 OR (_u.pos > CARDINALITY(ARRAY[1]) AND _u_2.pos_2 = CARDINALITY(ARRAY[1]))",
             },
         )
 
-    @mock.patch("sqlglot.helper.logger")
-    def test_array_offset(self, logger):
-        self.validate_all(
-            "SELECT col[1]",
-            write={
-                "hive": "SELECT col[0]",
-                "postgres": "SELECT col[1]",
-                "presto": "SELECT col[1]",
-            },
-        )
+    def test_array_offset(self):
+        with self.assertLogs(helper_logger) as cm:
+            self.validate_all(
+                "SELECT col[1]",
+                write={
+                    "bigquery": "SELECT col[0]",
+                    "duckdb": "SELECT col[1]",
+                    "hive": "SELECT col[0]",
+                    "postgres": "SELECT col[1]",
+                    "presto": "SELECT col[1]",
+                },
+            )
+
+            self.assertEqual(
+                cm.output,
+                [
+                    "WARNING:sqlglot:Applying array index offset (-1)",
+                    "WARNING:sqlglot:Applying array index offset (1)",
+                    "WARNING:sqlglot:Applying array index offset (1)",
+                    "WARNING:sqlglot:Applying array index offset (1)",
+                ],
+            )
+
+    def test_operator(self):
+        expr = parse_one("1 OPERATOR(+) 2 OPERATOR(*) 3", read="postgres")
+
+        expr.left.assert_is(exp.Operator)
+        expr.left.left.assert_is(exp.Literal)
+        expr.left.right.assert_is(exp.Literal)
+        expr.right.assert_is(exp.Literal)
+        self.assertEqual(expr.sql(dialect="postgres"), "1 OPERATOR(+) 2 OPERATOR(*) 3")
+
+        self.validate_identity("SELECT operator FROM t")
+        self.validate_identity("SELECT 1 OPERATOR(+) 2")
+        self.validate_identity("SELECT 1 OPERATOR(+) /* foo */ 2")
+        self.validate_identity("SELECT 1 OPERATOR(pg_catalog.+) 2")
 
     def test_postgres(self):
         expr = parse_one(
@@ -203,6 +228,14 @@ class TestPostgres(Validator):
         self.assertIsInstance(expr, exp.AlterTable)
         self.assertEqual(expr.sql(dialect="postgres"), alter_table_only)
 
+        self.validate_identity(
+            "SELECT c.oid, n.nspname, c.relname "
+            "FROM pg_catalog.pg_class AS c "
+            "LEFT JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace "
+            "WHERE c.relname OPERATOR(pg_catalog.~) '^(courses)$' COLLATE pg_catalog.default AND "
+            "pg_catalog.PG_TABLE_IS_VISIBLE(c.oid) "
+            "ORDER BY 2, 3"
+        )
         self.validate_identity(
             "SELECT ARRAY[]::INT[] AS foo",
             "SELECT CAST(ARRAY[] AS INT[]) AS foo",

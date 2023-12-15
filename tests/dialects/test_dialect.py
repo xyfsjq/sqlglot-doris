@@ -562,6 +562,7 @@ class TestDialect(Validator):
         self.validate_all(
             "TIME_TO_STR(x, '%Y-%m-%d')",
             write={
+                "bigquery": "FORMAT_DATE('%Y-%m-%d', x)",
                 "drill": "TO_CHAR(x, 'yyyy-MM-dd')",
                 "duckdb": "STRFTIME(x, '%Y-%m-%d')",
                 "hive": "DATE_FORMAT(x, 'yyyy-MM-dd')",
@@ -753,7 +754,7 @@ class TestDialect(Validator):
                 "snowflake": "DATE_TRUNC('day', x)",
                 "starrocks": "DATE_TRUNC('day', x)",
                 "spark": "DATE_TRUNC('day', x)",
-                "doris": "DATE_TRUNC('day', x)",
+                "doris": "DATE_TRUNC(x, 'day')",
             },
         )
         self.validate_all(
@@ -894,7 +895,7 @@ class TestDialect(Validator):
         self.validate_all(
             "TS_OR_DS_ADD(CURRENT_DATE, 1, 'DAY')",
             write={
-                "presto": "DATE_ADD('DAY', 1, CURRENT_DATE)",
+                "presto": "DATE_ADD('DAY', 1, CAST(CAST(CURRENT_DATE AS TIMESTAMP) AS DATE))",
                 "hive": "DATE_ADD(CURRENT_DATE, 1)",
             },
         )

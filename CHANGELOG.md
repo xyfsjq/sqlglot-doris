@@ -1,6 +1,89 @@
 Changelog
 =========
 
+## [v19.8.2] - 2023-12-01
+### :bug: Bug Fixes
+- [`5657a60`](https://github.com/tobymao/sqlglot/commit/5657a60169680c45feb67fe7a1da16b4c9ee22b6) - **tsql, teradata**: Distinct goes before top *(PR [#2618](https://github.com/tobymao/sqlglot/pull/2618) by [@treysp](https://github.com/treysp))*
+- [`c0e751a`](https://github.com/tobymao/sqlglot/commit/c0e751a71cd69746b7acb5f1950f1b925c826373) - **duckdb**: arrays are 1-indexed *(PR [#2619](https://github.com/tobymao/sqlglot/pull/2619) by [@georgesittas](https://github.com/georgesittas))*
+  - :arrow_lower_right: *fixes issue [#2617](undefined) opened by [@j1ah0ng](https://github.com/j1ah0ng)*
+
+
+## [v19.8.1] - 2023-12-01
+### :bug: Bug Fixes
+- [`441f624`](https://github.com/tobymao/sqlglot/commit/441f624c5cafb49e3d73d4435b7cf4bf3e891150) - cannot have union with limit *(commit by [@tobymao](https://github.com/tobymao))*
+
+
+## [v19.8.0] - 2023-12-01
+### :boom: BREAKING CHANGES
+- due to [`b5f690b`](https://github.com/tobymao/sqlglot/commit/b5f690bc36e2278ec9d9299041497485f73198a8) - add timestamp functions to BQ and DuckDB closes [#2611](https://github.com/tobymao/sqlglot/pull/2611) *(PR [#2612](https://github.com/tobymao/sqlglot/pull/2612) by [@j1ah0ng](https://github.com/j1ah0ng))*:
+
+  add timestamp functions to BQ and DuckDB closes #2611 (#2612)
+
+- due to [`019e0e5`](https://github.com/tobymao/sqlglot/commit/019e0e5ba4b5df1ef3b34510c2fa07f8623af364) - qualify columns added in explode to unnest transformation *(PR [#2615](https://github.com/tobymao/sqlglot/pull/2615) by [@georgesittas](https://github.com/georgesittas))*:
+
+  qualify columns added in explode to unnest transformation (#2615)
+
+
+### :sparkles: New Features
+- [`5af7ac3`](https://github.com/tobymao/sqlglot/commit/5af7ac359efc7d2575eb2cdfd0fe34b9518805c2) - helper method for dot parts *(commit by [@tobymao](https://github.com/tobymao))*
+- [`da0a4b1`](https://github.com/tobymao/sqlglot/commit/da0a4b1cc3d093012e4a92a9bb6f70c7db11749c) - **postgres**: add support for operators with schema path *(PR [#2610](https://github.com/tobymao/sqlglot/pull/2610) by [@georgesittas](https://github.com/georgesittas))*
+  - :arrow_lower_right: *addresses issue [#2609](undefined) opened by [@ninja96826](https://github.com/ninja96826)*
+
+### :bug: Bug Fixes
+- [`568ddd1`](https://github.com/tobymao/sqlglot/commit/568ddd12d98142146073e27e206426a66b73eb42) - treat parameters as primary expressions *(PR [#2605](https://github.com/tobymao/sqlglot/pull/2605) by [@georgesittas](https://github.com/georgesittas))*
+  - :arrow_lower_right: *fixes issue [#2604](undefined) opened by [@bruderooo](https://github.com/bruderooo)*
+- [`526d760`](https://github.com/tobymao/sqlglot/commit/526d7602018268f8dc6e8111b26de4df8601d0cf) - revert 568ddd12, parse placeholder in sample instead *(PR [#2606](https://github.com/tobymao/sqlglot/pull/2606) by [@georgesittas](https://github.com/georgesittas))*
+- [`bb75218`](https://github.com/tobymao/sqlglot/commit/bb7521820d6d22a669bfb8cbbc0ee8a37d32c361) - always expand sentinel line break in pretty mode *(PR [#2608](https://github.com/tobymao/sqlglot/pull/2608) by [@georgesittas](https://github.com/georgesittas))*
+- [`9106702`](https://github.com/tobymao/sqlglot/commit/9106702decda3957ef0f88f4a4d88b5a14a55a8c) - properly normalize and parse schema for replace_tables and expand *(commit by [@tobymao](https://github.com/tobymao))*
+- [`d47879f`](https://github.com/tobymao/sqlglot/commit/d47879f049914ec94df8b09cd5a60e8ad64b2f59) - **snowflake**: unnest sql doesn't need subquery *(commit by [@tobymao](https://github.com/tobymao))*
+- [`b5f690b`](https://github.com/tobymao/sqlglot/commit/b5f690bc36e2278ec9d9299041497485f73198a8) - add timestamp functions to BQ and DuckDB closes [#2611](https://github.com/tobymao/sqlglot/pull/2611) *(PR [#2612](https://github.com/tobymao/sqlglot/pull/2612) by [@j1ah0ng](https://github.com/j1ah0ng))*
+- [`5aa134d`](https://github.com/tobymao/sqlglot/commit/5aa134d8489cea96d8fa891aaa26e68983ee7537) - preserve alias quotes in explode_to_unnest *(PR [#2613](https://github.com/tobymao/sqlglot/pull/2613) by [@georgesittas](https://github.com/georgesittas))*
+- [`5509e31`](https://github.com/tobymao/sqlglot/commit/5509e31cde2e008e6afbe352d4700acb1d6b9c25) - generate UnixToTime correctly (spark, bq, presto, snowflake, duckdb) *(PR [#2614](https://github.com/tobymao/sqlglot/pull/2614) by [@georgesittas](https://github.com/georgesittas))*
+- [`019e0e5`](https://github.com/tobymao/sqlglot/commit/019e0e5ba4b5df1ef3b34510c2fa07f8623af364) - qualify columns added in explode to unnest transformation *(PR [#2615](https://github.com/tobymao/sqlglot/pull/2615) by [@georgesittas](https://github.com/georgesittas))*
+- [`ad9fe11`](https://github.com/tobymao/sqlglot/commit/ad9fe1156c55d6aa278a43bc979da216c2a1a7d9) - **snowflake**: snowflake array_contains closes [#2616](https://github.com/tobymao/sqlglot/pull/2616) *(commit by [@tobymao](https://github.com/tobymao))*
+
+### :wrench: Chores
+- [`4ec01d3`](https://github.com/tobymao/sqlglot/commit/4ec01d398535738a55c15202a5a88bae3f9a86dc) - cleanup types *(commit by [@tobymao](https://github.com/tobymao))*
+
+
+## [v19.7.0] - 2023-11-28
+### :boom: BREAKING CHANGES
+- due to [`8cd7d1c`](https://github.com/tobymao/sqlglot/commit/8cd7d1c0bb56aff6bcd08a3ae4e71f68022307b8) - use more canonical cast instead of to_date *(commit by [@tobymao](https://github.com/tobymao))*:
+
+  use more canonical cast instead of to_date
+
+- due to [`c413b7f`](https://github.com/tobymao/sqlglot/commit/c413b7fa56c69da3297eb575de7600316b491f18) - expand positional args in order by as aliases *(PR [#2599](https://github.com/tobymao/sqlglot/pull/2599) by [@tobymao](https://github.com/tobymao))*:
+
+  expand positional args in order by as aliases (#2599)
+
+- due to [`13817f1`](https://github.com/tobymao/sqlglot/commit/13817f187a79bcc559f7e6939729fce8fecbd812) - avoid unnecessary copying in normalization *(PR [#2602](https://github.com/tobymao/sqlglot/pull/2602) by [@tobymao](https://github.com/tobymao))*:
+
+  avoid unnecessary copying in normalization (#2602)
+
+
+### :sparkles: New Features
+- [`739c3c7`](https://github.com/tobymao/sqlglot/commit/739c3c7e4ab1c5986323f2ff6e0ad24bfab8fa0a) - insert returning builder closes [#2579](https://github.com/tobymao/sqlglot/pull/2579) *(commit by [@tobymao](https://github.com/tobymao))*
+- [`6e3c7c1`](https://github.com/tobymao/sqlglot/commit/6e3c7c197e8ca2dd48af389e12951ddd22313430) - **tsql**: default database .. closes [#2594](https://github.com/tobymao/sqlglot/pull/2594) *(commit by [@tobymao](https://github.com/tobymao))*
+
+### :bug: Bug Fixes
+- [`8cd7d1c`](https://github.com/tobymao/sqlglot/commit/8cd7d1c0bb56aff6bcd08a3ae4e71f68022307b8) - use more canonical cast instead of to_date *(commit by [@tobymao](https://github.com/tobymao))*
+- [`08d60b6`](https://github.com/tobymao/sqlglot/commit/08d60b6ef414515920666b56ee8fadb386df0022) - **tsql**: add special chars in single var tokens *(PR [#2582](https://github.com/tobymao/sqlglot/pull/2582) by [@georgesittas](https://github.com/georgesittas))*
+  - :arrow_lower_right: *fixes issue [#2581](undefined) opened by [@Hal-H2Apps](https://github.com/Hal-H2Apps)*
+- [`bf29a9b`](https://github.com/tobymao/sqlglot/commit/bf29a9b04152672d261649f392316cdaa39ef1e2) - handle ending spaces after keywords closes [#2585](https://github.com/tobymao/sqlglot/pull/2585) *(commit by [@tobymao](https://github.com/tobymao))*
+- [`f53f656`](https://github.com/tobymao/sqlglot/commit/f53f6565330cf594c07977b4f1d169220ae8fe19) - **optimizer**: respect EXCEPT when expanding star for PIVOTs *(PR [#2589](https://github.com/tobymao/sqlglot/pull/2589) by [@georgesittas](https://github.com/georgesittas))*
+- [`426075f`](https://github.com/tobymao/sqlglot/commit/426075fe17b60b419f38a8ef5735977b953b92af) - **duckdb**: unqualify columns under Pivot *(PR [#2590](https://github.com/tobymao/sqlglot/pull/2590) by [@georgesittas](https://github.com/georgesittas))*
+- [`4774431`](https://github.com/tobymao/sqlglot/commit/4774431e7f9cf8146d0e4721d8c49957696c7727) - **tsql**: generate DATEPART when the format is quarter *(PR [#2591](https://github.com/tobymao/sqlglot/pull/2591) by [@georgesittas](https://github.com/georgesittas))*
+  - :arrow_lower_right: *fixes issue [#2586](undefined) opened by [@abadugu13](https://github.com/abadugu13)*
+- [`dc783a8`](https://github.com/tobymao/sqlglot/commit/dc783a8b723ca000e6ff2343675f4f0030716037) - **bigquery**: generate FORMAT_DATE for TimeToStr *(PR [#2596](https://github.com/tobymao/sqlglot/pull/2596) by [@georgesittas](https://github.com/georgesittas))*
+- [`2ecfd34`](https://github.com/tobymao/sqlglot/commit/2ecfd34628853711dc30e86b3888a88a2d0869a0) - time format chunk misses from mapping, but its constituent parts are not *(PR [#2598](https://github.com/tobymao/sqlglot/pull/2598) by [@georgesittas](https://github.com/georgesittas))*
+  - :arrow_lower_right: *fixes issue [#2597](undefined) opened by [@j-bennet](https://github.com/j-bennet)*
+- [`c413b7f`](https://github.com/tobymao/sqlglot/commit/c413b7fa56c69da3297eb575de7600316b491f18) - expand positional args in order by as aliases *(PR [#2599](https://github.com/tobymao/sqlglot/pull/2599) by [@tobymao](https://github.com/tobymao))*
+- [`c66e413`](https://github.com/tobymao/sqlglot/commit/c66e413c916c15d8e485d42055a9214db936c56c) - **oracle**: to_char nlsparam closes [#2601](https://github.com/tobymao/sqlglot/pull/2601) *(commit by [@tobymao](https://github.com/tobymao))*
+
+### :recycle: Refactors
+- [`13817f1`](https://github.com/tobymao/sqlglot/commit/13817f187a79bcc559f7e6939729fce8fecbd812) - avoid unnecessary copying in normalization *(PR [#2602](https://github.com/tobymao/sqlglot/pull/2602) by [@tobymao](https://github.com/tobymao))*
+
+
 ## [v19.6.0] - 2023-11-20
 ### :bug: Bug Fixes
 - [`7647227`](https://github.com/tobymao/sqlglot/commit/76472275018a069abc7079bc52cac94fb8d2d348) - **oracle**: parse DROP CONSTRAINT into DROP instead of Command *(PR [#2573](https://github.com/tobymao/sqlglot/pull/2573) by [@HassanShafiq123](https://github.com/HassanShafiq123))*
@@ -2047,3 +2130,7 @@ Changelog
 [v19.5.0]: https://github.com/tobymao/sqlglot/compare/v19.4.0...v19.5.0
 [v19.5.1]: https://github.com/tobymao/sqlglot/compare/v19.5.0...v19.5.1
 [v19.6.0]: https://github.com/tobymao/sqlglot/compare/v19.5.1...v19.6.0
+[v19.7.0]: https://github.com/tobymao/sqlglot/compare/v19.6.0...v19.7.0
+[v19.8.0]: https://github.com/tobymao/sqlglot/compare/v19.7.0...v19.8.0
+[v19.8.1]: https://github.com/tobymao/sqlglot/compare/v19.8.0...v19.8.1
+[v19.8.2]: https://github.com/tobymao/sqlglot/compare/v19.8.1...v19.8.2

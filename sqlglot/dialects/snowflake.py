@@ -7,6 +7,7 @@ from sqlglot._typing import E
 from sqlglot.dialects.dialect import (
     Dialect,
     binary_from_function,
+    date_delta_sql,
     date_trunc_to_time,
     datestrtodate_sql,
     format_time_lambda,
@@ -51,7 +52,7 @@ def _parse_to_timestamp(args: t.List) -> t.Union[exp.StrToTime, exp.UnixToTime, 
         elif second_arg.name == "3":
             timescale = exp.UnixToTime.MILLIS
         elif second_arg.name == "9":
-            timescale = exp.UnixToTime.MICROS
+            timescale = exp.UnixToTime.NANOS
 
         return exp.UnixToTime(this=first_arg, scale=timescale)
 
@@ -96,14 +97,17 @@ def _parse_datediff(args: t.List) -> exp.DateDiff:
 def _unix_to_time_sql(self: Snowflake.Generator, expression: exp.UnixToTime) -> str:
     scale = expression.args.get("scale")
     timestamp = self.sql(expression, "this")
-    if scale in [None, exp.UnixToTime.SECONDS]:
+    if scale in (None, exp.UnixToTime.SECONDS):
         return f"TO_TIMESTAMP({timestamp})"
     if scale == exp.UnixToTime.MILLIS:
         return f"TO_TIMESTAMP({timestamp}, 3)"
     if scale == exp.UnixToTime.MICROS:
+        return f"TO_TIMESTAMP({timestamp} / 1000, 3)"
+    if scale == exp.UnixToTime.NANOS:
         return f"TO_TIMESTAMP({timestamp}, 9)"
 
-    raise ValueError("Improper scale for timestamp")
+    self.unsupported(f"Unsupported scale for timestamp: {scale}.")
+    return ""
 
 
 # https://docs.snowflake.com/en/sql-reference/functions/date_part.html
@@ -259,6 +263,9 @@ class Snowflake(Dialect):
             **parser.Parser.FUNCTIONS,
             "ARRAYAGG": exp.ArrayAgg.from_arg_list,
             "ARRAY_CONSTRUCT": exp.Array.from_arg_list,
+            "ARRAY_CONTAINS": lambda args: exp.ArrayContains(
+                this=seq_get(args, 1), expression=seq_get(args, 0)
+            ),
             "ARRAY_GENERATE_RANGE": lambda args: exp.GenerateSeries(
                 # ARRAY_GENERATE_RANGE has an exlusive end; we normalize it to be inclusive
                 start=seq_get(args, 0),
@@ -485,15 +492,14 @@ class Snowflake(Dialect):
             exp.ArgMin: rename_func("MIN_BY"),
             exp.Array: inline_array_sql,
             exp.ArrayConcat: rename_func("ARRAY_CAT"),
+            exp.ArrayContains: lambda self, e: self.func("ARRAY_CONTAINS", e.expression, e.this),
             exp.ArrayJoin: rename_func("ARRAY_TO_STRING"),
             exp.AtTimeZone: lambda self, e: self.func(
                 "CONVERT_TIMEZONE", e.args.get("zone"), e.this
             ),
             exp.BitwiseXor: rename_func("BITXOR"),
-            exp.DateAdd: lambda self, e: self.func("DATEADD", e.text("unit"), e.expression, e.this),
-            exp.DateDiff: lambda self, e: self.func(
-                "DATEDIFF", e.text("unit"), e.expression, e.this
-            ),
+            exp.DateAdd: date_delta_sql("DATEADD"),
+            exp.DateDiff: date_delta_sql("DATEDIFF"),
             exp.DateStrToDate: datestrtodate_sql,
             exp.DataType: _datatype_sql,
             exp.DayOfMonth: rename_func("DAYOFMONTH"),
@@ -522,7 +528,7 @@ class Snowflake(Dialect):
             exp.Select: transforms.preprocess(
                 [
                     transforms.eliminate_distinct_on,
-                    transforms.explode_to_unnest(0),
+                    transforms.explode_to_unnest(),
                     transforms.eliminate_semi_and_anti_joins,
                 ]
             ),
@@ -546,6 +552,8 @@ class Snowflake(Dialect):
             exp.TimeToUnix: lambda self, e: f"EXTRACT(epoch_second FROM {self.sql(e, 'this')})",
             exp.ToChar: lambda self, e: self.function_fallback_sql(e),
             exp.Trim: lambda self, e: self.func("TRIM", e.this, e.expression),
+            exp.TsOrDsAdd: date_delta_sql("DATEADD", cast=True),
+            exp.TsOrDsDiff: date_delta_sql("DATEDIFF"),
             exp.TsOrDsToDate: ts_or_ds_to_date_sql("snowflake"),
             exp.UnixToTime: _unix_to_time_sql,
             exp.VarMap: lambda self, e: var_map_sql(self, e, "OBJECT_CONSTRUCT"),
@@ -590,24 +598,28 @@ class Snowflake(Dialect):
             return super().log_sql(expression)
 
         def unnest_sql(self, expression: exp.Unnest) -> str:
-            selects = ["value"]
             unnest_alias = expression.args.get("alias")
-
             offset = expression.args.get("offset")
-            if offset:
-                if unnest_alias:
-                    unnest_alias.append("columns", offset.pop())
 
-                selects.append("index")
+            columns = [
+                exp.to_identifier("seq"),
+                exp.to_identifier("key"),
+                exp.to_identifier("path"),
+                offset.pop() if isinstance(offset, exp.Expression) else exp.to_identifier("index"),
+                seq_get(unnest_alias.columns if unnest_alias else [], 0)
+                or exp.to_identifier("value"),
+                exp.to_identifier("this"),
+            ]
 
-            subquery = exp.Subquery(
-                this=exp.select(*selects).from_(
-                    f"TABLE(FLATTEN(INPUT => {self.sql(expression.expressions[0])}))"
-                ),
-            )
+            if unnest_alias:
+                unnest_alias.set("columns", columns)
+            else:
+                unnest_alias = exp.TableAlias(this="_u", columns=columns)
+
+            explode = f"TABLE(FLATTEN(INPUT => {self.sql(expression.expressions[0])}))"
             alias = self.sql(unnest_alias)
             alias = f" AS {alias}" if alias else ""
-            return f"{self.sql(subquery)}{alias}"
+            return f"{explode}{alias}"
 
         def show_sql(self, expression: exp.Show) -> str:
             scope = self.sql(expression, "scope")

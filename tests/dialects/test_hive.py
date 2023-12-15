@@ -315,6 +315,7 @@ class TestHive(Validator):
         self.validate_all(
             "DATE_FORMAT('2020-01-01', 'yyyy-MM-dd HH:mm:ss')",
             write={
+                "bigquery": "FORMAT_DATE('%Y-%m-%d %H:%M:%S', CAST('2020-01-01' AS DATETIME))",
                 "duckdb": "STRFTIME(CAST('2020-01-01' AS TIMESTAMP), '%Y-%m-%d %H:%M:%S')",
                 "presto": "DATE_FORMAT(CAST('2020-01-01' AS TIMESTAMP), '%Y-%m-%d %T')",
                 "hive": "DATE_FORMAT(CAST('2020-01-01' AS TIMESTAMP), 'yyyy-MM-dd HH:mm:ss')",
@@ -324,21 +325,29 @@ class TestHive(Validator):
         self.validate_all(
             "DATE_ADD('2020-01-01', 1)",
             write={
+                "": "TS_OR_DS_ADD('2020-01-01', 1, DAY)",
+                "bigquery": "DATE_ADD(CAST(CAST('2020-01-01' AS DATETIME) AS DATE), INTERVAL 1 DAY)",
                 "duckdb": "CAST('2020-01-01' AS DATE) + INTERVAL 1 DAY",
-                "presto": "DATE_ADD('DAY', 1, CAST(CAST('2020-01-01' AS TIMESTAMP) AS DATE))",
                 "hive": "DATE_ADD('2020-01-01', 1)",
+                "presto": "DATE_ADD('DAY', 1, CAST(CAST('2020-01-01' AS TIMESTAMP) AS DATE))",
+                "redshift": "DATEADD(DAY, 1, '2020-01-01')",
+                "snowflake": "DATEADD(DAY, 1, CAST(CAST('2020-01-01' AS TIMESTAMPNTZ) AS DATE))",
                 "spark": "DATE_ADD('2020-01-01', 1)",
-                "": "TS_OR_DS_ADD('2020-01-01', 1, 'DAY')",
+                "tsql": "DATEADD(DAY, 1, CAST(CAST('2020-01-01' AS DATETIME2) AS DATE))",
             },
         )
         self.validate_all(
             "DATE_SUB('2020-01-01', 1)",
             write={
+                "": "TS_OR_DS_ADD('2020-01-01', 1 * -1, DAY)",
+                "bigquery": "DATE_ADD(CAST(CAST('2020-01-01' AS DATETIME) AS DATE), INTERVAL (1 * -1) DAY)",
                 "duckdb": "CAST('2020-01-01' AS DATE) + INTERVAL (1 * -1) DAY",
-                "presto": "DATE_ADD('DAY', 1 * -1, CAST(CAST('2020-01-01' AS TIMESTAMP) AS DATE))",
                 "hive": "DATE_ADD('2020-01-01', 1 * -1)",
+                "presto": "DATE_ADD('DAY', 1 * -1, CAST(CAST('2020-01-01' AS TIMESTAMP) AS DATE))",
+                "redshift": "DATEADD(DAY, 1 * -1, '2020-01-01')",
+                "snowflake": "DATEADD(DAY, 1 * -1, CAST(CAST('2020-01-01' AS TIMESTAMPNTZ) AS DATE))",
                 "spark": "DATE_ADD('2020-01-01', 1 * -1)",
-                "": "TS_OR_DS_ADD('2020-01-01', 1 * -1, 'DAY')",
+                "tsql": "DATEADD(DAY, 1 * -1, CAST(CAST('2020-01-01' AS DATETIME2) AS DATE))",
             },
         )
         self.validate_all("DATE_ADD('2020-01-01', -1)", read={"": "DATE_SUB('2020-01-01', 1)"})
@@ -522,11 +531,16 @@ class TestHive(Validator):
         )
         self.validate_all(
             "ARRAY_CONTAINS(x, 1)",
+            read={
+                "duckdb": "LIST_HAS(x, 1)",
+                "snowflake": "ARRAY_CONTAINS(1, x)",
+            },
             write={
                 "duckdb": "ARRAY_CONTAINS(x, 1)",
                 "presto": "CONTAINS(x, 1)",
                 "hive": "ARRAY_CONTAINS(x, 1)",
                 "spark": "ARRAY_CONTAINS(x, 1)",
+                "snowflake": "ARRAY_CONTAINS(1, x)",
             },
         )
         self.validate_all(

@@ -36,6 +36,19 @@ def _parse_xml_table(self: Oracle.Parser) -> exp.XMLTable:
     return self.expression(exp.XMLTable, this=this, passing=passing, columns=columns, by_ref=by_ref)
 
 
+def to_char(args: t.List) -> exp.TimeToStr | exp.ToChar:
+    this = seq_get(args, 0)
+
+    if this and not this.type:
+        from sqlglot.optimizer.annotate_types import annotate_types
+
+        annotate_types(this)
+        if this.is_type(*exp.DataType.TEMPORAL_TYPES):
+            return format_time_lambda(exp.TimeToStr, "oracle", default=True)(args)
+
+    return exp.ToChar.from_arg_list(args)
+
+
 class Oracle(Dialect):
     ALIAS_POST_TABLESAMPLE = True
     LOCKING_READS_SUPPORTED = True
@@ -76,10 +89,7 @@ class Oracle(Dialect):
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
             "SQUARE": lambda args: exp.Pow(this=seq_get(args, 0), expression=exp.Literal.number(2)),
-            "TO_CHAR": format_time_lambda(exp.TimeToStr, "oracle", default=True),
-            "TRUNC": exp.DateTrunc_oracle.from_arg_list,
-            "SUBSTR": exp.Substring.from_arg_list,
-            "TO_DATE": exp.TsOrDsToDate.from_arg_list,
+            "TO_CHAR": to_char,
         }
 
         FUNCTION_PARSERS: t.Dict[str, t.Callable] = {
@@ -226,5 +236,4 @@ class Oracle(Dialect):
             "START": TokenType.BEGIN,
             "TOP": TokenType.TOP,
             "VARCHAR2": TokenType.VARCHAR,
-            "SYSDATE": TokenType.CURRENT_TIMESTAMP,
         }

@@ -50,14 +50,15 @@ def handle_date_diff(self, expression: exp.DateDiff) -> str:
     return f"DATEDIFF({this},{expressions})"
 
 
-def handle_to_char(self, expression: exp.ToChar) -> str:
-    if self.sql(expression, "format") == "":
-        return f"DATE_FORMAT({self.sql(expression, 'this')}, '%H:%i:%s')"
-    decimal_places, has_decimal = parse_format_string(self.sql(expression, "format"))
-    if has_decimal:
-        return f"Round({self.sql(expression, 'this')},{decimal_places})"
-    else:
-        return f"DATE_FORMAT({self.sql(expression, 'this')}, {self.format_time(expression)})"
+#
+# def handle_to_char(self, expression: exp.ToChar) -> str:
+#     if self.sql(expression, "format") == "":
+#         return f"DATE_FORMAT({self.sql(expression, 'this')}, '%H:%i:%s')"
+#     decimal_places, has_decimal = parse_format_string(self.sql(expression, "format"))
+#     if has_decimal:
+#         return f"Round({self.sql(expression, 'this')},{decimal_places})"
+#     else:
+#         return f"DATE_FORMAT({self.sql(expression, 'this')}, {self.format_time(expression)})"
 
 
 def parse_format_string(format_string):
@@ -111,14 +112,16 @@ def handle_replace(self, expression: exp.Replace) -> str:
         return f"REPLACE({this},{old},'')"
     return f"REPLACE({this},{old},{new})"
 
+
 def extract_value_from_string(expression):
     # 匹配字符串中的数值或字符串值
-    match = re.search(r'(\b\d+\b|\b\w+(?:\.\w+)*\b)', expression)
+    match = re.search(r"(\b\d+\b|\b\w+(?:\.\w+)*\b)", expression)
 
     if match:
         return match.group(0)
     else:
         return None
+
 
 def arrow_json_extract_sql(self, expression: exp.JSONExtract) -> str:
     expr = self.sql(expression, "expression").strip("\"'")
@@ -209,6 +212,23 @@ def handle_rand(self, expr: exp.Random) -> str:
         return f"FLOOR(RANDOM()*{temp}.0+{min}.0)"
 
 
+def handle_filter(self, expr: exp.Filter) -> str:
+    expression = expr.copy()
+    self.sql(expr, "this")
+    expr = expression.expression.args["this"]
+    agg = expression.this.key
+    spec = expression.this.args["this"]
+    case = (
+        exp.Case()
+        .when(
+            expr,
+            spec,
+        )
+        .else_("0")
+    )
+    return f"{agg}({self.sql(case)})"
+
+
 class Doris(MySQL):
     DATE_FORMAT = "'yyyy-MM-dd'"
     DATEINT_FORMAT = "'yyyyMMdd'"
@@ -234,20 +254,20 @@ class Doris(MySQL):
     class Parser(MySQL.Parser):
         FUNCTIONS = {
             **MySQL.Parser.FUNCTIONS,
-            "DATE_TRUNC": parse_timestamp_trunc,
-            "REGEXP": exp.RegexpLike.from_arg_list,
-            "FROM_UNIXTIME": exp.StrToUnix.from_arg_list,
-            "SIZE": exp.ArraySize.from_arg_list,
+            "ARRAY_SHUFFLE": exp.Shuffle.from_arg_list,
+            "ARRAY_RANGE": exp.Range.from_arg_list,
+            "ARRAY_SORT": exp.SortArray.from_arg_list,
             "COUNTEQUAL": exp.Repeat.from_arg_list,
             "COLLECT_LIST": exp.ArrayAgg.from_arg_list,
-            "GROUP_ARRAY": exp.ArrayAgg.from_arg_list,
-            "NOW": exp.CurrentTimestamp.from_arg_list,
-            "ARRAY_RANGE": exp.Range.from_arg_list,
             "COLLECT_SET": exp.ArrayUniqueAgg.from_arg_list,
-            "ARRAY_SORT": exp.SortArray.from_arg_list,
-            "SPLIT_BY_STRING": exp.RegexpSplit.from_arg_list,
-            "ARRAY_SHUFFLE": exp.Shuffle.from_arg_list,
+            "DATE_TRUNC": parse_timestamp_trunc,
+            "FROM_UNIXTIME": exp.StrToUnix.from_arg_list,
+            "GROUP_ARRAY": exp.ArrayAgg.from_arg_list,
             "LAST_DAY": exp.LastDateOfMonth.from_arg_list,
+            "NOW": exp.CurrentTimestamp.from_arg_list,
+            "REGEXP": exp.RegexpLike.from_arg_list,
+            "SIZE": exp.ArraySize.from_arg_list,
+            "SPLIT_BY_STRING": exp.RegexpSplit.from_arg_list,
             "SAMP": exp.StddevSamp.from_arg_list,
         }
 
@@ -275,6 +295,7 @@ class Doris(MySQL):
             exp.ArrayFilter: lambda self, e: f"ARRAY_FILTER({self.sql(e, 'expression')},{self.sql(e, 'this')})",
             exp.ArrayUniq: lambda self, e: f"SIZE(ARRAY_DISTINCT({self.sql(e, 'this')}))",
             exp.ArrayOverlaps: rename_func("ARRAYS_OVERLAP"),
+            exp.ArrayUniqueAgg: rename_func("COLLECT_SET"),
             exp.BitwiseNot: rename_func("BITNOT"),
             exp.BitwiseAnd: rename_func("BITAND"),
             exp.BitwiseOr: rename_func("BITOR"),
@@ -313,7 +334,6 @@ class Doris(MySQL):
             exp.RegexpSplit: rename_func("SPLIT_BY_STRING"),
             exp.Replace: handle_replace,
             exp.Repeat: rename_func("COUNTEQUAL"),
-            exp.ArrayUniqueAgg: rename_func("COLLECT_SET"),
             exp.PERCENTILE_APPROX: rename_func("PERCENTILE_APPROX"),
             exp.RETENTION: rename_func("RETENTION"),
             exp.SHA256: lambda self, e: f"SHA2({self.sql(e, 'this')},256)",
@@ -326,7 +346,7 @@ class Doris(MySQL):
             exp.Slice: rename_func("ARRAY_SLICE"),
             exp.StAstext: handle_geography,
             exp.TimeStrToDate: rename_func("TO_DATE"),
-            exp.ToChar: handle_to_char,
+            # exp.ToChar: handle_to_char,
             exp.TsOrDsAdd: lambda self, e: f"DATE_ADD({self.sql(e, 'this')}, INTERVAL {self.sql(e, 'expression')} {self.sql(e, 'unit')})",
             exp.TsOrDsToDate: lambda self, e: f"CAST({self.sql(e, 'this')} AS DATE)",
             exp.TimeStrToUnix: rename_func("UNIX_TIMESTAMP"),
@@ -353,8 +373,23 @@ class Doris(MySQL):
             exp.UnixToTime: rename_func("FROM_UNIXTIME"),
             exp.QuartersAdd: lambda self, e: f"MONTHS_ADD({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
             exp.QuartersSub: lambda self, e: f"MONTHS_SUB({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
+            exp.Filter: handle_filter,
+            # exp.Struct: lambda self, e: f"$({self.sql(e, 'expression')})",
         }
 
         def currentdate_sql(self, expression: exp.CurrentDate) -> str:
             zone = self.sql(expression, "this")
             return f"CURRENT_DATE({zone})" if zone else "CURRENT_DATE()"
+
+        def parameter_sql(self, expression: exp.Parameter) -> str:
+            this = self.sql(expression, "this")
+            expression_sql = self.sql(expression, "expression")
+
+            parent = expression.parent
+            this = f"{this}:{expression_sql}" if expression_sql else this
+
+            if isinstance(parent, exp.EQ) and isinstance(parent.parent, exp.SetItem):
+                # We need to produce SET key = value instead of SET ${key} = value
+                return this
+
+            return f"${{{this}}}"

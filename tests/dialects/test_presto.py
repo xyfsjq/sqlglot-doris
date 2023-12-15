@@ -1,6 +1,5 @@
-from unittest import mock
-
 from sqlglot import UnsupportedError, exp, parse_one
+from sqlglot.helper import logger as helper_logger
 from tests.dialects.test_dialect import Validator
 
 
@@ -32,14 +31,6 @@ class TestPresto(Validator):
                 "presto": "SELECT CAST('10C' AS INTEGER)",
                 "redshift": "SELECT CAST('10C' AS INTEGER)",
             },
-        )
-        self.validate_all(
-            "SELECT DATE_DIFF('week', CAST(CAST('2009-01-01' AS TIMESTAMP) AS DATE), CAST(CAST('2009-12-31' AS TIMESTAMP) AS DATE))",
-            read={"redshift": "SELECT DATEDIFF(week, '2009-01-01', '2009-12-31')"},
-        )
-        self.validate_all(
-            "SELECT DATE_ADD('month', 18, CAST(CAST('2008-02-28' AS TIMESTAMP) AS DATE))",
-            read={"redshift": "SELECT DATEADD(month, 18, '2008-02-28')"},
         )
         self.validate_all(
             "SELECT CAST('1970-01-01 00:00:00' AS TIMESTAMP)",
@@ -229,6 +220,7 @@ class TestPresto(Validator):
         self.validate_all(
             "DATE_FORMAT(x, '%Y-%m-%d %H:%i:%S')",
             write={
+                "bigquery": "FORMAT_DATE('%Y-%m-%d %H:%M:%S', x)",
                 "duckdb": "STRFTIME(x, '%Y-%m-%d %H:%M:%S')",
                 "presto": "DATE_FORMAT(x, '%Y-%m-%d %T')",
                 "hive": "DATE_FORMAT(x, 'yyyy-MM-dd HH:mm:ss')",
@@ -308,7 +300,12 @@ class TestPresto(Validator):
                 "hive": "CURRENT_TIMESTAMP()",
             },
         )
-
+        self.validate_all(
+            "SELECT DATE_ADD('DAY', 1, CAST(CURRENT_DATE AS TIMESTAMP))",
+            read={
+                "redshift": "SELECT DATEADD(DAY, 1, CURRENT_DATE)",
+            },
+        )
         self.validate_all(
             "DAY_OF_WEEK(timestamp '2012-08-08 01:00:00')",
             write={
@@ -537,8 +534,7 @@ class TestPresto(Validator):
             },
         )
 
-    @mock.patch("sqlglot.helper.logger")
-    def test_presto(self, logger):
+    def test_presto(self):
         self.validate_identity("string_agg(x, ',')", "ARRAY_JOIN(ARRAY_AGG(x), ',')")
         self.validate_identity(
             "SELECT * FROM example.testdb.customer_orders FOR VERSION AS OF 8954597067493422955"
@@ -557,6 +553,32 @@ class TestPresto(Validator):
         self.validate_identity(
             "SELECT SPLIT_TO_MAP('a:1;b:2;a:3', ';', ':', (k, v1, v2) -> CONCAT(v1, v2))"
         )
+
+        with self.assertLogs(helper_logger) as cm:
+            self.validate_all(
+                "SELECT COALESCE(ELEMENT_AT(MAP_FROM_ENTRIES(ARRAY[(51, '1')]), id), quantity) FROM my_table",
+                write={
+                    "postgres": UnsupportedError,
+                    "presto": "SELECT COALESCE(ELEMENT_AT(MAP_FROM_ENTRIES(ARRAY[(51, '1')]), id), quantity) FROM my_table",
+                },
+            )
+            self.validate_all(
+                "SELECT ELEMENT_AT(ARRAY[1, 2, 3], 4)",
+                write={
+                    "": "SELECT ARRAY(1, 2, 3)[3]",
+                    "postgres": "SELECT (ARRAY[1, 2, 3])[4]",
+                    "presto": "SELECT ELEMENT_AT(ARRAY[1, 2, 3], 4)",
+                },
+            )
+
+            self.assertEqual(
+                cm.output,
+                [
+                    "WARNING:sqlglot:Applying array index offset (-1)",
+                    "WARNING:sqlglot:Applying array index offset (1)",
+                    "WARNING:sqlglot:Applying array index offset (1)",
+                ],
+            )
 
         self.validate_all(
             "SELECT MAX_BY(a.id, a.timestamp) FROM a",
@@ -668,21 +690,6 @@ class TestPresto(Validator):
         self.validate_all("INTERVAL '1 day'", write={"trino": "INTERVAL '1' day"})
         self.validate_all("(5 * INTERVAL '7' day)", read={"": "INTERVAL '5' week"})
         self.validate_all("(5 * INTERVAL '7' day)", read={"": "INTERVAL '5' WEEKS"})
-        self.validate_all(
-            "SELECT COALESCE(ELEMENT_AT(MAP_FROM_ENTRIES(ARRAY[(51, '1')]), id), quantity) FROM my_table",
-            write={
-                "postgres": UnsupportedError,
-                "presto": "SELECT COALESCE(ELEMENT_AT(MAP_FROM_ENTRIES(ARRAY[(51, '1')]), id), quantity) FROM my_table",
-            },
-        )
-        self.validate_all(
-            "SELECT ELEMENT_AT(ARRAY[1, 2, 3], 4)",
-            write={
-                "": "SELECT ARRAY(1, 2, 3)[3]",
-                "postgres": "SELECT (ARRAY[1, 2, 3])[4]",
-                "presto": "SELECT ELEMENT_AT(ARRAY[1, 2, 3], 4)",
-            },
-        )
         self.validate_all(
             "SELECT SUBSTRING(a, 1, 3), SUBSTRING(a, LENGTH(a) - (3 - 1))",
             read={
