@@ -64,6 +64,27 @@ x"""
         self.assertEqual(Tokenizer().tokenize("'''abc'")[0].end, 6)
         self.assertEqual(Tokenizer().tokenize("'abc'")[0].start, 0)
 
+        tokens = Tokenizer().tokenize("SELECT\r\n  1,\r\n  2")
+
+        self.assertEqual(tokens[0].line, 1)
+        self.assertEqual(tokens[1].line, 2)
+        self.assertEqual(tokens[2].line, 2)
+        self.assertEqual(tokens[3].line, 3)
+
+    def test_crlf(self):
+        tokens = Tokenizer().tokenize("SELECT a\r\nFROM b")
+        tokens = [(token.token_type, token.text) for token in tokens]
+
+        self.assertEqual(
+            tokens,
+            [
+                (TokenType.SELECT, "SELECT"),
+                (TokenType.VAR, "a"),
+                (TokenType.FROM, "FROM"),
+                (TokenType.VAR, "b"),
+            ],
+        )
+
     def test_command(self):
         tokens = Tokenizer().tokenize("SHOW;")
         self.assertEqual(tokens[0].token_type, TokenType.SHOW)

@@ -55,6 +55,13 @@ class TestDuckDB(Validator):
             )
 
         self.validate_all(
+            "SELECT {'bla': column1, 'foo': column2, 'bar': column3} AS data FROM source_table",
+            read={
+                "bigquery": "SELECT STRUCT(column1 AS bla, column2 AS foo, column3 AS bar) AS data FROM source_table",
+                "duckdb": "SELECT {'bla': column1, 'foo': column2, 'bar': column3} AS data FROM source_table",
+            },
+        )
+        self.validate_all(
             "WITH cte(x) AS (SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3) SELECT AVG(x) FILTER (WHERE x > 1) FROM cte",
             write={
                 "duckdb": "WITH cte(x) AS (SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3) SELECT AVG(x) FILTER(WHERE x > 1) FROM cte",
@@ -109,6 +116,8 @@ class TestDuckDB(Validator):
             parse_one("a // b", read="duckdb").assert_is(exp.IntDiv).sql(dialect="duckdb"), "a // b"
         )
 
+        self.validate_identity("MAKE_TIMESTAMP(1992, 9, 20, 13, 34, 27.123456)")
+        self.validate_identity("MAKE_TIMESTAMP(1667810584123456)")
         self.validate_identity("SELECT EPOCH_MS(10) AS t")
         self.validate_identity("SELECT MAKE_TIMESTAMP(10) AS t")
         self.validate_identity("SELECT TO_TIMESTAMP(10) AS t")

@@ -7,6 +7,7 @@ import typing as t
 from sqlglot import exp, generator, parser, tokens, transforms
 from sqlglot.dialects.dialect import (
     Dialect,
+    NormalizationStrategy,
     any_value_to_max_sql,
     date_delta_sql,
     generatedasidentitycolumnconstraint_sql,
@@ -136,6 +137,9 @@ def _parse_hashbytes(args: t.List) -> exp.Expression:
     return exp.func("HASHBYTES", *args)
 
 
+DATEPART_ONLY_FORMATS = {"dw", "hour", "quarter"}
+
+
 def _format_sql(self: TSQL.Generator, expression: exp.NumberToStr | exp.TimeToStr) -> str:
     fmt = (
         expression.args["format"]
@@ -149,8 +153,8 @@ def _format_sql(self: TSQL.Generator, expression: exp.NumberToStr | exp.TimeToSt
     )
 
     # There is no format for "quarter"
-    if fmt.name.lower() == "quarter":
-        return self.func("DATEPART", "QUARTER", expression.this)
+    if fmt.name.lower() in DATEPART_ONLY_FORMATS:
+        return self.func("DATEPART", fmt.name, expression.this)
 
     return self.func("FORMAT", expression.this, fmt, expression.args.get("culture"))
 
@@ -236,11 +240,12 @@ def qualify_derived_table_outputs(expression: exp.Expression) -> exp.Expression:
 
 
 class TSQL(Dialect):
-    RESOLVES_IDENTIFIERS_AS_UPPERCASE = None
+    NORMALIZATION_STRATEGY = NormalizationStrategy.CASE_INSENSITIVE
     TIME_FORMAT = "'yyyy-mm-dd hh:mm:ss'"
     SUPPORTS_SEMI_ANTI_JOIN = False
     LOG_BASE_FIRST = False
     TYPED_DIVISION = True
+    CONCAT_COALESCE = True
 
     TIME_MAPPING = {
         "year": "%Y",
@@ -434,9 +439,7 @@ class TSQL(Dialect):
 
         LOG_DEFAULTS_TO_LN = True
 
-        CONCAT_NULL_OUTPUTS_STRING = True
-
-        ALTER_TABLE_ADD_COLUMN_KEYWORD = False
+        ALTER_TABLE_ADD_REQUIRED_FOR_EACH_COLUMN = False
 
         def _parse_projections(self) -> t.List[exp.Expression]:
             """
@@ -622,12 +625,13 @@ class TSQL(Dialect):
         QUERY_HINTS = False
         RETURNING_END = False
         NVL2_SUPPORTED = False
-        ALTER_TABLE_ADD_COLUMN_KEYWORD = False
+        ALTER_TABLE_INCLUDE_COLUMN_KEYWORD = False
         LIMIT_FETCH = "FETCH"
         COMPUTED_COLUMN_WITH_TYPE = False
         CTE_RECURSIVE_KEYWORD_REQUIRED = False
         ENSURE_BOOLS = True
         NULL_ORDERING_SUPPORTED = False
+        SUPPORTS_SINGLE_ARG_CONCAT = False
 
         EXPRESSIONS_WITHOUT_NESTED_CTES = {
             exp.Delete,
@@ -696,6 +700,13 @@ class TSQL(Dialect):
             **generator.Generator.PROPERTIES_LOCATION,
             exp.VolatileProperty: exp.Properties.Location.UNSUPPORTED,
         }
+
+        def set_operation(self, expression: exp.Union, op: str) -> str:
+            limit = expression.args.get("limit")
+            if limit:
+                return self.sql(expression.limit(limit.pop(), copy=False))
+
+            return super().set_operation(expression, op)
 
         def setitem_sql(self, expression: exp.SetItem) -> str:
             this = expression.this

@@ -32,6 +32,7 @@ setup(
             "pdoc",
             "pre-commit",
             "types-python-dateutil",
+            "maturin>=1.4,<2.0",
         ],
     },
     classifiers=[

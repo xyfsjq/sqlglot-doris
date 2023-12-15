@@ -429,7 +429,7 @@ WITH "customer_2" AS (
     "date_dim"."d_date_sk" AS "d_date_sk",
     "date_dim"."d_year" AS "d_year"
   FROM "date_dim" AS "date_dim"
-), "cte" AS (
+), "year_total" AS (
   SELECT
     "customer"."c_customer_id" AS "customer_id",
     "customer"."c_first_name" AS "customer_first_name",
@@ -458,7 +458,7 @@ WITH "customer_2" AS (
     "customer"."c_login",
     "customer"."c_email_address",
     "date_dim"."d_year"
-), "cte_2" AS (
+  UNION ALL
   SELECT
     "customer"."c_customer_id" AS "customer_id",
     "customer"."c_first_name" AS "customer_first_name",
@@ -489,7 +489,7 @@ WITH "customer_2" AS (
     "customer"."c_login",
     "customer"."c_email_address",
     "date_dim"."d_year"
-), "cte_3" AS (
+  UNION ALL
   SELECT
     "customer"."c_customer_id" AS "customer_id",
     "customer"."c_first_name" AS "customer_first_name",
@@ -520,46 +520,6 @@ WITH "customer_2" AS (
     "customer"."c_login",
     "customer"."c_email_address",
     "date_dim"."d_year"
-), "cte_4" AS (
-  SELECT
-    "cte_2"."customer_id" AS "customer_id",
-    "cte_2"."customer_first_name" AS "customer_first_name",
-    "cte_2"."customer_last_name" AS "customer_last_name",
-    "cte_2"."customer_preferred_cust_flag" AS "customer_preferred_cust_flag",
-    "cte_2"."dyear" AS "dyear",
-    "cte_2"."year_total" AS "year_total",
-    "cte_2"."sale_type" AS "sale_type"
-  FROM "cte_2" AS "cte_2"
-  UNION ALL
-  SELECT
-    "cte_3"."customer_id" AS "customer_id",
-    "cte_3"."customer_first_name" AS "customer_first_name",
-    "cte_3"."customer_last_name" AS "customer_last_name",
-    "cte_3"."customer_preferred_cust_flag" AS "customer_preferred_cust_flag",
-    "cte_3"."dyear" AS "dyear",
-    "cte_3"."year_total" AS "year_total",
-    "cte_3"."sale_type" AS "sale_type"
-  FROM "cte_3" AS "cte_3"
-), "year_total" AS (
-  SELECT
-    "cte"."customer_id" AS "customer_id",
-    "cte"."customer_first_name" AS "customer_first_name",
-    "cte"."customer_last_name" AS "customer_last_name",
-    "cte"."customer_preferred_cust_flag" AS "customer_preferred_cust_flag",
-    "cte"."dyear" AS "dyear",
-    "cte"."year_total" AS "year_total",
-    "cte"."sale_type" AS "sale_type"
-  FROM "cte" AS "cte"
-  UNION ALL
-  SELECT
-    "cte_4"."customer_id" AS "customer_id",
-    "cte_4"."customer_first_name" AS "customer_first_name",
-    "cte_4"."customer_last_name" AS "customer_last_name",
-    "cte_4"."customer_preferred_cust_flag" AS "customer_preferred_cust_flag",
-    "cte_4"."dyear" AS "dyear",
-    "cte_4"."year_total" AS "year_total",
-    "cte_4"."sale_type" AS "sale_type"
-  FROM "cte_4" AS "cte_4"
 )
 SELECT
   "t_s_secyear"."customer_id" AS "customer_id",
@@ -854,7 +814,15 @@ WITH "salesreturns" AS (
     ON "salesreturns"."wsr_web_site_sk" = "web_site"."web_site_sk"
   GROUP BY
     "web_site"."web_site_id"
-), "cte_10" AS (
+), "x" AS (
+  SELECT
+    'store channel' AS "channel",
+    CONCAT('store', "ssr"."s_store_id") AS "id",
+    "ssr"."sales" AS "sales",
+    "ssr"."returns1" AS "returns1",
+    "ssr"."profit" - "ssr"."profit_loss" AS "profit"
+  FROM "ssr"
+  UNION ALL
   SELECT
     'catalog channel' AS "channel",
     CONCAT('catalog_page', "csr"."cp_catalog_page_id") AS "id",
@@ -870,22 +838,6 @@ WITH "salesreturns" AS (
     "wsr"."returns1" AS "returns1",
     "wsr"."profit" - "wsr"."profit_loss" AS "profit"
   FROM "wsr"
-), "x" AS (
-  SELECT
-    'store channel' AS "channel",
-    CONCAT('store', "ssr"."s_store_id") AS "id",
-    "ssr"."sales" AS "sales",
-    "ssr"."returns1" AS "returns1",
-    "ssr"."profit" - "ssr"."profit_loss" AS "profit"
-  FROM "ssr"
-  UNION ALL
-  SELECT
-    "cte_10"."channel" AS "channel",
-    "cte_10"."id" AS "id",
-    "cte_10"."sales" AS "sales",
-    "cte_10"."returns1" AS "returns1",
-    "cte_10"."profit" AS "profit"
-  FROM "cte_10" AS "cte_10"
 )
 SELECT
   "x"."channel" AS "channel",
@@ -1782,7 +1734,7 @@ WITH "customer_2" AS (
     "date_dim"."d_date_sk" AS "d_date_sk",
     "date_dim"."d_year" AS "d_year"
   FROM "date_dim" AS "date_dim"
-), "cte" AS (
+), "year_total" AS (
   SELECT
     "customer"."c_customer_id" AS "customer_id",
     "customer"."c_first_name" AS "customer_first_name",
@@ -1805,7 +1757,7 @@ WITH "customer_2" AS (
     "customer"."c_login",
     "customer"."c_email_address",
     "date_dim"."d_year"
-), "cte_2" AS (
+  UNION ALL
   SELECT
     "customer"."c_customer_id" AS "customer_id",
     "customer"."c_first_name" AS "customer_first_name",
@@ -1828,26 +1780,6 @@ WITH "customer_2" AS (
     "customer"."c_login",
     "customer"."c_email_address",
     "date_dim"."d_year"
-), "year_total" AS (
-  SELECT
-    "cte"."customer_id" AS "customer_id",
-    "cte"."customer_first_name" AS "customer_first_name",
-    "cte"."customer_last_name" AS "customer_last_name",
-    "cte"."customer_birth_country" AS "customer_birth_country",
-    "cte"."dyear" AS "dyear",
-    "cte"."year_total" AS "year_total",
-    "cte"."sale_type" AS "sale_type"
-  FROM "cte" AS "cte"
-  UNION ALL
-  SELECT
-    "cte_2"."customer_id" AS "customer_id",
-    "cte_2"."customer_first_name" AS "customer_first_name",
-    "cte_2"."customer_last_name" AS "customer_last_name",
-    "cte_2"."customer_birth_country" AS "customer_birth_country",
-    "cte_2"."dyear" AS "dyear",
-    "cte_2"."year_total" AS "year_total",
-    "cte_2"."sale_type" AS "sale_type"
-  FROM "cte_2" AS "cte_2"
 )
 SELECT
   "t_s_secyear"."customer_id" AS "customer_id",
@@ -2200,7 +2132,19 @@ WITH "item_2" AS (
     "item"."i_class_id" AS "i_class_id",
     "item"."i_category_id" AS "i_category_id"
   FROM "item" AS "item"
-), "cte_4" AS (
+), "_q_0" AS (
+  SELECT
+    "iss"."i_brand_id" AS "brand_id",
+    "iss"."i_class_id" AS "class_id",
+    "iss"."i_category_id" AS "category_id"
+  FROM "store_sales" AS "store_sales"
+  JOIN "date_dim" AS "d1"
+    ON "d1"."d_year" <= 2001
+    AND "d1"."d_year" >= 1999
+    AND "store_sales"."ss_sold_date_sk" = "d1"."d_date_sk"
+  JOIN "item" AS "iss"
+    ON "store_sales"."ss_item_sk" = "iss"."i_item_sk"
+  INTERSECT
   SELECT
     "ics"."i_brand_id" AS "i_brand_id",
     "ics"."i_class_id" AS "i_class_id",
@@ -2224,24 +2168,6 @@ WITH "item_2" AS (
     AND "web_sales"."ws_sold_date_sk" = "d3"."d_date_sk"
   JOIN "item" AS "iws"
     ON "web_sales"."ws_item_sk" = "iws"."i_item_sk"
-), "_q_0" AS (
-  SELECT
-    "iss"."i_brand_id" AS "brand_id",
-    "iss"."i_class_id" AS "class_id",
-    "iss"."i_category_id" AS "category_id"
-  FROM "store_sales" AS "store_sales"
-  JOIN "date_dim" AS "d1"
-    ON "d1"."d_year" <= 2001
-    AND "d1"."d_year" >= 1999
-    AND "store_sales"."ss_sold_date_sk" = "d1"."d_date_sk"
-  JOIN "item" AS "iss"
-    ON "store_sales"."ss_item_sk" = "iss"."i_item_sk"
-  INTERSECT
-  SELECT
-    "cte_4"."i_brand_id" AS "i_brand_id",
-    "cte_4"."i_class_id" AS "i_class_id",
-    "cte_4"."i_category_id" AS "i_category_id"
-  FROM "cte_4" AS "cte_4"
 ), "date_dim_2" AS (
   SELECT
     "date_dim"."d_date_sk" AS "d_date_sk",
@@ -2249,7 +2175,14 @@ WITH "item_2" AS (
   FROM "date_dim" AS "date_dim"
   WHERE
     "date_dim"."d_year" <= 2001 AND "date_dim"."d_year" >= 1999
-), "cte_8" AS (
+), "x" AS (
+  SELECT
+    "store_sales"."ss_quantity" AS "quantity",
+    "store_sales"."ss_list_price" AS "list_price"
+  FROM "store_sales" AS "store_sales"
+  JOIN "date_dim_2" AS "date_dim"
+    ON "store_sales"."ss_sold_date_sk" = "date_dim"."d_date_sk"
+  UNION ALL
   SELECT
     "catalog_sales"."cs_quantity" AS "quantity",
     "catalog_sales"."cs_list_price" AS "list_price"
@@ -2263,18 +2196,6 @@ WITH "item_2" AS (
   FROM "web_sales" AS "web_sales"
   JOIN "date_dim_2" AS "date_dim"
     ON "web_sales"."ws_sold_date_sk" = "date_dim"."d_date_sk"
-), "x" AS (
-  SELECT
-    "store_sales"."ss_quantity" AS "quantity",
-    "store_sales"."ss_list_price" AS "list_price"
-  FROM "store_sales" AS "store_sales"
-  JOIN "date_dim_2" AS "date_dim"
-    ON "store_sales"."ss_sold_date_sk" = "date_dim"."d_date_sk"
-  UNION ALL
-  SELECT
-    "cte_8"."quantity" AS "quantity",
-    "cte_8"."list_price" AS "list_price"
-  FROM "cte_8" AS "cte_8"
 ), "avg_sales" AS (
   SELECT
     AVG("x"."quantity" * "x"."list_price") AS "average_sales"
@@ -2301,7 +2222,7 @@ WITH "item_2" AS (
   FROM "date_dim" AS "date_dim"
   WHERE
     "date_dim"."d_moy" = 11 AND "date_dim"."d_year" = 2001
-), "cte_9" AS (
+), "y" AS (
   SELECT
     'store' AS "channel",
     "item"."i_brand_id" AS "i_brand_id",
@@ -2325,7 +2246,7 @@ WITH "item_2" AS (
     "item"."i_category_id"
   HAVING
     SUM("store_sales"."ss_quantity" * "store_sales"."ss_list_price") > MAX("_u_1"."average_sales")
-), "cte_10" AS (
+  UNION ALL
   SELECT
     'catalog' AS "channel",
     "item"."i_brand_id" AS "i_brand_id",
@@ -2349,7 +2270,7 @@ WITH "item_2" AS (
     "item"."i_category_id"
   HAVING
     SUM("catalog_sales"."cs_quantity" * "catalog_sales"."cs_list_price") > MAX("_u_3"."average_sales")
-), "cte_11" AS (
+  UNION ALL
   SELECT
     'web' AS "channel",
     "item"."i_brand_id" AS "i_brand_id",
@@ -2373,42 +2294,6 @@ WITH "item_2" AS (
     "item"."i_category_id"
   HAVING
     SUM("web_sales"."ws_quantity" * "web_sales"."ws_list_price") > MAX("_u_5"."average_sales")
-), "cte_12" AS (
-  SELECT
-    "cte_10"."channel" AS "channel",
-    "cte_10"."i_brand_id" AS "i_brand_id",
-    "cte_10"."i_class_id" AS "i_class_id",
-    "cte_10"."i_category_id" AS "i_category_id",
-    "cte_10"."sales" AS "sales",
-    "cte_10"."number_sales" AS "number_sales"
-  FROM "cte_10" AS "cte_10"
-  UNION ALL
-  SELECT
-    "cte_11"."channel" AS "channel",
-    "cte_11"."i_brand_id" AS "i_brand_id",
-    "cte_11"."i_class_id" AS "i_class_id",
-    "cte_11"."i_category_id" AS "i_category_id",
-    "cte_11"."sales" AS "sales",
-    "cte_11"."number_sales" AS "number_sales"
-  FROM "cte_11" AS "cte_11"
-), "y" AS (
-  SELECT
-    "cte_9"."channel" AS "channel",
-    "cte_9"."i_brand_id" AS "i_brand_id",
-    "cte_9"."i_class_id" AS "i_class_id",
-    "cte_9"."i_category_id" AS "i_category_id",
-    "cte_9"."sales" AS "sales",
-    "cte_9"."number_sales" AS "number_sales"
-  FROM "cte_9" AS "cte_9"
-  UNION ALL
-  SELECT
-    "cte_12"."channel" AS "channel",
-    "cte_12"."i_brand_id" AS "i_brand_id",
-    "cte_12"."i_class_id" AS "i_class_id",
-    "cte_12"."i_category_id" AS "i_category_id",
-    "cte_12"."sales" AS "sales",
-    "cte_12"."number_sales" AS "number_sales"
-  FROM "cte_12" AS "cte_12"
 )
 SELECT
   "y"."channel" AS "channel",
@@ -4204,7 +4089,12 @@ WITH "customer_address_2" AS (
     NOT "_u_2"."i_manufact_id" IS NULL
   GROUP BY
     "item"."i_manufact_id"
-), "cte_4" AS (
+), "tmp1" AS (
+  SELECT
+    "ss"."i_manufact_id" AS "i_manufact_id",
+    "ss"."total_sales" AS "total_sales"
+  FROM "ss"
+  UNION ALL
   SELECT
     "cs"."i_manufact_id" AS "i_manufact_id",
     "cs"."total_sales" AS "total_sales"
@@ -4214,16 +4104,6 @@ WITH "customer_address_2" AS (
     "ws"."i_manufact_id" AS "i_manufact_id",
     "ws"."total_sales" AS "total_sales"
   FROM "ws"
-), "tmp1" AS (
-  SELECT
-    "ss"."i_manufact_id" AS "i_manufact_id",
-    "ss"."total_sales" AS "total_sales"
-  FROM "ss"
-  UNION ALL
-  SELECT
-    "cte_4"."i_manufact_id" AS "i_manufact_id",
-    "cte_4"."total_sales" AS "total_sales"
-  FROM "cte_4" AS "cte_4"
 )
 SELECT
   "tmp1"."i_manufact_id" AS "i_manufact_id",
@@ -4663,7 +4543,7 @@ WITH "customer_2" AS (
   FROM "date_dim" AS "date_dim"
   WHERE
     "date_dim"."d_month_seq" <= 1199 AND "date_dim"."d_month_seq" >= 1188
-), "cte" AS (
+), "hot_cust" AS (
   SELECT DISTINCT
     "customer"."c_last_name" AS "c_last_name",
     "customer"."c_first_name" AS "c_first_name",
@@ -4673,7 +4553,7 @@ WITH "customer_2" AS (
     ON "store_sales"."ss_customer_sk" = "customer"."c_customer_sk"
   JOIN "date_dim_2" AS "date_dim"
     ON "store_sales"."ss_sold_date_sk" = "date_dim"."d_date_sk"
-), "cte_2" AS (
+  INTERSECT
   SELECT DISTINCT
     "customer"."c_last_name" AS "c_last_name",
     "customer"."c_first_name" AS "c_first_name",
@@ -4683,7 +4563,7 @@ WITH "customer_2" AS (
     ON "catalog_sales"."cs_bill_customer_sk" = "customer"."c_customer_sk"
   JOIN "date_dim_2" AS "date_dim"
     ON "catalog_sales"."cs_sold_date_sk" = "date_dim"."d_date_sk"
-), "cte_3" AS (
+  INTERSECT
   SELECT DISTINCT
     "customer"."c_last_name" AS "c_last_name",
     "customer"."c_first_name" AS "c_first_name",
@@ -4693,30 +4573,6 @@ WITH "customer_2" AS (
     ON "web_sales"."ws_bill_customer_sk" = "customer"."c_customer_sk"
   JOIN "date_dim_2" AS "date_dim"
     ON "web_sales"."ws_sold_date_sk" = "date_dim"."d_date_sk"
-), "cte_4" AS (
-  SELECT
-    "cte_2"."c_last_name" AS "c_last_name",
-    "cte_2"."c_first_name" AS "c_first_name",
-    "cte_2"."d_date" AS "d_date"
-  FROM "cte_2" AS "cte_2"
-  INTERSECT
-  SELECT
-    "cte_3"."c_last_name" AS "c_last_name",
-    "cte_3"."c_first_name" AS "c_first_name",
-    "cte_3"."d_date" AS "d_date"
-  FROM "cte_3" AS "cte_3"
-), "hot_cust" AS (
-  SELECT
-    "cte"."c_last_name" AS "c_last_name",
-    "cte"."c_first_name" AS "c_first_name",
-    "cte"."d_date" AS "d_date"
-  FROM "cte" AS "cte"
-  INTERSECT
-  SELECT
-    "cte_4"."c_last_name" AS "c_last_name",
-    "cte_4"."c_first_name" AS "c_first_name",
-    "cte_4"."d_date" AS "d_date"
-  FROM "cte_4" AS "cte_4"
 )
 SELECT
   COUNT(*) AS "_col_0"
@@ -6009,39 +5865,6 @@ WITH "date_dim_2" AS (
     RANK() OVER (ORDER BY "in_store"."return_ratio") AS "return_rank",
     RANK() OVER (ORDER BY "in_store"."currency_ratio") AS "currency_rank"
   FROM "in_store" AS "in_store"
-), "cte_3" AS (
-  SELECT
-    'store' AS "channel",
-    "store"."item" AS "item",
-    "store"."return_ratio" AS "return_ratio",
-    "store"."return_rank" AS "return_rank",
-    "store"."currency_rank" AS "currency_rank"
-  FROM "store" AS "store"
-  WHERE
-    "store"."currency_rank" <= 10 OR "store"."return_rank" <= 10
-  ORDER BY
-    "channel",
-    "return_rank",
-    "currency_rank"
-  LIMIT 100
-), "cte_4" AS (
-  SELECT
-    'catalog' AS "channel",
-    "catalog"."item" AS "item",
-    "catalog"."return_ratio" AS "return_ratio",
-    "catalog"."return_rank" AS "return_rank",
-    "catalog"."currency_rank" AS "currency_rank"
-  FROM "catalog" AS "catalog"
-  WHERE
-    "catalog"."currency_rank" <= 10 OR "catalog"."return_rank" <= 10
-  UNION
-  SELECT
-    "cte_3"."channel" AS "channel",
-    "cte_3"."item" AS "item",
-    "cte_3"."return_ratio" AS "return_ratio",
-    "cte_3"."return_rank" AS "return_rank",
-    "cte_3"."currency_rank" AS "currency_rank"
-  FROM "cte_3" AS "cte_3"
 )
 SELECT
   'web' AS "channel",
@@ -6054,12 +5877,29 @@ WHERE
   "web"."currency_rank" <= 10 OR "web"."return_rank" <= 10
 UNION
 SELECT
-  "cte_4"."channel" AS "channel",
-  "cte_4"."item" AS "item",
-  "cte_4"."return_ratio" AS "return_ratio",
-  "cte_4"."return_rank" AS "return_rank",
-  "cte_4"."currency_rank" AS "currency_rank"
-FROM "cte_4" AS "cte_4";
+  'catalog' AS "channel",
+  "catalog"."item" AS "item",
+  "catalog"."return_ratio" AS "return_ratio",
+  "catalog"."return_rank" AS "return_rank",
+  "catalog"."currency_rank" AS "currency_rank"
+FROM "catalog" AS "catalog"
+WHERE
+  "catalog"."currency_rank" <= 10 OR "catalog"."return_rank" <= 10
+UNION
+SELECT
+  'store' AS "channel",
+  "store"."item" AS "item",
+  "store"."return_ratio" AS "return_ratio",
+  "store"."return_rank" AS "return_rank",
+  "store"."currency_rank" AS "currency_rank"
+FROM "store" AS "store"
+WHERE
+  "store"."currency_rank" <= 10 OR "store"."return_rank" <= 10
+ORDER BY
+  "channel",
+  "return_rank",
+  "currency_rank"
+LIMIT 100;
 
 --------------------------------------
 -- TPC-DS 50
@@ -6835,7 +6675,12 @@ WITH "customer_address_2" AS (
     NOT "_u_2"."i_item_id" IS NULL
   GROUP BY
     "item"."i_item_id"
-), "cte_4" AS (
+), "tmp1" AS (
+  SELECT
+    "ss"."i_item_id" AS "i_item_id",
+    "ss"."total_sales" AS "total_sales"
+  FROM "ss"
+  UNION ALL
   SELECT
     "cs"."i_item_id" AS "i_item_id",
     "cs"."total_sales" AS "total_sales"
@@ -6845,16 +6690,6 @@ WITH "customer_address_2" AS (
     "ws"."i_item_id" AS "i_item_id",
     "ws"."total_sales" AS "total_sales"
   FROM "ws"
-), "tmp1" AS (
-  SELECT
-    "ss"."i_item_id" AS "i_item_id",
-    "ss"."total_sales" AS "total_sales"
-  FROM "ss"
-  UNION ALL
-  SELECT
-    "cte_4"."i_item_id" AS "i_item_id",
-    "cte_4"."total_sales" AS "total_sales"
-  FROM "cte_4" AS "cte_4"
 )
 SELECT
   "tmp1"."i_item_id" AS "i_item_id",
@@ -7538,7 +7373,12 @@ WITH "customer_address_2" AS (
     NOT "_u_2"."i_item_id" IS NULL
   GROUP BY
     "item"."i_item_id"
-), "cte_4" AS (
+), "tmp1" AS (
+  SELECT
+    "ss"."i_item_id" AS "i_item_id",
+    "ss"."total_sales" AS "total_sales"
+  FROM "ss"
+  UNION ALL
   SELECT
     "cs"."i_item_id" AS "i_item_id",
     "cs"."total_sales" AS "total_sales"
@@ -7548,16 +7388,6 @@ WITH "customer_address_2" AS (
     "ws"."i_item_id" AS "i_item_id",
     "ws"."total_sales" AS "total_sales"
   FROM "ws"
-), "tmp1" AS (
-  SELECT
-    "ss"."i_item_id" AS "i_item_id",
-    "ss"."total_sales" AS "total_sales"
-  FROM "ss"
-  UNION ALL
-  SELECT
-    "cte_4"."i_item_id" AS "i_item_id",
-    "cte_4"."total_sales" AS "total_sales"
-  FROM "cte_4" AS "cte_4"
 )
 SELECT
   "tmp1"."i_item_id" AS "i_item_id",
@@ -8618,7 +8448,7 @@ WITH "date_dim_2" AS (
     "warehouse"."w_state" AS "w_state",
     "warehouse"."w_country" AS "w_country"
   FROM "warehouse" AS "warehouse"
-), "cte" AS (
+), "x" AS (
   SELECT
     "warehouse"."w_warehouse_name" AS "w_warehouse_name",
     "warehouse"."w_warehouse_sq_ft" AS "w_warehouse_sq_ft",
@@ -8813,7 +8643,7 @@ WITH "date_dim_2" AS (
     "warehouse"."w_state",
     "warehouse"."w_country",
     "date_dim"."d_year"
-), "cte_2" AS (
+  UNION ALL
   SELECT
     "warehouse"."w_warehouse_name" AS "w_warehouse_name",
     "warehouse"."w_warehouse_sq_ft" AS "w_warehouse_sq_ft",
@@ -9008,76 +8838,6 @@ WITH "date_dim_2" AS (
     "warehouse"."w_state",
     "warehouse"."w_country",
     "date_dim"."d_year"
-), "x" AS (
-  SELECT
-    "cte"."w_warehouse_name" AS "w_warehouse_name",
-    "cte"."w_warehouse_sq_ft" AS "w_warehouse_sq_ft",
-    "cte"."w_city" AS "w_city",
-    "cte"."w_county" AS "w_county",
-    "cte"."w_state" AS "w_state",
-    "cte"."w_country" AS "w_country",
-    "cte"."ship_carriers" AS "ship_carriers",
-    "cte"."year1" AS "year1",
-    "cte"."jan_sales" AS "jan_sales",
-    "cte"."feb_sales" AS "feb_sales",
-    "cte"."mar_sales" AS "mar_sales",
-    "cte"."apr_sales" AS "apr_sales",
-    "cte"."may_sales" AS "may_sales",
-    "cte"."jun_sales" AS "jun_sales",
-    "cte"."jul_sales" AS "jul_sales",
-    "cte"."aug_sales" AS "aug_sales",
-    "cte"."sep_sales" AS "sep_sales",
-    "cte"."oct_sales" AS "oct_sales",
-    "cte"."nov_sales" AS "nov_sales",
-    "cte"."dec_sales" AS "dec_sales",
-    "cte"."jan_net" AS "jan_net",
-    "cte"."feb_net" AS "feb_net",
-    "cte"."mar_net" AS "mar_net",
-    "cte"."apr_net" AS "apr_net",
-    "cte"."may_net" AS "may_net",
-    "cte"."jun_net" AS "jun_net",
-    "cte"."jul_net" AS "jul_net",
-    "cte"."aug_net" AS "aug_net",
-    "cte"."sep_net" AS "sep_net",
-    "cte"."oct_net" AS "oct_net",
-    "cte"."nov_net" AS "nov_net",
-    "cte"."dec_net" AS "dec_net"
-  FROM "cte" AS "cte"
-  UNION ALL
-  SELECT
-    "cte_2"."w_warehouse_name" AS "w_warehouse_name",
-    "cte_2"."w_warehouse_sq_ft" AS "w_warehouse_sq_ft",
-    "cte_2"."w_city" AS "w_city",
-    "cte_2"."w_county" AS "w_county",
-    "cte_2"."w_state" AS "w_state",
-    "cte_2"."w_country" AS "w_country",
-    "cte_2"."ship_carriers" AS "ship_carriers",
-    "cte_2"."year1" AS "year1",
-    "cte_2"."jan_sales" AS "jan_sales",
-    "cte_2"."feb_sales" AS "feb_sales",
-    "cte_2"."mar_sales" AS "mar_sales",
-    "cte_2"."apr_sales" AS "apr_sales",
-    "cte_2"."may_sales" AS "may_sales",
-    "cte_2"."jun_sales" AS "jun_sales",
-    "cte_2"."jul_sales" AS "jul_sales",
-    "cte_2"."aug_sales" AS "aug_sales",
-    "cte_2"."sep_sales" AS "sep_sales",
-    "cte_2"."oct_sales" AS "oct_sales",
-    "cte_2"."nov_sales" AS "nov_sales",
-    "cte_2"."dec_sales" AS "dec_sales",
-    "cte_2"."jan_net" AS "jan_net",
-    "cte_2"."feb_net" AS "feb_net",
-    "cte_2"."mar_net" AS "mar_net",
-    "cte_2"."apr_net" AS "apr_net",
-    "cte_2"."may_net" AS "may_net",
-    "cte_2"."jun_net" AS "jun_net",
-    "cte_2"."jul_net" AS "jul_net",
-    "cte_2"."aug_net" AS "aug_net",
-    "cte_2"."sep_net" AS "sep_net",
-    "cte_2"."oct_net" AS "oct_net",
-    "cte_2"."nov_net" AS "nov_net",
-    "cte_2"."dec_net" AS "dec_net"
-  FROM "cte_2" AS "cte_2"
 )
 SELECT
   "x"."w_warehouse_name" AS "w_warehouse_name",
@@ -9649,7 +9409,15 @@ WITH "date_dim_2" AS (
   FROM "date_dim" AS "date_dim"
   WHERE
     "date_dim"."d_moy" = 11 AND "date_dim"."d_year" = 2001
-), "cte_4" AS (
+), "tmp" AS (
+  SELECT
+    "web_sales"."ws_ext_sales_price" AS "ext_price",
+    "web_sales"."ws_item_sk" AS "sold_item_sk",
+    "web_sales"."ws_sold_time_sk" AS "time_sk"
+  FROM "web_sales" AS "web_sales"
+  JOIN "date_dim_2" AS "date_dim"
+    ON "date_dim"."d_date_sk" = "web_sales"."ws_sold_date_sk"
+  UNION ALL
   SELECT
     "catalog_sales"."cs_ext_sales_price" AS "ext_price",
     "catalog_sales"."cs_item_sk" AS "sold_item_sk",
@@ -9665,20 +9433,6 @@ WITH "date_dim_2" AS (
   FROM "store_sales" AS "store_sales"
   JOIN "date_dim_2" AS "date_dim"
     ON "date_dim"."d_date_sk" = "store_sales"."ss_sold_date_sk"
-), "tmp" AS (
-  SELECT
-    "web_sales"."ws_ext_sales_price" AS "ext_price",
-    "web_sales"."ws_item_sk" AS "sold_item_sk",
-    "web_sales"."ws_sold_time_sk" AS "time_sk"
-  FROM "web_sales" AS "web_sales"
-  JOIN "date_dim_2" AS "date_dim"
-    ON "date_dim"."d_date_sk" = "web_sales"."ws_sold_date_sk"
-  UNION ALL
-  SELECT
-    "cte_4"."ext_price" AS "ext_price",
-    "cte_4"."sold_item_sk" AS "sold_item_sk",
-    "cte_4"."time_sk" AS "time_sk"
-  FROM "cte_4" AS "cte_4"
 )
 SELECT
   "item"."i_brand_id" AS "brand_id",
@@ -9974,7 +9728,7 @@ WITH "customer_2" AS (
   FROM "date_dim" AS "date_dim"
   WHERE
     "date_dim"."d_year" IN (1999, 2000)
-), "cte" AS (
+), "year_total" AS (
   SELECT
     "customer"."c_customer_id" AS "customer_id",
     "customer"."c_first_name" AS "customer_first_name",
@@ -9992,7 +9746,7 @@ WITH "customer_2" AS (
     "customer"."c_first_name",
     "customer"."c_last_name",
     "date_dim"."d_year"
-), "cte_2" AS (
+  UNION ALL
   SELECT
     "customer"."c_customer_id" AS "customer_id",
     "customer"."c_first_name" AS "customer_first_name",
@@ -10010,24 +9764,6 @@ WITH "customer_2" AS (
     "customer"."c_first_name",
     "customer"."c_last_name",
     "date_dim"."d_year"
-), "year_total" AS (
-  SELECT
-    "cte"."customer_id" AS "customer_id",
-    "cte"."customer_first_name" AS "customer_first_name",
-    "cte"."customer_last_name" AS "customer_last_name",
-    "cte"."year1" AS "year1",
-    "cte"."year_total" AS "year_total",
-    "cte"."sale_type" AS "sale_type"
-  FROM "cte" AS "cte"
-  UNION ALL
-  SELECT
-    "cte_2"."customer_id" AS "customer_id",
-    "cte_2"."customer_first_name" AS "customer_first_name",
-    "cte_2"."customer_last_name" AS "customer_last_name",
-    "cte_2"."year1" AS "year1",
-    "cte_2"."year_total" AS "year_total",
-    "cte_2"."sale_type" AS "sale_type"
-  FROM "cte_2" AS "cte_2"
 )
 SELECT
   "t_s_secyear"."customer_id" AS "customer_id",
@@ -10177,7 +9913,24 @@ WITH "date_dim_2" AS (
   FROM "item" AS "item"
   WHERE
     "item"."i_category" = 'Men'
-), "cte_4" AS (
+), "sales_detail" AS (
+  SELECT
+    "date_dim"."d_year" AS "d_year",
+    "item"."i_brand_id" AS "i_brand_id",
+    "item"."i_class_id" AS "i_class_id",
+    "item"."i_category_id" AS "i_category_id",
+    "item"."i_manufact_id" AS "i_manufact_id",
+    "catalog_sales"."cs_quantity" - COALESCE("catalog_returns"."cr_return_quantity", 0) AS "sales_cnt",
+    "catalog_sales"."cs_ext_sales_price" - COALESCE("catalog_returns"."cr_return_amount", 0.0) AS "sales_amt"
+  FROM "catalog_sales" AS "catalog_sales"
+  LEFT JOIN "catalog_returns" AS "catalog_returns"
+    ON "catalog_sales"."cs_item_sk" = "catalog_returns"."cr_item_sk"
+    AND "catalog_sales"."cs_order_number" = "catalog_returns"."cr_order_number"
+  JOIN "date_dim_2" AS "date_dim"
+    ON "date_dim"."d_date_sk" = "catalog_sales"."cs_sold_date_sk"
+  JOIN "item_2" AS "item"
+    ON "item"."i_item_sk" = "catalog_sales"."cs_item_sk"
+  UNION
   SELECT
     "date_dim"."d_year" AS "d_year",
     "item"."i_brand_id" AS "i_brand_id",
@@ -10211,33 +9964,6 @@ WITH "date_dim_2" AS (
   LEFT JOIN "web_returns" AS "web_returns"
     ON "web_sales"."ws_item_sk" = "web_returns"."wr_item_sk"
     AND "web_sales"."ws_order_number" = "web_returns"."wr_order_number"
-), "sales_detail" AS (
-  SELECT
-    "date_dim"."d_year" AS "d_year",
-    "item"."i_brand_id" AS "i_brand_id",
-    "item"."i_class_id" AS "i_class_id",
-    "item"."i_category_id" AS "i_category_id",
-    "item"."i_manufact_id" AS "i_manufact_id",
-    "catalog_sales"."cs_quantity" - COALESCE("catalog_returns"."cr_return_quantity", 0) AS "sales_cnt",
-    "catalog_sales"."cs_ext_sales_price" - COALESCE("catalog_returns"."cr_return_amount", 0.0) AS "sales_amt"
-  FROM "catalog_sales" AS "catalog_sales"
-  LEFT JOIN "catalog_returns" AS "catalog_returns"
-    ON "catalog_sales"."cs_item_sk" = "catalog_returns"."cr_item_sk"
-    AND "catalog_sales"."cs_order_number" = "catalog_returns"."cr_order_number"
-  JOIN "date_dim_2" AS "date_dim"
-    ON "date_dim"."d_date_sk" = "catalog_sales"."cs_sold_date_sk"
-  JOIN "item_2" AS "item"
-    ON "item"."i_item_sk" = "catalog_sales"."cs_item_sk"
-  UNION
-  SELECT
-    "cte_4"."d_year" AS "d_year",
-    "cte_4"."i_brand_id" AS "i_brand_id",
-    "cte_4"."i_class_id" AS "i_class_id",
-    "cte_4"."i_category_id" AS "i_category_id",
-    "cte_4"."i_manufact_id" AS "i_manufact_id",
-    "cte_4"."sales_cnt" AS "sales_cnt",
-    "cte_4"."sales_amt" AS "sales_amt"
-  FROM "cte_4" AS "cte_4"
 ), "all_sales" AS (
   SELECT
     "sales_detail"."d_year" AS "d_year",
@@ -10350,7 +10076,22 @@ WITH "date_dim_2" AS (
     "item"."i_item_sk" AS "i_item_sk",
     "item"."i_category" AS "i_category"
   FROM "item" AS "item"
-), "cte_4" AS (
+), "foo" AS (
+  SELECT
+    'store' AS "channel",
+    'ss_hdemo_sk' AS "col_name",
+    "date_dim"."d_year" AS "d_year",
+    "date_dim"."d_qoy" AS "d_qoy",
+    "item"."i_category" AS "i_category",
+    "store_sales"."ss_ext_sales_price" AS "ext_sales_price"
+  FROM "store_sales" AS "store_sales"
+  JOIN "date_dim_2" AS "date_dim"
+    ON "store_sales"."ss_sold_date_sk" = "date_dim"."d_date_sk"
+  JOIN "item_2" AS "item"
+    ON "store_sales"."ss_item_sk" = "item"."i_item_sk"
+  WHERE
+    "store_sales"."ss_hdemo_sk" IS NULL
+  UNION ALL
   SELECT
     'web' AS "channel",
     'ws_ship_hdemo_sk' AS "col_name",
@@ -10380,30 +10121,6 @@ WITH "date_dim_2" AS (
     ON "catalog_sales"."cs_item_sk" = "item"."i_item_sk"
   WHERE
     "catalog_sales"."cs_warehouse_sk" IS NULL
-), "foo" AS (
-  SELECT
-    'store' AS "channel",
-    'ss_hdemo_sk' AS "col_name",
-    "date_dim"."d_year" AS "d_year",
-    "date_dim"."d_qoy" AS "d_qoy",
-    "item"."i_category" AS "i_category",
-    "store_sales"."ss_ext_sales_price" AS "ext_sales_price"
-  FROM "store_sales" AS "store_sales"
-  JOIN "date_dim_2" AS "date_dim"
-    ON "store_sales"."ss_sold_date_sk" = "date_dim"."d_date_sk"
-  JOIN "item_2" AS "item"
-    ON "store_sales"."ss_item_sk" = "item"."i_item_sk"
-  WHERE
-    "store_sales"."ss_hdemo_sk" IS NULL
-  UNION ALL
-  SELECT
-    "cte_4"."channel" AS "channel",
-    "cte_4"."col_name" AS "col_name",
-    "cte_4"."d_year" AS "d_year",
-    "cte_4"."d_qoy" AS "d_qoy",
-    "cte_4"."i_category" AS "i_category",
-    "cte_4"."ext_sales_price" AS "ext_sales_price"
-  FROM "cte_4" AS "cte_4"
 )
 SELECT
   "foo"."channel" AS "channel",
@@ -10620,7 +10337,17 @@ WITH "date_dim_2" AS (
     ON "web_returns"."wr_web_page_sk" = "web_page"."wp_web_page_sk"
   GROUP BY
     "web_page"."wp_web_page_sk"
-), "cte_4" AS (
+), "x" AS (
+  SELECT
+    'store channel' AS "channel",
+    "ss"."s_store_sk" AS "id",
+    "ss"."sales" AS "sales",
+    COALESCE("sr"."returns1", 0) AS "returns1",
+    "ss"."profit" - COALESCE("sr"."profit_loss", 0) AS "profit"
+  FROM "ss"
+  LEFT JOIN "sr"
+    ON "ss"."s_store_sk" = "sr"."s_store_sk"
+  UNION ALL
   SELECT
     'catalog channel' AS "channel",
     "cs"."cs_call_center_sk" AS "id",
@@ -10639,24 +10366,6 @@ WITH "date_dim_2" AS (
   FROM "ws"
   LEFT JOIN "wr"
     ON "ws"."wp_web_page_sk" = "wr"."wp_web_page_sk"
-), "x" AS (
-  SELECT
-    'store channel' AS "channel",
-    "ss"."s_store_sk" AS "id",
-    "ss"."sales" AS "sales",
-    COALESCE("sr"."returns1", 0) AS "returns1",
-    "ss"."profit" - COALESCE("sr"."profit_loss", 0) AS "profit"
-  FROM "ss"
-  LEFT JOIN "sr"
-    ON "ss"."s_store_sk" = "sr"."s_store_sk"
-  UNION ALL
-  SELECT
-    "cte_4"."channel" AS "channel",
-    "cte_4"."id" AS "id",
-    "cte_4"."sales" AS "sales",
-    "cte_4"."returns1" AS "returns1",
-    "cte_4"."profit" AS "profit"
-  FROM "cte_4" AS "cte_4"
 )
 SELECT
   "x"."channel" AS "channel",
@@ -11135,7 +10844,15 @@ WITH "date_dim_2" AS (
     ON "web_sales"."ws_web_site_sk" = "web_site"."web_site_sk"
   GROUP BY
     "web_site"."web_site_id"
-), "cte_4" AS (
+), "x" AS (
+  SELECT
+    'store channel' AS "channel",
+    CONCAT('store', "ssr"."store_id") AS "id",
+    "ssr"."sales" AS "sales",
+    "ssr"."returns1" AS "returns1",
+    "ssr"."profit" AS "profit"
+  FROM "ssr"
+  UNION ALL
   SELECT
     'catalog channel' AS "channel",
     CONCAT('catalog_page', "csr"."catalog_page_id") AS "id",
@@ -11151,22 +10868,6 @@ WITH "date_dim_2" AS (
     "wsr"."returns1" AS "returns1",
     "wsr"."profit" AS "profit"
   FROM "wsr"
-), "x" AS (
-  SELECT
-    'store channel' AS "channel",
-    CONCAT('store', "ssr"."store_id") AS "id",
-    "ssr"."sales" AS "sales",
-    "ssr"."returns1" AS "returns1",
-    "ssr"."profit" AS "profit"
-  FROM "ssr"
-  UNION ALL
-  SELECT
-    "cte_4"."channel" AS "channel",
-    "cte_4"."id" AS "id",
-    "cte_4"."sales" AS "sales",
-    "cte_4"."returns1" AS "returns1",
-    "cte_4"."profit" AS "profit"
-  FROM "cte_4" AS "cte_4"
 )
 SELECT
   "x"."channel" AS "channel",
@@ -11822,66 +11523,42 @@ WITH "customer_2" AS (
   FROM "date_dim" AS "date_dim"
   WHERE
     "date_dim"."d_month_seq" <= 1199 AND "date_dim"."d_month_seq" >= 1188
-), "cte" AS (
-  SELECT DISTINCT
-    "customer"."c_last_name" AS "c_last_name",
-    "customer"."c_first_name" AS "c_first_name",
-    "date_dim"."d_date" AS "d_date"
-  FROM "store_sales" AS "store_sales"
-  JOIN "customer_2" AS "customer"
-    ON "store_sales"."ss_customer_sk" = "customer"."c_customer_sk"
-  JOIN "date_dim_2" AS "date_dim"
-    ON "store_sales"."ss_sold_date_sk" = "date_dim"."d_date_sk"
-), "cte_2" AS (
-  SELECT DISTINCT
-    "customer"."c_last_name" AS "c_last_name",
-    "customer"."c_first_name" AS "c_first_name",
-    "date_dim"."d_date" AS "d_date"
-  FROM "catalog_sales" AS "catalog_sales"
-  JOIN "customer_2" AS "customer"
-    ON "catalog_sales"."cs_bill_customer_sk" = "customer"."c_customer_sk"
-  JOIN "date_dim_2" AS "date_dim"
-    ON "catalog_sales"."cs_sold_date_sk" = "date_dim"."d_date_sk"
-), "cte_3" AS (
-  SELECT DISTINCT
-    "customer"."c_last_name" AS "c_last_name",
-    "customer"."c_first_name" AS "c_first_name",
-    "date_dim"."d_date" AS "d_date"
-  FROM "web_sales" AS "web_sales"
-  JOIN "customer_2" AS "customer"
-    ON "web_sales"."ws_bill_customer_sk" = "customer"."c_customer_sk"
-  JOIN "date_dim_2" AS "date_dim"
-    ON "web_sales"."ws_sold_date_sk" = "date_dim"."d_date_sk"
-), "cte_4" AS (
-  (
-    SELECT
-      "cte_2"."c_last_name" AS "c_last_name",
-      "cte_2"."c_first_name" AS "c_first_name",
-      "cte_2"."d_date" AS "d_date"
-    FROM "cte_2" AS "cte_2"
-  )
-  EXCEPT
-  (
-    SELECT
-      "cte_3"."c_last_name" AS "c_last_name",
-      "cte_3"."c_first_name" AS "c_first_name",
-      "cte_3"."d_date" AS "d_date"
-    FROM "cte_3" AS "cte_3"
-  )
 ), "cool_cust" AS (
   (
-    SELECT
-      "cte"."c_last_name" AS "c_last_name",
-      "cte"."c_first_name" AS "c_first_name",
-      "cte"."d_date" AS "d_date"
-    FROM "cte" AS "cte"
+    SELECT DISTINCT
+      "customer"."c_last_name" AS "c_last_name",
+      "customer"."c_first_name" AS "c_first_name",
+      "date_dim"."d_date" AS "d_date"
+    FROM "store_sales" AS "store_sales"
+    JOIN "customer_2" AS "customer"
+      ON "store_sales"."ss_customer_sk" = "customer"."c_customer_sk"
+    JOIN "date_dim_2" AS "date_dim"
+      ON "store_sales"."ss_sold_date_sk" = "date_dim"."d_date_sk"
   )
   EXCEPT
-  SELECT
-    "cte_4"."c_last_name" AS "c_last_name",
-    "cte_4"."c_first_name" AS "c_first_name",
-    "cte_4"."d_date" AS "d_date"
-  FROM "cte_4" AS "cte_4"
+  (
+    SELECT DISTINCT
+      "customer"."c_last_name" AS "c_last_name",
+      "customer"."c_first_name" AS "c_first_name",
+      "date_dim"."d_date" AS "d_date"
+    FROM "catalog_sales" AS "catalog_sales"
+    JOIN "customer_2" AS "customer"
+      ON "catalog_sales"."cs_bill_customer_sk" = "customer"."c_customer_sk"
+    JOIN "date_dim_2" AS "date_dim"
+      ON "catalog_sales"."cs_sold_date_sk" = "date_dim"."d_date_sk"
+  )
+  EXCEPT
+  (
+    SELECT DISTINCT
+      "customer"."c_last_name" AS "c_last_name",
+      "customer"."c_first_name" AS "c_first_name",
+      "date_dim"."d_date" AS "d_date"
+    FROM "web_sales" AS "web_sales"
+    JOIN "customer_2" AS "customer"
+      ON "web_sales"."ws_bill_customer_sk" = "customer"."c_customer_sk"
+    JOIN "date_dim_2" AS "date_dim"
+      ON "web_sales"."ws_sold_date_sk" = "date_dim"."d_date_sk"
+  )
 )
 SELECT
   COUNT(*) AS "_col_0"

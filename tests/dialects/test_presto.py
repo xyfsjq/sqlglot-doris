@@ -379,6 +379,16 @@ class TestPresto(Validator):
                 "presto": "TIMESTAMP(x, '12:00:00')",
             },
         )
+        self.validate_all(
+            "DATE_ADD('DAY', CAST(x AS BIGINT), y)",
+            write={
+                "presto": "DATE_ADD('DAY', CAST(x AS BIGINT), y)",
+            },
+            read={
+                "presto": "DATE_ADD('DAY', x, y)",
+            },
+        )
+        self.validate_identity("DATE_ADD('DAY', 1, y)")
 
     def test_ddl(self):
         self.validate_all(
@@ -566,18 +576,10 @@ class TestPresto(Validator):
                 "SELECT ELEMENT_AT(ARRAY[1, 2, 3], 4)",
                 write={
                     "": "SELECT ARRAY(1, 2, 3)[3]",
+                    "bigquery": "SELECT [1, 2, 3][SAFE_ORDINAL(4)]",
                     "postgres": "SELECT (ARRAY[1, 2, 3])[4]",
                     "presto": "SELECT ELEMENT_AT(ARRAY[1, 2, 3], 4)",
                 },
-            )
-
-            self.assertEqual(
-                cm.output,
-                [
-                    "WARNING:sqlglot:Applying array index offset (-1)",
-                    "WARNING:sqlglot:Applying array index offset (1)",
-                    "WARNING:sqlglot:Applying array index offset (1)",
-                ],
             )
 
         self.validate_all(

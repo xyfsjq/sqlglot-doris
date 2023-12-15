@@ -8,6 +8,7 @@ from sqlglot import exp, generator, parser, tokens, transforms
 from sqlglot._typing import E
 from sqlglot.dialects.dialect import (
     Dialect,
+    NormalizationStrategy,
     arg_max_or_min_no_count,
     binary_from_function,
     date_add_interval_sql,
@@ -220,7 +221,7 @@ class BigQuery(Dialect):
     LOG_BASE_FIRST = False
 
     # https://cloud.google.com/bigquery/docs/reference/standard-sql/lexical#case_sensitivity
-    RESOLVES_IDENTIFIERS_AS_UPPERCASE = None
+    NORMALIZATION_STRATEGY = NormalizationStrategy.CASE_INSENSITIVE
 
     # bigquery udfs are case sensitive
     NORMALIZE_FUNCTIONS = False
@@ -259,8 +260,7 @@ class BigQuery(Dialect):
     # https://cloud.google.com/bigquery/docs/querying-partitioned-tables#query_an_ingestion-time_partitioned_table
     PSEUDOCOLUMNS = {"_PARTITIONTIME", "_PARTITIONDATE"}
 
-    @classmethod
-    def normalize_identifier(cls, expression: E) -> E:
+    def normalize_identifier(self, expression: E) -> E:
         if isinstance(expression, exp.Identifier):
             parent = expression.parent
             while isinstance(parent, exp.Dot):
@@ -411,6 +411,13 @@ class BigQuery(Dialect):
             TokenType.FOR: lambda self: self._parse_for_in(),
         }
 
+        BRACKET_OFFSETS = {
+            "OFFSET": (0, False),
+            "ORDINAL": (1, False),
+            "SAFE_OFFSET": (0, True),
+            "SAFE_ORDINAL": (1, True),
+        }
+
         def _parse_for_in(self) -> exp.ForIn:
             this = self._parse_range()
             self._match_text_seq("DO")
@@ -430,11 +437,7 @@ class BigQuery(Dialect):
             elif isinstance(this, exp.Literal):
                 table_name = this.name
 
-                if (
-                    self._curr
-                    and self._prev.end == self._curr.start - 1
-                    and self._parse_var(any_token=True)
-                ):
+                if self._is_connected() and self._parse_var(any_token=True):
                     table_name += self._prev.text
 
                 this = exp.Identifier(this=table_name, quoted=True)
@@ -476,6 +479,26 @@ class BigQuery(Dialect):
                 )
 
             return json_object
+
+        def _parse_bracket(self, this: t.Optional[exp.Expression]) -> t.Optional[exp.Expression]:
+            bracket = super()._parse_bracket(this)
+
+            if this is bracket:
+                return bracket
+
+            if isinstance(bracket, exp.Bracket):
+                for expression in bracket.expressions:
+                    name = expression.name.upper()
+
+                    if name not in self.BRACKET_OFFSETS:
+                        break
+
+                    offset, safe = self.BRACKET_OFFSETS[name]
+                    bracket.set("offset", offset)
+                    bracket.set("safe", safe)
+                    expression.replace(expression.expressions[0])
+
+            return bracket
 
     class Generator(generator.Generator):
         EXPLICIT_UNION = True
@@ -733,6 +756,23 @@ class BigQuery(Dialect):
                 return f"ARRAY{self.wrap(self.sql(first_arg))}"
 
             return inline_array_sql(self, expression)
+
+        def bracket_sql(self, expression: exp.Bracket) -> str:
+            expressions = expression.expressions
+            expressions_sql = ", ".join(self.sql(e) for e in expressions)
+            offset = expression.args.get("offset")
+
+            if offset == 0:
+                expressions_sql = f"OFFSET({expressions_sql})"
+            elif offset == 1:
+                expressions_sql = f"ORDINAL({expressions_sql})"
+            else:
+                self.unsupported(f"Unsupported array offset: {offset}")
+
+            if expression.args.get("safe"):
+                expressions_sql = f"SAFE_{expressions_sql}"
+
+            return f"{self.sql(expression, 'this')}[{expressions_sql}]"
 
         def transaction_sql(self, *_) -> str:
             return "BEGIN TRANSACTION"

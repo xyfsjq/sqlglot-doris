@@ -6,6 +6,7 @@ from sqlglot import exp, generator, parser, tokens, transforms
 from sqlglot._typing import E
 from sqlglot.dialects.dialect import (
     Dialect,
+    NormalizationStrategy,
     binary_from_function,
     date_delta_sql,
     date_trunc_to_time,
@@ -23,7 +24,6 @@ from sqlglot.dialects.dialect import (
 )
 from sqlglot.expressions import Literal
 from sqlglot.helper import seq_get
-from sqlglot.parser import binary_range_parser
 from sqlglot.tokens import TokenType
 
 
@@ -206,7 +206,7 @@ def _show_parser(*args: t.Any, **kwargs: t.Any) -> t.Callable[[Snowflake.Parser]
 
 class Snowflake(Dialect):
     # https://docs.snowflake.com/en/sql-reference/identifiers-syntax
-    RESOLVES_IDENTIFIERS_AS_UPPERCASE = True
+    NORMALIZATION_STRATEGY = NormalizationStrategy.UPPERCASE
     NULL_ORDERING = "nulls_are_large"
     TIME_FORMAT = "'YYYY-MM-DD HH24:MI:SS'"
     SUPPORTS_USER_DEFINED_TYPES = False
@@ -241,8 +241,7 @@ class Snowflake(Dialect):
         "ff6": "%f",
     }
 
-    @classmethod
-    def quote_identifier(cls, expression: E, identify: bool = True) -> E:
+    def quote_identifier(self, expression: E, identify: bool = True) -> E:
         # This disables quoting DUAL in SELECT ... FROM DUAL, because Snowflake treats an
         # unquoted DUAL keyword in a special way and does not map it to a user-defined table
         if (
@@ -323,8 +322,8 @@ class Snowflake(Dialect):
 
         RANGE_PARSERS = {
             **parser.Parser.RANGE_PARSERS,
-            TokenType.LIKE_ANY: binary_range_parser(exp.LikeAny),
-            TokenType.ILIKE_ANY: binary_range_parser(exp.ILikeAny),
+            TokenType.LIKE_ANY: parser.binary_range_parser(exp.LikeAny),
+            TokenType.ILIKE_ANY: parser.binary_range_parser(exp.ILikeAny),
         }
 
         ALTER_PARSERS = {
@@ -342,6 +341,11 @@ class Snowflake(Dialect):
         STATEMENT_PARSERS = {
             **parser.Parser.STATEMENT_PARSERS,
             TokenType.SHOW: lambda self: self._parse_show(),
+        }
+
+        PROPERTY_PARSERS = {
+            **parser.Parser.PROPERTY_PARSERS,
+            "LOCATION": lambda self: self._parse_location(),
         }
 
         SHOW_PARSERS = {
@@ -371,36 +375,58 @@ class Snowflake(Dialect):
 
             return lateral
 
+        def _parse_at_before(self, table: exp.Table) -> exp.Table:
+            # https://docs.snowflake.com/en/sql-reference/constructs/at-before
+            index = self._index
+            if self._match_texts(("AT", "BEFORE")):
+                this = self._prev.text.upper()
+                kind = (
+                    self._match(TokenType.L_PAREN)
+                    and self._match_texts(self.HISTORICAL_DATA_KIND)
+                    and self._prev.text.upper()
+                )
+                expression = self._match(TokenType.FARROW) and self._parse_bitwise()
+
+                if expression:
+                    self._match_r_paren()
+                    when = self.expression(
+                        exp.HistoricalData, this=this, kind=kind, expression=expression
+                    )
+                    table.set("when", when)
+                else:
+                    self._retreat(index)
+
+            return table
+
         def _parse_table_parts(self, schema: bool = False) -> exp.Table:
             # https://docs.snowflake.com/en/user-guide/querying-stage
-            table: t.Optional[exp.Expression] = None
-            if self._match_text_seq("@"):
-                table_name = "@"
-                while self._curr:
-                    self._advance()
-                    table_name += self._prev.text
-                    if not self._match_set(self.STAGED_FILE_SINGLE_TOKENS, advance=False):
-                        break
-                    while self._match_set(self.STAGED_FILE_SINGLE_TOKENS):
-                        table_name += self._prev.text
-
-                table = exp.var(table_name)
-            elif self._match(TokenType.STRING, advance=False):
+            if self._match(TokenType.STRING, advance=False):
                 table = self._parse_string()
+            elif self._match_text_seq("@", advance=False):
+                table = self._parse_location_path()
+            else:
+                table = None
 
             if table:
                 file_format = None
                 pattern = None
 
-                if self._match_text_seq("(", "FILE_FORMAT", "=>"):
-                    file_format = self._parse_string() or super()._parse_table_parts()
-                    if self._match_text_seq(",", "PATTERN", "=>"):
+                self._match(TokenType.L_PAREN)
+                while self._curr and not self._match(TokenType.R_PAREN):
+                    if self._match_text_seq("FILE_FORMAT", "=>"):
+                        file_format = self._parse_string() or super()._parse_table_parts()
+                    elif self._match_text_seq("PATTERN", "=>"):
                         pattern = self._parse_string()
-                    self._match_r_paren()
+                    else:
+                        break
 
-                return self.expression(exp.Table, this=table, format=file_format, pattern=pattern)
+                    self._match(TokenType.COMMA)
 
-            return super()._parse_table_parts(schema=schema)
+                table = self.expression(exp.Table, this=table, format=file_format, pattern=pattern)
+            else:
+                table = super()._parse_table_parts(schema=schema)
+
+            return self._parse_at_before(table)
 
         def _parse_id_var(
             self,
@@ -437,6 +463,20 @@ class Snowflake(Dialect):
         def _parse_alter_table_swap(self) -> exp.SwapTable:
             self._match_text_seq("WITH")
             return self.expression(exp.SwapTable, this=self._parse_table(schema=True))
+
+        def _parse_location(self) -> exp.LocationProperty:
+            self._match(TokenType.EQ)
+            return self.expression(exp.LocationProperty, this=self._parse_location_path())
+
+        def _parse_location_path(self) -> exp.Var:
+            parts = [self._advance_any(ignore_reserved=True)]
+
+            # We avoid consuming a comma token because external tables like @foo and @bar
+            # can be joined in a query with a comma separator.
+            while self._is_connected() and not self._match(TokenType.COMMA, advance=False):
+                parts.append(self._advance_any(ignore_reserved=True))
+
+            return exp.var("".join(part.text for part in parts if part))
 
     class Tokenizer(tokens.Tokenizer):
         STRING_ESCAPES = ["\\", "'"]
@@ -680,3 +720,6 @@ class Snowflake(Dialect):
         def swaptable_sql(self, expression: exp.SwapTable) -> str:
             this = self.sql(expression, "this")
             return f"SWAP WITH {this}"
+
+        def with_properties(self, properties: exp.Properties) -> str:
+            return self.properties(properties, wrapped=False, prefix=self.seg(""), sep=" ")

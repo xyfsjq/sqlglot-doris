@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import typing as t
-from enum import Enum
+from enum import Enum, auto
 from functools import reduce
 
 from sqlglot import exp
 from sqlglot._typing import E
 from sqlglot.errors import ParseError
 from sqlglot.generator import Generator
-from sqlglot.helper import flatten, seq_get
+from sqlglot.helper import AutoName, flatten, seq_get
 from sqlglot.parser import Parser
 from sqlglot.time import TIMEZONES, format_time
 from sqlglot.tokens import Token, Tokenizer, TokenType
@@ -21,11 +21,14 @@ DATE_ADD_OR_SUB = t.Union[exp.DateAdd, exp.TsOrDsAdd, exp.DateSub]
 
 
 class Dialects(str, Enum):
+    """Dialects supported by SQLGLot."""
+
     DIALECT = ""
 
     BIGQUERY = "bigquery"
     CLICKHOUSE = "clickhouse"
     DATABRICKS = "databricks"
+    DORIS = "doris"
     DRILL = "drill"
     DUCKDB = "duckdb"
     HIVE = "hive"
@@ -43,7 +46,22 @@ class Dialects(str, Enum):
     TERADATA = "teradata"
     TRINO = "trino"
     TSQL = "tsql"
-    Doris = "doris"
+
+
+class NormalizationStrategy(str, AutoName):
+    """Specifies the strategy according to which identifiers should be normalized."""
+
+    LOWERCASE = auto()
+    """Unquoted identifiers are lowercased."""
+
+    UPPERCASE = auto()
+    """Unquoted identifiers are uppercased."""
+
+    CASE_SENSITIVE = auto()
+    """Always case-sensitive, regardless of quotes."""
+
+    CASE_INSENSITIVE = auto()
+    """Always case-insensitive, regardless of quotes."""
 
 
 class _Dialect(type):
@@ -109,26 +127,8 @@ class _Dialect(type):
         klass.HEX_START, klass.HEX_END = get_start_end(TokenType.HEX_STRING)
         klass.BYTE_START, klass.BYTE_END = get_start_end(TokenType.BYTE_STRING)
 
-        dialect_properties = {
-            **{
-                k: v
-                for k, v in vars(klass).items()
-                if not callable(v) and not isinstance(v, classmethod) and not k.startswith("__")
-            },
-            "TOKENIZER_CLASS": klass.tokenizer_class,
-        }
-
         if enum not in ("", "bigquery"):
-            dialect_properties["SELECT_KINDS"] = ()
-
-        # Pass required dialect properties to the tokenizer, parser and generator classes
-        for subclass in (klass.tokenizer_class, klass.parser_class, klass.generator_class):
-            for name, value in dialect_properties.items():
-                if hasattr(subclass, name):
-                    setattr(subclass, name, value)
-
-        if not klass.STRICT_STRING_CONCAT and klass.DPIPE_IS_STRING_CONCAT:
-            klass.parser_class.BITWISE[TokenType.DPIPE] = exp.SafeDPipe
+            klass.generator_class.SELECT_KINDS = ()
 
         if not klass.SUPPORTS_SEMI_ANTI_JOIN:
             klass.parser_class.TABLE_ALIAS_TOKENS = klass.parser_class.TABLE_ALIAS_TOKENS | {
@@ -136,80 +136,88 @@ class _Dialect(type):
                 TokenType.SEMI,
             }
 
-        klass.generator_class.can_identify = klass.can_identify
-
         return klass
 
 
 class Dialect(metaclass=_Dialect):
-    # Determines the base index offset for arrays
     INDEX_OFFSET = 0
+    """Determines the base index offset for arrays."""
 
-    # If true unnest table aliases are considered only as column aliases
     UNNEST_COLUMN_ONLY = False
+    """Determines whether or not `UNNEST` table aliases are treated as column aliases."""
 
-    # Determines whether or not the table alias comes after tablesample
     ALIAS_POST_TABLESAMPLE = False
+    """Determines whether or not the table alias comes after tablesample."""
 
-    # Determines whether or not unquoted identifiers are resolved as uppercase
-    # When set to None, it means that the dialect treats all identifiers as case-insensitive
-    RESOLVES_IDENTIFIERS_AS_UPPERCASE: t.Optional[bool] = False
+    NORMALIZATION_STRATEGY = NormalizationStrategy.LOWERCASE
+    """Specifies the strategy according to which identifiers should be normalized."""
 
-    # Determines whether or not an unquoted identifier can start with a digit
     IDENTIFIERS_CAN_START_WITH_DIGIT = False
+    """Determines whether or not an unquoted identifier can start with a digit."""
 
-    # Determines whether or not the DPIPE token ('||') is a string concatenation operator
     DPIPE_IS_STRING_CONCAT = True
+    """Determines whether or not the DPIPE token (`||`) is a string concatenation operator."""
 
-    # Determines whether or not CONCAT's arguments must be strings
     STRICT_STRING_CONCAT = False
+    """Determines whether or not `CONCAT`'s arguments must be strings."""
 
-    # Determines whether or not user-defined data types are supported
     SUPPORTS_USER_DEFINED_TYPES = True
+    """Determines whether or not user-defined data types are supported."""
 
-    # Determines whether or not SEMI/ANTI JOINs are supported
     SUPPORTS_SEMI_ANTI_JOIN = True
+    """Determines whether or not `SEMI` or `ANTI` joins are supported."""
 
-    # Determines how function names are going to be normalized
     NORMALIZE_FUNCTIONS: bool | str = "upper"
+    """Determines how function names are going to be normalized."""
 
-    # Determines whether the base comes first in the LOG function
     LOG_BASE_FIRST = True
+    """Determines whether the base comes first in the `LOG` function."""
 
-    # Indicates the default null ordering method to use if not explicitly set
-    # Options are: "nulls_are_small", "nulls_are_large", "nulls_are_last"
     NULL_ORDERING = "nulls_are_small"
+    """
+    Indicates the default `NULL` ordering method to use if not explicitly set.
+    Possible values: `"nulls_are_small"`, `"nulls_are_large"`, `"nulls_are_last"`
+    """
 
-    # Whether the behavior of a / b depends on the types of a and b.
-    # False means a / b is always float division.
-    # True means a / b is integer division if both a and b are integers.
     TYPED_DIVISION = False
+    """
+    Whether the behavior of `a / b` depends on the types of `a` and `b`.
+    False means `a / b` is always float division.
+    True means `a / b` is integer division if both `a` and `b` are integers.
+    """
 
-    # False means 1 / 0 throws an error.
-    # True means 1 / 0 returns null.
     SAFE_DIVISION = False
+    """Determines whether division by zero throws an error (`False`) or returns NULL (`True`)."""
+
+    CONCAT_COALESCE = False
+    """A `NULL` arg in `CONCAT` yields `NULL` by default, but in some dialects it yields an empty string."""
 
     DATE_FORMAT = "'%Y-%m-%d'"
     DATEINT_FORMAT = "'%Y%m%d'"
     TIME_FORMAT = "'%Y-%m-%d %H:%M:%S'"
 
-    # Custom time mappings in which the key represents dialect time format
-    # and the value represents a python time format
     TIME_MAPPING: t.Dict[str, str] = {}
+    """Associates this dialect's time formats with their equivalent Python `strftime` format."""
 
     # https://cloud.google.com/bigquery/docs/reference/standard-sql/format-elements#format_model_rules_date_time
     # https://docs.teradata.com/r/Teradata-Database-SQL-Functions-Operators-Expressions-and-Predicates/March-2017/Data-Type-Conversions/Character-to-DATE-Conversion/Forcing-a-FORMAT-on-CAST-for-Converting-Character-to-DATE
-    # special syntax cast(x as date format 'yyyy') defaults to time_mapping
     FORMAT_MAPPING: t.Dict[str, str] = {}
+    """
+    Helper which is used for parsing the special syntax `CAST(x AS DATE FORMAT 'yyyy')`.
+    If empty, the corresponding trie will be constructed off of `TIME_MAPPING`.
+    """
 
-    # Mapping of an unescaped escape sequence to the corresponding character
     ESCAPE_SEQUENCES: t.Dict[str, str] = {}
+    """Mapping of an unescaped escape sequence to the corresponding character."""
 
-    # Columns that are auto-generated by the engine corresponding to this dialect
-    # Such columns may be excluded from SELECT * queries, for example
     PSEUDOCOLUMNS: t.Set[str] = set()
+    """
+    Columns that are auto-generated by the engine corresponding to this dialect.
+    For example, such columns may be excluded from `SELECT *` queries.
+    """
 
-    # Autofilled
+    # --- Autofilled ---
+
     tokenizer_class = Tokenizer
     parser_class = Parser
     generator_class = Generator
@@ -223,31 +231,67 @@ class Dialect(metaclass=_Dialect):
 
     INVERSE_ESCAPE_SEQUENCES: t.Dict[str, str] = {}
 
-    def __eq__(self, other: t.Any) -> bool:
-        return type(self) == other
+    # Delimiters for quotes, identifiers and the corresponding escape characters
+    QUOTE_START = "'"
+    QUOTE_END = "'"
+    IDENTIFIER_START = '"'
+    IDENTIFIER_END = '"'
 
-    def __hash__(self) -> int:
-        return hash(type(self))
+    # Delimiters for bit, hex and byte literals
+    BIT_START: t.Optional[str] = None
+    BIT_END: t.Optional[str] = None
+    HEX_START: t.Optional[str] = None
+    HEX_END: t.Optional[str] = None
+    BYTE_START: t.Optional[str] = None
+    BYTE_END: t.Optional[str] = None
 
     @classmethod
-    def get_or_raise(cls, dialect: DialectType) -> t.Type[Dialect]:
+    def get_or_raise(cls, dialect: DialectType) -> Dialect:
+        """
+        Look up a dialect in the global dialect registry and return it if it exists.
+
+        Args:
+            dialect: The target dialect. If this is a string, it can be optionally followed by
+                additional key-value pairs that are separated by commas and are used to specify
+                dialect settings, such as whether the dialect's identifiers are case-sensitive.
+
+        Example:
+            >>> dialect = dialect_class = get_or_raise("duckdb")
+            >>> dialect = get_or_raise("mysql, normalization_strategy = case_sensitive")
+
+        Returns:
+            The corresponding Dialect instance.
+        """
+
         if not dialect:
-            return cls
+            return cls()
         if isinstance(dialect, _Dialect):
-            return dialect
+            return dialect()
         if isinstance(dialect, Dialect):
-            return dialect.__class__
+            return dialect
+        if isinstance(dialect, str):
+            try:
+                dialect_name, *kv_pairs = dialect.split(",")
+                kwargs = {k.strip(): v.strip() for k, v in (kv.split("=") for kv in kv_pairs)}
+            except ValueError:
+                raise ValueError(
+                    f"Invalid dialect format: '{dialect}'. "
+                    "Please use the correct format: 'dialect [, k1 = v2 [, ...]]'."
+                )
 
-        result = cls.get(dialect)
-        if not result:
-            raise ValueError(f"Unknown dialect '{dialect}'")
+            result = cls.get(dialect_name.strip())
+            if not result:
+                raise ValueError(f"Unknown dialect '{dialect_name}'.")
 
-        return result
+            return result(**kwargs)
+
+        raise ValueError(f"Invalid dialect type for '{dialect}': '{type(dialect)}'.")
 
     @classmethod
     def format_time(
         cls, expression: t.Optional[str | exp.Expression]
     ) -> t.Optional[exp.Expression]:
+        """Converts a time format in this dialect to its equivalent Python `strftime` format."""
         if isinstance(expression, str):
             return exp.Literal.string(
                 # the time formats are quoted
@@ -259,43 +303,78 @@ class Dialect(metaclass=_Dialect):
 
         return expression
 
-    @classmethod
-    def normalize_identifier(cls, expression: E) -> E:
+    def __init__(self, **kwargs) -> None:
+        normalization_strategy = kwargs.get("normalization_strategy")
+
+        if normalization_strategy is None:
+            self.normalization_strategy = self.NORMALIZATION_STRATEGY
+        else:
+            self.normalization_strategy = NormalizationStrategy(normalization_strategy.upper())
+
+    def __eq__(self, other: t.Any) -> bool:
+        # Does not currently take dialect state into account
+        return type(self) == other
+
+    def __hash__(self) -> int:
+        # Does not currently take dialect state into account
+        return hash(type(self))
+
+    def normalize_identifier(self, expression: E) -> E:
         """
-        Normalizes an unquoted identifier to either lower or upper case, thus essentially
-        making it case-insensitive. If a dialect treats all identifiers as case-insensitive,
-        they will be normalized to lowercase regardless of being quoted or not.
+        Transforms an identifier in a way that resembles how it'd be resolved by this dialect.
+
+        For example, an identifier like `FoO` would be resolved as `foo` in Postgres, because it
+        lowercases all unquoted identifiers. On the other hand, Snowflake uppercases them, so
+        it would resolve it as `FOO`. If it was quoted, it'd need to be treated as case-sensitive,
+        and so any normalization would be prohibited in order to avoid "breaking" the identifier.
+
+        There are also dialects like Spark, which are case-insensitive even when quotes are
+        present, and dialects like MySQL, whose resolution rules match those employed by the
+        underlying operating system, for example they may always be case-sensitive in Linux.
+
+        Finally, the normalization behavior of some engines can even be controlled through flags,
+        like in Redshift's case, where users can explicitly set enable_case_sensitive_identifier.
+
+        SQLGlot aims to understand and handle all of these different behaviors gracefully, so
+        that it can analyze queries in the optimizer and successfully capture their semantics.
         """
-        if isinstance(expression, exp.Identifier) and (
-            not expression.quoted or cls.RESOLVES_IDENTIFIERS_AS_UPPERCASE is None
+        if (
+            isinstance(expression, exp.Identifier)
+            and not self.normalization_strategy is NormalizationStrategy.CASE_SENSITIVE
+            and (
+                not expression.quoted
+                or self.normalization_strategy is NormalizationStrategy.CASE_INSENSITIVE
+            )
         ):
             expression.set(
                 "this",
                 expression.this.upper()
-                if cls.RESOLVES_IDENTIFIERS_AS_UPPERCASE
+                if self.normalization_strategy is NormalizationStrategy.UPPERCASE
                 else expression.this.lower(),
             )
 
         return expression
 
-    @classmethod
-    def case_sensitive(cls, text: str) -> bool:
+    def case_sensitive(self, text: str) -> bool:
         """Checks if text contains any case sensitive characters, based on the dialect's rules."""
-        if cls.RESOLVES_IDENTIFIERS_AS_UPPERCASE is None:
+        if self.normalization_strategy is NormalizationStrategy.CASE_INSENSITIVE:
             return False
 
-        unsafe = str.islower if cls.RESOLVES_IDENTIFIERS_AS_UPPERCASE else str.isupper
+        unsafe = (
+            str.islower
+            if self.normalization_strategy is NormalizationStrategy.UPPERCASE
+            else str.isupper
+        )
         return any(unsafe(char) for char in text)
 
-    @classmethod
-    def can_identify(cls, text: str, identify: str | bool = "safe") -> bool:
+    def can_identify(self, text: str, identify: str | bool = "safe") -> bool:
         """Checks if text can be identified given an identify option.
 
         Args:
             text: The text to check.
             identify:
-                "always" or `True`: Always returns true.
-                "safe": True if the identifier is case-insensitive.
+                `"always"` or `True`: Always returns `True`.
+                `"safe"`: Only returns `True` if the identifier is case-insensitive.
 
         Returns:
             Whether or not the given text can be identified.
@@ -304,17 +383,24 @@ class Dialect(metaclass=_Dialect):
             return True
 
         if identify == "safe":
-            return not cls.case_sensitive(text)
+            return not self.case_sensitive(text)
 
         return False
 
-    @classmethod
-    def quote_identifier(cls, expression: E, identify: bool = True) -> E:
+    def quote_identifier(self, expression: E, identify: bool = True) -> E:
+        """
+        Adds quotes to a given identifier.
+
+        Args:
+            expression: The expression of interest. If it's not an `Identifier`, this method is a no-op.
+            identify: If set to `False`, the quotes will only be added if the identifier is deemed
+                "unsafe", with respect to its characters and this dialect's normalization strategy.
+        """
         if isinstance(expression, exp.Identifier):
             name = expression.this
             expression.set(
                 "quoted",
-                identify or cls.case_sensitive(name) or not exp.SAFE_IDENTIFIER_RE.match(name),
+                identify or self.case_sensitive(name) or not exp.SAFE_IDENTIFIER_RE.match(name),
             )
 
         return expression
@@ -342,14 +428,14 @@ class Dialect(metaclass=_Dialect):
     @property
     def tokenizer(self) -> Tokenizer:
         if not hasattr(self, "_tokenizer"):
-            self._tokenizer = self.tokenizer_class()
+            self._tokenizer = self.tokenizer_class(dialect=self)
         return self._tokenizer
 
     def parser(self, **opts) -> Parser:
-        return self.parser_class(**opts)
+        return self.parser_class(dialect=self, **opts)
 
     def generator(self, **opts) -> Generator:
-        return self.generator_class(**opts)
+        return self.generator_class(dialect=self, **opts)
 
 
 DialectType = t.Union[str, Dialect, t.Type[Dialect], None]
@@ -731,7 +817,7 @@ def ts_or_ds_to_date_sql(dialect: str) -> t.Callable:
     return _ts_or_ds_to_date_sql
 
 
-def concat_to_dpipe_sql(self: Generator, expression: exp.Concat | exp.SafeConcat) -> str:
+def concat_to_dpipe_sql(self: Generator, expression: exp.Concat) -> str:
     return self.sql(reduce(lambda x, y: exp.DPipe(this=x, expression=y), expression.expressions))
 
 

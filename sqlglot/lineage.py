@@ -29,8 +29,38 @@ class Node:
             else:
                 yield d
 
-    def to_html(self, **opts) -> LineageHTML:
-        return LineageHTML(self, **opts)
+    def to_html(self, dialect: DialectType = None, **opts) -> GraphHTML:
+        nodes = {}
+        edges = []
+
+        for node in self.walk():
+            if isinstance(node.expression, exp.Table):
+                label = f"FROM {node.expression.this}"
+                title = f"<pre>SELECT {node.name} FROM {node.expression.this}</pre>"
+                group = 1
+            else:
+                label = node.expression.sql(pretty=True, dialect=dialect)
+                source = node.source.transform(
+                    lambda n: exp.Tag(this=n, prefix="<b>", postfix="</b>")
+                    if n is node.expression
+                    else n,
+                    copy=False,
+                ).sql(pretty=True, dialect=dialect)
+                title = f"<pre>{source}</pre>"
+                group = 0
+
+            node_id = id(node)
+
+            nodes[node_id] = {
+                "id": node_id,
+                "label": label,
+                "title": title,
+                "group": group,
+            }
+
+            for d in node.downstream:
+                edges.append({"from": node_id, "to": id(d)})
+        return GraphHTML(nodes, edges, **opts)
 
 
 def lineage(
@@ -194,20 +224,15 @@ def lineage(
     return to_node(column if isinstance(column, str) else column.name, scope)
 
 
-class LineageHTML:
+class GraphHTML:
     """Node to HTML generator using vis.js.
 
     https://visjs.github.io/vis-network/docs/network/
     """
 
     def __init__(
-        self,
-        node: Node,
-        dialect: DialectType = None,
-        imports: bool = True,
-        **opts: t.Any,
+        self, nodes: t.Dict, edges: t.List, imports: bool = True, options: t.Optional[t.Dict] = None
     ):
-        self.node = node
         self.imports = imports
 
         self.options = {
@@ -237,39 +262,11 @@ class LineageHTML:
                     "maximum": 300,
                 },
             },
-            **opts,
+            **(options or {}),
         }
 
-        self.nodes = {}
-        self.edges = []
-
-        for node in node.walk():
-            if isinstance(node.expression, exp.Table):
-                label = f"FROM {node.expression.this}"
-                title = f"<pre>SELECT {node.name} FROM {node.expression.this}</pre>"
-                group = 1
-            else:
-                label = node.expression.sql(pretty=True, dialect=dialect)
-                source = node.source.transform(
-                    lambda n: exp.Tag(this=n, prefix="<b>", postfix="</b>")
-                    if n is node.expression
-                    else n,
-                    copy=False,
-                ).sql(pretty=True, dialect=dialect)
-                title = f"<pre>{source}</pre>"
-                group = 0
-
-            node_id = id(node)
-
-            self.nodes[node_id] = {
-                "id": node_id,
-                "label": label,
-                "title": title,
-                "group": group,
-            }
-
-            for d in node.downstream:
-                self.edges.append({"from": node_id, "to": id(d)})
+        self.nodes = nodes
+        self.edges = edges
 
     def __str__(self):
         nodes = json.dumps(list(self.nodes.values()))

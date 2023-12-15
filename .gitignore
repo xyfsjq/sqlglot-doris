@@ -141,4 +141,8 @@ spark_warehouse
 # Version file
 sqlglot/_version.py
 
-sqlglot/dialects/test.py
+# Emacs files
+*~
+
+# Auto-generated files
+sqlglotrs/src/token_type.rs

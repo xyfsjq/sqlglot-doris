@@ -533,22 +533,24 @@ def _simplify_binary(expression, a, b):
         return exp.null()
 
     if a.is_number and b.is_number:
-        a = int(a.name) if a.is_int else Decimal(a.name)
-        b = int(b.name) if b.is_int else Decimal(b.name)
+        num_a = int(a.name) if a.is_int else Decimal(a.name)
+        num_b = int(b.name) if b.is_int else Decimal(b.name)
 
         if isinstance(expression, exp.Add):
-            return exp.Literal.number(a + b)
-        if isinstance(expression, exp.Sub):
-            return exp.Literal.number(a - b)
+            return exp.Literal.number(num_a + num_b)
         if isinstance(expression, exp.Mul):
-            return exp.Literal.number(a * b)
+            return exp.Literal.number(num_a * num_b)
+
+        # We only simplify Sub, Div if a and b have the same parent because they're not associative
+        if isinstance(expression, exp.Sub):
+            return exp.Literal.number(num_a - num_b) if a.parent is b.parent else None
         if isinstance(expression, exp.Div):
             # engines have differing int div behavior so intdiv is not safe
-            if isinstance(a, int) and isinstance(b, int):
+            if (isinstance(num_a, int) and isinstance(num_b, int)) or a.parent is not b.parent:
                 return None
-            return exp.Literal.number(a / b)
+            return exp.Literal.number(num_a / num_b)
 
-        boolean = eval_boolean(expression, a, b)
+        boolean = eval_boolean(expression, num_a, num_b)
 
         if boolean:
             return boolean
@@ -678,7 +680,6 @@ def simplify_coalesce(expression):
 
 
 CONCATS = (exp.Concat, exp.DPipe)
-SAFE_CONCATS = (exp.SafeConcat, exp.SafeDPipe)
 
 
 def simplify_concat(expression):
@@ -694,10 +695,15 @@ def simplify_concat(expression):
         sep_expr, *expressions = expression.expressions
         sep = sep_expr.name
         concat_type = exp.ConcatWs
+        args = {}
     else:
         expressions = expression.expressions
         sep = ""
-        concat_type = exp.SafeConcat if isinstance(expression, SAFE_CONCATS) else exp.Concat
+        concat_type = exp.Concat
+        args = {
+            "safe": expression.args.get("safe"),
+            "coalesce": expression.args.get("coalesce"),
+        }
 
     new_args = []
     for is_string_group, group in itertools.groupby(
@@ -714,7 +720,7 @@ def simplify_concat(expression):
     if concat_type is exp.ConcatWs:
         new_args = [sep_expr] + new_args
 
-    return concat_type(expressions=new_args)
+    return concat_type(expressions=new_args, **args)
 
 
 def simplify_conditionals(expression):
@@ -1120,8 +1126,6 @@ GEN_MAP = {
     exp.DataType: lambda e: f"{e.this.name} {gen(tuple(e.args.values())[1:])}",
     exp.Div: lambda e: _binary(e, "/"),
     exp.Dot: lambda e: _binary(e, "."),
-    exp.DPipe: lambda e: _binary(e, "||"),
-    exp.SafeDPipe: lambda e: _binary(e, "||"),
     exp.EQ: lambda e: _binary(e, "="),
     exp.GT: lambda e: _binary(e, ">"),
     exp.GTE: lambda e: _binary(e, ">="),

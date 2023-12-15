@@ -290,11 +290,6 @@ class TestExecutor(unittest.TestCase):
                 [(1,), (2,), (3,)],
             ),
             (
-                "SELECT 1 AS a UNION SELECT 2 AS a UNION SELECT 3 AS a",
-                ["a"],
-                [(1,), (2,), (3,)],
-            ),
-            (
                 "SELECT 1 / 2 AS a",
                 ["a"],
                 [
@@ -319,6 +314,11 @@ class TestExecutor(unittest.TestCase):
                 [
                     (None,),
                 ],
+            ),
+            (
+                "SELECT a FROM x UNION ALL SELECT a FROM x LIMIT 1",
+                ["a"],
+                [("a",)],
             ),
         ]:
             with self.subTest(sql):

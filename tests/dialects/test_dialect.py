@@ -10,7 +10,7 @@ from sqlglot import (
     exp,
     parse_one,
 )
-from sqlglot.dialects import Hive
+from sqlglot.dialects import BigQuery, Hive, Snowflake
 
 
 class Validator(unittest.TestCase):
@@ -79,9 +79,56 @@ class TestDialect(Validator):
             self.assertIsNotNone(Dialect[dialect.value])
 
     def test_get_or_raise(self):
-        self.assertEqual(Dialect.get_or_raise(Hive), Hive)
-        self.assertEqual(Dialect.get_or_raise(Hive()), Hive)
-        self.assertEqual(Dialect.get_or_raise("hive"), Hive)
+        self.assertIsInstance(Dialect.get_or_raise(Hive), Hive)
+        self.assertIsInstance(Dialect.get_or_raise(Hive()), Hive)
+        self.assertIsInstance(Dialect.get_or_raise("hive"), Hive)
+
+        with self.assertRaises(ValueError):
+            Dialect.get_or_raise(1)
+
+        default_mysql = Dialect.get_or_raise("mysql")
+        self.assertEqual(default_mysql.normalization_strategy, "CASE_SENSITIVE")
+
+        lowercase_mysql = Dialect.get_or_raise("mysql,normalization_strategy=lowercase")
+        self.assertEqual(lowercase_mysql.normalization_strategy, "LOWERCASE")
+
+        lowercase_mysql = Dialect.get_or_raise("mysql, normalization_strategy = lowercase")
+        self.assertEqual(lowercase_mysql.normalization_strategy.value, "LOWERCASE")
+
+        with self.assertRaises(ValueError) as cm:
+            Dialect.get_or_raise("mysql, normalization_strategy")
+
+        self.assertEqual(
+            str(cm.exception),
+            "Invalid dialect format: 'mysql, normalization_strategy'. "
+            "Please use the correct format: 'dialect [, k1 = v2 [, ...]]'.",
+        )
+
+    def test_compare_dialects(self):
+        bigquery_class = Dialect["bigquery"]
+        bigquery_object = BigQuery()
+        bigquery_string = "bigquery"
+
+        snowflake_class = Dialect["snowflake"]
+        snowflake_object = Snowflake()
+        snowflake_string = "snowflake"
+
+        self.assertEqual(snowflake_class, snowflake_class)
+        self.assertEqual(snowflake_class, snowflake_object)
+        self.assertEqual(snowflake_class, snowflake_string)
+        self.assertEqual(snowflake_object, snowflake_object)
+        self.assertEqual(snowflake_object, snowflake_string)
+
+        self.assertNotEqual(snowflake_class, bigquery_class)
+        self.assertNotEqual(snowflake_class, bigquery_object)
+        self.assertNotEqual(snowflake_class, bigquery_string)
+        self.assertNotEqual(snowflake_object, bigquery_object)
+        self.assertNotEqual(snowflake_object, bigquery_string)
+
+        self.assertTrue(snowflake_class in {"snowflake", "bigquery"})
+        self.assertTrue(snowflake_object in {"snowflake", "bigquery"})
+        self.assertFalse(snowflake_class in {"bigquery", "redshift"})
+        self.assertFalse(snowflake_object in {"bigquery", "redshift"})
 
     def test_cast(self):
         self.validate_all(
@@ -1310,35 +1357,37 @@ class TestDialect(Validator):
         self.validate_all(
             "CONCAT_WS('-', 'a', 'b')",
             write={
+                "clickhouse": "CONCAT_WS('-', 'a', 'b')",
                 "duckdb": "CONCAT_WS('-', 'a', 'b')",
-                "presto": "CONCAT_WS('-', 'a', 'b')",
+                "presto": "CONCAT_WS('-', CAST('a' AS VARCHAR), CAST('b' AS VARCHAR))",
                 "hive": "CONCAT_WS('-', 'a', 'b')",
                 "spark": "CONCAT_WS('-', 'a', 'b')",
-                "trino": "CONCAT_WS('-', 'a', 'b')",
+                "trino": "CONCAT_WS('-', CAST('a' AS VARCHAR), CAST('b' AS VARCHAR))",
             },
         )
 
         self.validate_all(
             "CONCAT_WS('-', x)",
             write={
+                "clickhouse": "CONCAT_WS('-', x)",
                 "duckdb": "CONCAT_WS('-', x)",
                 "hive": "CONCAT_WS('-', x)",
-                "presto": "CONCAT_WS('-', x)",
+                "presto": "CONCAT_WS('-', CAST(x AS VARCHAR))",
                 "spark": "CONCAT_WS('-', x)",
-                "trino": "CONCAT_WS('-', x)",
+                "trino": "CONCAT_WS('-', CAST(x AS VARCHAR))",
             },
         )
         self.validate_all(
             "CONCAT(a)",
             write={
-                "clickhouse": "a",
-                "presto": "a",
-                "trino": "a",
+                "clickhouse": "CONCAT(a)",
+                "presto": "CAST(a AS VARCHAR)",
+                "trino": "CAST(a AS VARCHAR)",
                 "tsql": "a",
             },
         )
         self.validate_all(
-            "COALESCE(CAST(a AS TEXT), '')",
+            "CONCAT(COALESCE(a, ''))",
             read={
                 "drill": "CONCAT(a)",
                 "duckdb": "CONCAT(a)",

@@ -160,7 +160,13 @@ LIMIT 100
 
 
 def sqlglot_parse(sql):
-    sqlglot.parse(sql, error_level=sqlglot.ErrorLevel.IGNORE)
+    sqlglot.tokens.USE_RS_TOKENIZER = False
+    sqlglot.parse_one(sql, error_level=sqlglot.ErrorLevel.IGNORE)
+
+
+def sqlglotrs_parse(sql):
+    sqlglot.tokens.USE_RS_TOKENIZER = True
+    sqlglot.parse_one(sql, error_level=sqlglot.ErrorLevel.IGNORE)
 
 
 def sqltree_parse(sql):
@@ -199,6 +205,7 @@ def diff(row, column):
 
 libs = [
     "sqlglot",
+    "sqlglotrs",
     #"sqlfluff",
     "sqltree",
     #"sqlparse",

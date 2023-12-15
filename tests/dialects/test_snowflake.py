@@ -6,9 +6,11 @@ from tests.dialects.test_dialect import Validator
 
 
 class TestSnowflake(Validator):
+    maxDiff = None
     dialect = "snowflake"
 
     def test_snowflake(self):
+        self.validate_identity("SELECT rename, replace")
         expr = parse_one("SELECT APPROX_TOP_K(C4, 3, 5) FROM t")
         expr.selects[0].assert_is(exp.AggFunc)
         self.assertEqual(expr.sql(dialect="snowflake"), "SELECT APPROX_TOP_K(C4, 3, 5) FROM t")
@@ -69,6 +71,18 @@ WHERE
         self.validate_identity("ALTER TABLE a SWAP WITH b")
         self.validate_identity(
             'DESCRIBE TABLE "SNOWFLAKE_SAMPLE_DATA"."TPCDS_SF100TCL"."WEB_SITE" type=stage'
+        )
+        self.validate_identity(
+            "SELECT * FROM foo at",
+            "SELECT * FROM foo AS at",
+        )
+        self.validate_identity(
+            "SELECT * FROM foo before",
+            "SELECT * FROM foo AS before",
+        )
+        self.validate_identity(
+            "SELECT * FROM foo at (col)",
+            "SELECT * FROM foo AS at(col)",
         )
         self.validate_identity(
             "SELECT * FROM unnest(x) with ordinality",
@@ -624,6 +638,10 @@ WHERE
             "SELECT * FROM @mystage t (c1)",
             "SELECT * FROM @mystage AS t(c1)",
         )
+        self.validate_identity(
+            "SELECT * FROM @foo/bar (PATTERN => 'test', FILE_FORMAT => ds_sandbox.test.my_csv_format) AS bla",
+            "SELECT * FROM @foo/bar (FILE_FORMAT => ds_sandbox.test.my_csv_format, PATTERN => 'test') AS bla",
+        )
 
     def test_sample(self):
         self.validate_identity("SELECT * FROM testtable TABLESAMPLE BERNOULLI (20.3)")
@@ -773,7 +791,65 @@ WHERE
             },
         )
 
+    def test_historical_data(self):
+        self.validate_identity("SELECT * FROM my_table AT (STATEMENT => $query_id_var)")
+        self.validate_identity("SELECT * FROM my_table AT (OFFSET => -60 * 5)")
+        self.validate_identity("SELECT * FROM my_table BEFORE (STATEMENT => $query_id_var)")
+        self.validate_identity("SELECT * FROM my_table BEFORE (OFFSET => -60 * 5)")
+        self.validate_identity("CREATE SCHEMA restored_schema CLONE my_schema AT (OFFSET => -3600)")
+        self.validate_identity(
+            "CREATE TABLE restored_table CLONE my_table AT (TIMESTAMP => CAST('Sat, 09 May 2015 01:01:00 +0300' AS TIMESTAMPTZ))",
+        )
+        self.validate_identity(
+            "CREATE DATABASE restored_db CLONE my_db BEFORE (STATEMENT => '8e5d0ca9-005e-44e6-b858-a8f5b37c5726')"
+        )
+        self.validate_identity(
+            "SELECT * FROM my_table AT (TIMESTAMP => TO_TIMESTAMP(1432669154242, 3))"
+        )
+        self.validate_identity(
+            "SELECT * FROM my_table AT (OFFSET => -60 * 5) AS T WHERE T.flag = 'valid'"
+        )
+        self.validate_identity(
+            "SELECT * FROM my_table AT (STATEMENT => '8e5d0ca9-005e-44e6-b858-a8f5b37c5726')"
+        )
+        self.validate_identity(
+            "SELECT * FROM my_table BEFORE (STATEMENT => '8e5d0ca9-005e-44e6-b858-a8f5b37c5726')"
+        )
+        self.validate_identity(
+            "SELECT * FROM my_table AT (TIMESTAMP => 'Fri, 01 May 2015 16:20:00 -0700'::timestamp)",
+            "SELECT * FROM my_table AT (TIMESTAMP => CAST('Fri, 01 May 2015 16:20:00 -0700' AS TIMESTAMPNTZ))",
+        )
+        self.validate_identity(
+            "SELECT * FROM my_table AT(TIMESTAMP => 'Fri, 01 May 2015 16:20:00 -0700'::timestamp_tz)",
+            "SELECT * FROM my_table AT (TIMESTAMP => CAST('Fri, 01 May 2015 16:20:00 -0700' AS TIMESTAMPTZ))",
+        )
+        self.validate_identity(
+            "SELECT * FROM my_table BEFORE (TIMESTAMP => 'Fri, 01 May 2015 16:20:00 -0700'::timestamp_tz);",
+            "SELECT * FROM my_table BEFORE (TIMESTAMP => CAST('Fri, 01 May 2015 16:20:00 -0700' AS TIMESTAMPTZ))",
+        )
+        self.validate_identity(
+            """
+            SELECT oldt.* , newt.*
+            FROM my_table BEFORE(STATEMENT => '8e5d0ca9-005e-44e6-b858-a8f5b37c5726') AS oldt
+            FULL OUTER JOIN my_table AT(STATEMENT => '8e5d0ca9-005e-44e6-b858-a8f5b37c5726') AS newt
+            ON oldt.id = newt.id
+            WHERE oldt.id IS NULL OR newt.id IS NULL;
+            """,
+            "SELECT oldt.*, newt.* FROM my_table BEFORE (STATEMENT => '8e5d0ca9-005e-44e6-b858-a8f5b37c5726') AS oldt FULL OUTER JOIN my_table AT (STATEMENT => '8e5d0ca9-005e-44e6-b858-a8f5b37c5726') AS newt ON oldt.id = newt.id WHERE oldt.id IS NULL OR newt.id IS NULL",
+        )
+
     def test_ddl(self):
+        self.validate_identity(
+            """create external table et2(
+  col1 date as (parse_json(metadata$external_table_partition):COL1::date),
+  col2 varchar as (parse_json(metadata$external_table_partition):COL2::varchar),
+  col3 number as (parse_json(metadata$external_table_partition):COL3::number))
+  partition by (col1,col2,col3)
+  location=@s2/logs/
+  partition_type = user_specified
+  file_format = (type = parquet)""",
+            "CREATE EXTERNAL TABLE et2 (col1 DATE AS (CAST(PARSE_JSON(metadata$external_table_partition)['COL1'] AS DATE)), col2 VARCHAR AS (CAST(PARSE_JSON(metadata$external_table_partition)['COL2'] AS VARCHAR)), col3 DECIMAL AS (CAST(PARSE_JSON(metadata$external_table_partition)['COL3'] AS DECIMAL))) LOCATION @s2/logs/ PARTITION BY (col1, col2, col3) partition_type=user_specified file_format=(type = parquet)",
+        )
         self.validate_identity("CREATE OR REPLACE VIEW foo (uid) COPY GRANTS AS (SELECT 1)")
         self.validate_identity("CREATE TABLE geospatial_table (id INT, g GEOGRAPHY)")
         self.validate_identity("CREATE MATERIALIZED VIEW a COMMENT='...' AS SELECT 1 FROM x")
@@ -788,7 +864,7 @@ WHERE
             "CREATE TABLE orders_clone_restore CLONE orders BEFORE (STATEMENT => '8e5d0ca9-005e-44e6-b858-a8f5b37c5726')"
         )
         self.validate_identity(
-            "CREATE TABLE a (x DATE, y BIGINT) WITH (PARTITION BY (x), integration='q', auto_refresh=TRUE, file_format=(type = parquet))"
+            "CREATE TABLE a (x DATE, y BIGINT) PARTITION BY (x) integration='q' auto_refresh=TRUE file_format=(type = parquet)"
         )
         self.validate_identity(
             "CREATE SCHEMA mytestschema_clone_restore CLONE testschema BEFORE (TIMESTAMP => TO_TIMESTAMP(40 * 365 * 86400))"
