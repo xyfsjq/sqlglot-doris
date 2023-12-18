@@ -5055,9 +5055,11 @@ class ParseJSON(Func):
     arg_types = {"this": True, "expressions": False}
     is_var_len_args = True
 
+
 class JsonArrayLength(Func):
     _sql_names = ["JSON_ARRAY_LENGTH"]
     arg_types = {"this": True, "expressions": False}
+
 
 class Least(Func):
     arg_types = {"this": True, "expressions": False}

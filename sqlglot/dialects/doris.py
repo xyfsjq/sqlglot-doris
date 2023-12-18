@@ -93,7 +93,7 @@ def handle_array_concat(self, expression: exp.ArrayStringConcat) -> str:
 
 
 def handle_geography(
-    self, expression: exp.StAstext
+        self, expression: exp.StAstext
 ) -> str:  # Realize the identification of geography
     this = self.sql(expression, "this").upper()
     match = re.search(r"POINT\(([-\d.]+) ([-\d.]+)\)", this)
@@ -291,8 +291,9 @@ class Doris(MySQL):
             exp.ArrayAgg: rename_func("COLLECT_LIST"),
             exp.ArrayStringConcat: handle_array_concat,
             exp.ArrayToString: lambda self, e: f"ARRAY_JOIN({self.sql(e, 'this')},{self.sql(e, 'sep')}"
-            + (f",{self.sql(e, 'null_replace')}" if self.sql(e, "null_replace") else "")
-            + ")",
+                                               + (f",{self.sql(e, 'null_replace')}" if self.sql(e,
+                                                                                                "null_replace") else "")
+                                               + ")",
             exp.ArrayFilter: lambda self, e: f"ARRAY_FILTER({self.sql(e, 'expression')},{self.sql(e, 'this')})",
             exp.ArrayUniq: lambda self, e: f"SIZE(ARRAY_DISTINCT({self.sql(e, 'this')}))",
             exp.ArrayOverlaps: rename_func("ARRAYS_OVERLAP"),
@@ -310,6 +311,7 @@ class Doris(MySQL):
             exp.DateTrunc: handle_date_trunc,
             exp.DateTrunc_oracle: handle_date_trunc,
             # exp.Explode: rename_func("LATERAL VIEW EXPLODE"),
+            exp.Filter: handle_filter,
             exp.GroupBitmap: lambda self, e: f"BITMAP_COUNT(BITMAP_AGG({self.sql(e, 'this')}))",
             exp.GroupBitmapAnd: lambda self, e: f"BITMAP_COUNT(BITMAP_INTERSECT({self.sql(e, 'this')}))",
             exp.GroupBitmapOr: lambda self, e: f"BITMAP_COUNT(BITMAP_UNION({self.sql(e, 'this')}))",
@@ -319,7 +321,8 @@ class Doris(MySQL):
             exp.JSONBExtract: arrow_jsonb_extract_sql,
             exp.JSONBExtractScalar: arrow_jsonb_extract_scalar_sql,
             exp.JSON_EXISTS_PATH: rename_func("JSON_EXISTS_PATH"),
-            exp.JSONArrayContains: lambda self, e: f"JSON_CONTAINS({self.sql(e, 'this')},'{self.sql(e,'expression')}')",
+            exp.JSONArrayContains: lambda self,
+                                          e: f"JSON_CONTAINS({self.sql(e, 'this')},'{self.sql(e, 'expression')}')",
             exp.ParseJSON: rename_func("JSON_PARSE"),
             exp.JsonArrayLength: rename_func("JSON_LENGTH"),
             exp.LastDateOfMonth: rename_func("LAST_DAY"),
@@ -348,7 +351,8 @@ class Doris(MySQL):
             exp.StAstext: handle_geography,
             exp.TimeStrToDate: rename_func("TO_DATE"),
             # exp.ToChar: handle_to_char,
-            exp.TsOrDsAdd: lambda self, e: f"DATE_ADD({self.sql(e, 'this')}, INTERVAL {self.sql(e, 'expression')} {self.sql(e, 'unit')})",
+            exp.TsOrDsAdd: lambda self,
+                                  e: f"DATE_ADD({self.sql(e, 'this')}, INTERVAL {self.sql(e, 'expression')} {self.sql(e, 'unit')})",
             exp.TsOrDsToDate: lambda self, e: f"CAST({self.sql(e, 'this')} AS DATE)",
             exp.TimeStrToUnix: rename_func("UNIX_TIMESTAMP"),
             exp.TimeToUnix: rename_func("UNIX_TIMESTAMP"),
@@ -374,8 +378,7 @@ class Doris(MySQL):
             exp.UnixToTime: rename_func("FROM_UNIXTIME"),
             exp.QuartersAdd: lambda self, e: f"MONTHS_ADD({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
             exp.QuartersSub: lambda self, e: f"MONTHS_SUB({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
-            exp.Filter: handle_filter,
-            # exp.Struct: lambda self, e: f"$({self.sql(e, 'expression')})",
+
         }
 
         def currentdate_sql(self, expression: exp.CurrentDate) -> str:
