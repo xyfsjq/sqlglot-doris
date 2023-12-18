@@ -203,6 +203,8 @@ class TestPostgres(Validator):
         self.validate_identity("SELECT 1 OPERATOR(pg_catalog.+) 2")
 
     def test_postgres(self):
+        self.validate_identity("EXEC AS myfunc @id = 123")
+
         expr = parse_one(
             "SELECT * FROM r CROSS JOIN LATERAL UNNEST(ARRAY[1]) AS s(location)", read="postgres"
         )
@@ -767,26 +769,23 @@ class TestPostgres(Validator):
         )
 
     def test_string_concat(self):
-        self.validate_all(
-            "SELECT CONCAT('abcde', 2, NULL, 22)",
-            write={
-                "postgres": "SELECT CONCAT(COALESCE(CAST('abcde' AS TEXT), ''), COALESCE(CAST(2 AS TEXT), ''), COALESCE(CAST(NULL AS TEXT), ''), COALESCE(CAST(22 AS TEXT), ''))",
-            },
-        )
+        self.validate_identity("SELECT CONCAT('abcde', 2, NULL, 22)")
+
         self.validate_all(
             "CONCAT(a, b)",
             write={
-                "": "CONCAT(COALESCE(CAST(a AS TEXT), ''), COALESCE(CAST(b AS TEXT), ''))",
-                "duckdb": "CONCAT(COALESCE(CAST(a AS TEXT), ''), COALESCE(CAST(b AS TEXT), ''))",
-                "postgres": "CONCAT(COALESCE(CAST(a AS TEXT), ''), COALESCE(CAST(b AS TEXT), ''))",
-                "presto": "CONCAT(CAST(COALESCE(CAST(a AS VARCHAR), '') AS VARCHAR), CAST(COALESCE(CAST(b AS VARCHAR), '') AS VARCHAR))",
+                "": "CONCAT(COALESCE(a, ''), COALESCE(b, ''))",
+                "clickhouse": "CONCAT(COALESCE(a, ''), COALESCE(b, ''))",
+                "duckdb": "CONCAT(a, b)",
+                "postgres": "CONCAT(a, b)",
+                "presto": "CONCAT(COALESCE(CAST(a AS VARCHAR), ''), COALESCE(CAST(b AS VARCHAR), ''))",
             },
         )
         self.validate_all(
             "a || b",
             write={
                 "": "a || b",
-                "clickhouse": "CONCAT(CAST(a AS String), CAST(b AS String))",
+                "clickhouse": "a || b",
                 "duckdb": "a || b",
                 "postgres": "a || b",
                 "presto": "CONCAT(CAST(a AS VARCHAR), CAST(b AS VARCHAR))",

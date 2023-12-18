@@ -3,22 +3,36 @@
 install:
 	pip install -e .
 
-install-dev:
+install-dev-rs-release:
+	cd sqlglotrs/ && python -m maturin develop -r
+
+install-dev-rs:
+	cd sqlglotrs/ && python -m maturin develop
+
+install-dev-core:
 	pip install -e ".[dev]"
+
+install-dev: install-dev-core install-dev-rs
 
 install-pre-commit:
 	pre-commit install
 
 test:
-	python -m unittest
+	SQLGLOTRS_TOKENIZER=0 python -m unittest
+
+test-rs:
+	RUST_BACKTRACE=1 python -m unittest
 
 unit:
-	SKIP_INTEGRATION=1 python -m unittest
+	SKIP_INTEGRATION=1 SQLGLOTRS_TOKENIZER=0 python -m unittest
+
+unit-rs:
+	SKIP_INTEGRATION=1 RUST_BACKTRACE=1 python -m unittest
 
 style:
 	pre-commit run --all-files
 
-check: style test
+check: style test test-rs
 
 docs:
 	python pdoc/cli.py -o docs

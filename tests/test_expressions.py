@@ -217,6 +217,8 @@ class TestExpressions(unittest.TestCase):
             "foo.`{bar,er}`",
         )
 
+        self.assertEqual(exp.table_name(bq_dashed_table, identify=True), '"a-1"."b"."c"')
+
     def test_table(self):
         self.assertEqual(exp.table_("a", alias="b"), parse_one("select * from a b").find(exp.Table))
         self.assertEqual(exp.table_("a", "").sql(), "a")
@@ -238,7 +240,7 @@ class TestExpressions(unittest.TestCase):
                 },
                 dialect="bigquery",
             ).sql(),
-            'SELECT * FROM a1 AS a, b.a, c.a2, d2 CROSS JOIN e.a CROSS JOIN "F" CROSS JOIN g1.a',
+            'SELECT * FROM a1 AS a /* a */, b.a /* b */, c.a2 /* c.a */, d2 /* d.a */ CROSS JOIN e.a CROSS JOIN "F" /* f-F.A */ CROSS JOIN g1.a /* g */',
         )
 
     def test_expand(self):
@@ -309,8 +311,17 @@ class TestExpressions(unittest.TestCase):
         self.assertEqual(exp.func("bla", 1, "foo").sql(), "BLA(1, foo)")
         self.assertEqual(exp.func("COUNT", exp.Star()).sql(), "COUNT(*)")
         self.assertEqual(exp.func("bloo").sql(), "BLOO()")
+        self.assertEqual(exp.func("concat", exp.convert("a")).sql("duckdb"), "CONCAT('a')")
         self.assertEqual(
             exp.func("locate", "'x'", "'xo'", dialect="hive").sql("hive"), "LOCATE('x', 'xo')"
+        )
+        self.assertEqual(
+            exp.func("log", exp.to_identifier("x"), 2, dialect="bigquery").sql("bigquery"),
+            "LOG(x, 2)",
+        )
+        self.assertEqual(
+            exp.func("log", dialect="bigquery", expression="x", this=2).sql("bigquery"),
+            "LOG(x, 2)",
         )
 
         self.assertIsInstance(exp.func("instr", "x", "b", dialect="mysql"), exp.StrPosition)
@@ -325,6 +336,15 @@ class TestExpressions(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             exp.func("abs")
+
+        with self.assertRaises(ValueError) as cm:
+            exp.func("to_hex", dialect="bigquery", this=5)
+
+        self.assertEqual(
+            str(cm.exception),
+            "Unable to convert 'to_hex' into a Func. Either manually construct the Func "
+            "expression of interest or parse the function call.",
+        )
 
     def test_named_selects(self):
         expression = parse_one(

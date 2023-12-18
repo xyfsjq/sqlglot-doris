@@ -188,37 +188,43 @@ def _to_timestamp(args: t.List) -> exp.Expression:
     return format_time_lambda(exp.StrToTime, "postgres")(args)
 
 
-def _remove_target_from_merge(expression: exp.Expression) -> exp.Expression:
-    """Remove table refs from columns in when statements."""
-    if isinstance(expression, exp.Merge):
-        alias = expression.this.args.get("alias")
+def _merge_sql(self: Postgres.Generator, expression: exp.Merge) -> str:
+    def _remove_target_from_merge(expression: exp.Expression) -> exp.Expression:
+        """Remove table refs from columns in when statements."""
+        if isinstance(expression, exp.Merge):
+            alias = expression.this.args.get("alias")
 
-        normalize = (
-            lambda identifier: Postgres.normalize_identifier(identifier).name
-            if identifier
-            else None
-        )
-
-        targets = {normalize(expression.this.this)}
-
-        if alias:
-            targets.add(normalize(alias.this))
-
-        for when in expression.expressions:
-            when.transform(
-                lambda node: exp.column(node.this)
-                if isinstance(node, exp.Column) and normalize(node.args.get("table")) in targets
-                else node,
-                copy=False,
+            normalize = (
+                lambda identifier: self.dialect.normalize_identifier(identifier).name
+                if identifier
+                else None
             )
 
-    return expression
+            targets = {normalize(expression.this.this)}
+
+            if alias:
+                targets.add(normalize(alias.this))
+
+            for when in expression.expressions:
+                when.transform(
+                    lambda node: exp.column(node.this)
+                    if isinstance(node, exp.Column) and normalize(node.args.get("table")) in targets
+                    else node,
+                    copy=False,
+                )
+
+        return expression
+
+    return transforms.preprocess([_remove_target_from_merge])(self, expression)
 
 
 class Postgres(Dialect):
     INDEX_OFFSET = 1
+    TYPED_DIVISION = True
+    CONCAT_COALESCE = True
     NULL_ORDERING = "nulls_are_large"
     TIME_FORMAT = "'YYYY-MM-DD HH24:MI:SS'"
+
     TIME_MAPPING = {
         "AM": "%p",
         "PM": "%p",
@@ -248,7 +254,6 @@ class Postgres(Dialect):
         "YY": "%y",  # 15
         "YYYY": "%Y",  # 2015
     }
-    TYPED_DIVISION = True
 
     class Tokenizer(tokens.Tokenizer):
         BIT_STRINGS = [("b'", "'"), ("B'", "'")]
@@ -272,6 +277,7 @@ class Postgres(Dialect):
             "CONSTRAINT TRIGGER": TokenType.COMMAND,
             "DECLARE": TokenType.COMMAND,
             "DO": TokenType.COMMAND,
+            "EXEC": TokenType.COMMAND,
             "HSTORE": TokenType.HSTORE,
             "JSONB": TokenType.JSONB,
             "MONEY": TokenType.MONEY,
@@ -306,8 +312,6 @@ class Postgres(Dialect):
         VAR_SINGLE_TOKENS = {"$"}
 
     class Parser(parser.Parser):
-        CONCAT_NULL_OUTPUTS_STRING = True
-
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
             "DATE_TRUNC": parse_timestamp_trunc,
@@ -453,7 +457,7 @@ class Postgres(Dialect):
             exp.Max: max_or_greatest,
             exp.MapFromEntries: no_map_from_entries_sql,
             exp.Min: min_or_least,
-            exp.Merge: transforms.preprocess([_remove_target_from_merge]),
+            exp.Merge: _merge_sql,
             exp.PartitionedByProperty: lambda self, e: f"PARTITION BY {self.sql(e, 'this')}",
             exp.PercentileCont: transforms.preprocess(
                 [transforms.add_within_group_for_percentiles]

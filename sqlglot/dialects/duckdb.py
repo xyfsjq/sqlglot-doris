@@ -5,6 +5,7 @@ import typing as t
 from sqlglot import exp, generator, parser, tokens, transforms
 from sqlglot.dialects.dialect import (
     Dialect,
+    NormalizationStrategy,
     approx_count_distinct_sql,
     arg_max_or_min_no_count,
     arrow_json_extract_scalar_sql,
@@ -83,11 +84,35 @@ def _parse_date_diff(args: t.List) -> exp.Expression:
     return exp.DateDiff(this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0))
 
 
+def _parse_make_timestamp(args: t.List) -> exp.Expression:
+    if len(args) == 1:
+        return exp.UnixToTime(this=seq_get(args, 0), scale=exp.UnixToTime.MICROS)
+
+    return exp.TimestampFromParts(
+        year=seq_get(args, 0),
+        month=seq_get(args, 1),
+        day=seq_get(args, 2),
+        hour=seq_get(args, 3),
+        min=seq_get(args, 4),
+        sec=seq_get(args, 5),
+    )
+
+
 def _struct_sql(self: DuckDB.Generator, expression: exp.Struct) -> str:
-    args = [
-        f"'{e.name or e.this.name}': {self.sql(e.expressions[0]) if isinstance(e, exp.Bracket) else self.sql(e, 'expression')}"
-        for e in expression.expressions
-    ]
+    args: t.List[str] = []
+    for expr in expression.expressions:
+        if isinstance(expr, exp.Alias):
+            key = expr.alias
+            value = expr.this
+        else:
+            key = expr.name or expr.this.name
+            if isinstance(expr, exp.Bracket):
+                value = expr.expressions[0]
+            else:
+                value = expr.expression
+
+        args.append(f"{self.sql(exp.Literal.string(key))}: {self.sql(value)}")
+
     return f"{{{', '.join(args)}}}"
 
 
@@ -128,9 +153,10 @@ class DuckDB(Dialect):
     SUPPORTS_USER_DEFINED_TYPES = False
     SAFE_DIVISION = True
     INDEX_OFFSET = 1
+    CONCAT_COALESCE = True
 
     # https://duckdb.org/docs/sql/introduction.html#creating-a-new-table
-    RESOLVES_IDENTIFIERS_AS_UPPERCASE = None
+    NORMALIZATION_STRATEGY = NormalizationStrategy.CASE_INSENSITIVE
 
     class Tokenizer(tokens.Tokenizer):
         KEYWORDS = {
@@ -158,8 +184,6 @@ class DuckDB(Dialect):
         }
 
     class Parser(parser.Parser):
-        CONCAT_NULL_OUTPUTS_STRING = True
-
         BITWISE = {
             **parser.Parser.BITWISE,
             TokenType.TILDA: exp.RegexpLike,
@@ -175,6 +199,12 @@ class DuckDB(Dialect):
             "DATE_DIFF": _parse_date_diff,
             "DATE_TRUNC": date_trunc_to_time,
             "DATETRUNC": date_trunc_to_time,
+            "DECODE": lambda args: exp.Decode(
+                this=seq_get(args, 0), charset=exp.Literal.string("utf-8")
+            ),
+            "ENCODE": lambda args: exp.Encode(
+                this=seq_get(args, 0), charset=exp.Literal.string("utf-8")
+            ),
             "EPOCH": exp.TimeToUnix.from_arg_list,
             "EPOCH_MS": lambda args: exp.UnixToTime(
                 this=seq_get(args, 0), scale=exp.UnixToTime.MILLIS
@@ -183,9 +213,7 @@ class DuckDB(Dialect):
             "LIST_REVERSE_SORT": _sort_array_reverse,
             "LIST_SORT": exp.SortArray.from_arg_list,
             "LIST_VALUE": exp.Array.from_arg_list,
-            "MAKE_TIMESTAMP": lambda args: exp.UnixToTime(
-                this=seq_get(args, 0), scale=exp.UnixToTime.MICROS
-            ),
+            "MAKE_TIMESTAMP": _parse_make_timestamp,
             "MEDIAN": lambda args: exp.PercentileCont(
                 this=seq_get(args, 0), expression=exp.Literal.number(0.5)
             ),
@@ -214,15 +242,8 @@ class DuckDB(Dialect):
             "XOR": binary_from_function(exp.BitwiseXor),
         }
 
-        FUNCTION_PARSERS = {
-            **parser.Parser.FUNCTION_PARSERS,
-            "DECODE": lambda self: self.expression(
-                exp.Decode, this=self._parse_conjunction(), charset=exp.Literal.string("utf-8")
-            ),
-            "ENCODE": lambda self: self.expression(
-                exp.Encode, this=self._parse_conjunction(), charset=exp.Literal.string("utf-8")
-            ),
-        }
+        FUNCTION_PARSERS = parser.Parser.FUNCTION_PARSERS.copy()
+        FUNCTION_PARSERS.pop("DECODE", None)
 
         TABLE_ALIAS_TOKENS = parser.Parser.TABLE_ALIAS_TOKENS - {
             TokenType.SEMI,
@@ -340,6 +361,7 @@ class DuckDB(Dialect):
             exp.StrToUnix: lambda self, e: f"EPOCH(STRPTIME({self.sql(e, 'this')}, {self.format_time(e)}))",
             exp.Struct: _struct_sql,
             exp.Timestamp: no_timestamp_sql,
+            exp.TimestampFromParts: rename_func("MAKE_TIMESTAMP"),
             exp.TimestampTrunc: timestamptrunc_sql,
             exp.TimeStrToDate: lambda self, e: f"CAST({self.sql(e, 'this')} AS DATE)",
             exp.TimeStrToTime: timestrtotime_sql,

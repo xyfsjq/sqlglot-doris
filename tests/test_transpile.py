@@ -89,8 +89,13 @@ class TestTranspile(unittest.TestCase):
         self.validate("SELECT MIN(3)>=MIN(2)", "SELECT MIN(3) >= MIN(2)")
         self.validate("SELECT 1>0", "SELECT 1 > 0")
         self.validate("SELECT 3>=3", "SELECT 3 >= 3")
+        self.validate("SELECT a\r\nFROM b", "SELECT a FROM b")
 
     def test_comments(self):
+        self.validate(
+            "SELECT c AS /* foo */ (a, b, c) FROM t",
+            "SELECT c AS (a, b, c) /* foo */ FROM t",
+        )
         self.validate(
             "SELECT * FROM t1\n/*x*/\nUNION ALL SELECT * FROM t2",
             "SELECT * FROM t1 /* x */ UNION ALL SELECT * FROM t2",
@@ -433,6 +438,40 @@ SELECT
   'hotel2' AS hotel,
   *
 FROM dw_1_dw_1_1.exactonline_2.transactionlines""",
+            pretty=True,
+        )
+        self.validate(
+            """/* The result of  some calculations
+ */
+with
+    base as (
+        select
+            sum(sb.hep_amount) as hep_amount,
+            -- I AM REMOVED
+            sum(sb.hep_budget)
+            /* Budget defined in sharepoint */
+            as blub
+            , 1 as bla
+        from gold.data_budget sb
+        group by all
+    )
+select
+    *
+from base
+""",
+            """/* The result of  some calculations
+ */
+WITH base AS (
+  SELECT
+    SUM(sb.hep_amount) AS hep_amount,
+    SUM(sb.hep_budget) /* I AM REMOVED */ AS blub, /* Budget defined in sharepoint */
+    1 AS bla
+  FROM gold.data_budget AS sb
+  GROUP BY ALL
+)
+SELECT
+  *
+FROM base""",
             pretty=True,
         )
 

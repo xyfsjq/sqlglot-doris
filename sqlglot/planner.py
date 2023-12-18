@@ -425,16 +425,27 @@ class SetOperation(Step):
         cls, expression: exp.Expression, ctes: t.Optional[t.Dict[str, Step]] = None
     ) -> Step:
         assert isinstance(expression, exp.Union)
+
         left = Step.from_expression(expression.left, ctes)
+        # SELECT 1 UNION SELECT 2  <-- these subqueries don't have names
+        left.name = left.name or "left"
         right = Step.from_expression(expression.right, ctes)
+        right.name = right.name or "right"
         step = cls(
             op=expression.__class__,
             left=left.name,
             right=right.name,
             distinct=bool(expression.args.get("distinct")),
         )
+
         step.add_dependency(left)
         step.add_dependency(right)
+
+        limit = expression.args.get("limit")
+
+        if limit:
+            step.limit = int(limit.text("expression"))
+
         return step
 
     def _to_s(self, indent: str) -> t.List[str]:

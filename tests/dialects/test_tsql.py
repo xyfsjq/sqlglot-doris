@@ -9,6 +9,8 @@ class TestTSQL(Validator):
         # https://learn.microsoft.com/en-us/previous-versions/sql/sql-server-2008-r2/ms187879(v=sql.105)?redirectedfrom=MSDN
         # tsql allows .. which means use the default schema
         self.validate_identity("SELECT * FROM a..b")
+
+        self.validate_identity("SELECT CONCAT(column1, column2)")
         self.validate_identity("SELECT TestSpecialChar.Test# FROM TestSpecialChar")
         self.validate_identity("SELECT TestSpecialChar.Test@ FROM TestSpecialChar")
         self.validate_identity("SELECT TestSpecialChar.Test$ FROM TestSpecialChar")
@@ -18,6 +20,12 @@ class TestTSQL(Validator):
         self.validate_identity("1 AND true", "1 <> 0 AND (1 = 1)")
         self.validate_identity("CAST(x AS int) OR y", "CAST(x AS INTEGER) <> 0 OR y <> 0")
 
+        self.validate_all(
+            "SELECT TOP 1 * FROM (SELECT x FROM t1 UNION ALL SELECT x FROM t2) AS _l_0",
+            read={
+                "": "SELECT x FROM t1 UNION ALL SELECT x FROM t2 LIMIT 1",
+            },
+        )
         self.validate_all(
             "WITH t(c) AS (SELECT 1) SELECT * INTO foo FROM (SELECT c AS c FROM t) AS temp",
             read={
@@ -891,8 +899,26 @@ WHERE
         )
 
     def test_datepart(self):
-        self.validate_identity("DATEPART(QUARTER, x)", "DATEPART(QUARTER, CAST(x AS DATETIME2))")
-        self.validate_identity("DATEPART(YEAR, x)", "FORMAT(CAST(x AS DATETIME2), 'yyyy')")
+        self.validate_identity(
+            "DATEPART(QUARTER, x)",
+            "DATEPART(quarter, CAST(x AS DATETIME2))",
+        )
+        self.validate_identity(
+            "DATEPART(YEAR, x)",
+            "FORMAT(CAST(x AS DATETIME2), 'yyyy')",
+        )
+        self.validate_identity(
+            "DATEPART(HOUR, date_and_time)",
+            "DATEPART(hour, CAST(date_and_time AS DATETIME2))",
+        )
+        self.validate_identity(
+            "DATEPART(WEEKDAY, date_and_time)",
+            "DATEPART(dw, CAST(date_and_time AS DATETIME2))",
+        )
+        self.validate_identity(
+            "DATEPART(DW, date_and_time)",
+            "DATEPART(dw, CAST(date_and_time AS DATETIME2))",
+        )
 
         self.validate_all(
             "SELECT DATEPART(month,'1970-01-01')",

@@ -131,7 +131,7 @@ SELECT
   SUM("y"."b") AS "sum_b"
 FROM "x" AS "x"
 LEFT JOIN "_u_0" AS "_u_0"
-  ON "x"."b" = "_u_0"."_u_1"
+  ON "_u_0"."_u_1" = "x"."b"
 JOIN "y" AS "y"
   ON "x"."b" = "y"."b"
 WHERE
@@ -522,7 +522,7 @@ OR (
 SELECT
   *,
   IFF(
-    IFF("unioned"."uploaded_at" >= '2022-06-16', 'workday', 'bamboohr') = "unioned"."source_system",
+    "unioned"."source_system" = IFF("unioned"."uploaded_at" >= '2022-06-16', 'workday', 'bamboohr'),
     1,
     0
   ) AS "sort_order"
@@ -950,7 +950,7 @@ SELECT
 FROM "y" AS "y"
 CROSS JOIN "_u_0" AS "_u_0"
 JOIN "x" AS "x"
-  ON "y"."b" = "x"."b"
+  ON "x"."b" = "y"."b"
 GROUP BY
   "x"."a";
 
@@ -989,7 +989,7 @@ SELECT
   COALESCE("m"."a", "foo"."a") AS "a"
 FROM "m"
 JOIN "n" AS "foo"("a")
-  ON "m"."a" = "foo"."a";
+  ON "foo"."a" = "m"."a";
 
 # title: reduction of string concatenation that uses CONCAT(..), || and +
 # execute: false
@@ -1068,7 +1068,7 @@ SELECT
   COALESCE("alias3"."c_od", 0) AS "c_od"
 FROM "table1" AS "table1"
 LEFT JOIN "alias3"
-  ON "table1"."cid" = "alias3"."cid";
+  ON "alias3"."cid" = "table1"."cid";
 
 # title: CTE with EXPLODE cannot be merged
 # dialect: spark
@@ -1091,3 +1091,56 @@ SELECT
   `_q_0`.`fruitstruct`.`$id` AS `$id`,
   `_q_0`.`fruitstruct`.`value` AS `value`
 FROM `_q_0` AS `_q_0`;
+
+# title: mysql is case-sensitive by default
+# dialect: mysql
+# execute: false
+WITH T AS (SELECT 1 AS CoL) SELECT * FROM `T`;
+WITH `T` AS (
+  SELECT
+    1 AS `CoL`
+)
+SELECT
+  `T`.`CoL` AS `CoL`
+FROM `T`;
+
+# title: override mysql's settings so it normalizes to lowercase
+# dialect: mysql, normalization_strategy = lowercase
+# execute: false
+WITH T AS (SELECT 1 AS `CoL`) SELECT * FROM T;
+WITH `t` AS (
+  SELECT
+    1 AS `CoL`
+)
+SELECT
+  `t`.`CoL` AS `CoL`
+FROM `t`;
+
+# title: top-level query is parenthesized
+# execute: false
+WITH x AS (
+  SELECT a FROM t
+)
+(
+  SELECT * FROM x
+  UNION ALL
+  SELECT * FROM x
+  LIMIT 10
+)
+LIMIT 10;
+WITH "x" AS (
+  SELECT
+    "t"."a" AS "a"
+  FROM "t" AS "t"
+)
+(
+  SELECT
+    "x"."a" AS "a"
+  FROM "x"
+  UNION ALL
+  SELECT
+    "x"."a" AS "a"
+  FROM "x"
+  LIMIT 10
+)
+LIMIT 10;

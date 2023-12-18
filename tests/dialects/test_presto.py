@@ -379,6 +379,16 @@ class TestPresto(Validator):
                 "presto": "TIMESTAMP(x, '12:00:00')",
             },
         )
+        self.validate_all(
+            "DATE_ADD('DAY', CAST(x AS BIGINT), y)",
+            write={
+                "presto": "DATE_ADD('DAY', CAST(x AS BIGINT), y)",
+            },
+            read={
+                "presto": "DATE_ADD('DAY', x, y)",
+            },
+        )
+        self.validate_identity("DATE_ADD('DAY', 1, y)")
 
     def test_ddl(self):
         self.validate_all(
@@ -566,18 +576,10 @@ class TestPresto(Validator):
                 "SELECT ELEMENT_AT(ARRAY[1, 2, 3], 4)",
                 write={
                     "": "SELECT ARRAY(1, 2, 3)[3]",
+                    "bigquery": "SELECT [1, 2, 3][SAFE_ORDINAL(4)]",
                     "postgres": "SELECT (ARRAY[1, 2, 3])[4]",
                     "presto": "SELECT ELEMENT_AT(ARRAY[1, 2, 3], 4)",
                 },
-            )
-
-            self.assertEqual(
-                cm.output,
-                [
-                    "WARNING:sqlglot:Applying array index offset (-1)",
-                    "WARNING:sqlglot:Applying array index offset (1)",
-                    "WARNING:sqlglot:Applying array index offset (1)",
-                ],
             )
 
         self.validate_all(
@@ -1051,4 +1053,62 @@ MATCH_RECOGNIZE (
     D AS totalprice > PREV(totalprice)
 )""",
             pretty=True,
+        )
+
+    def test_to_char(self):
+        self.validate_all(
+            "TO_CHAR(ts, 'dd')",
+            write={
+                "bigquery": "FORMAT_DATE('%d', ts)",
+                "presto": "DATE_FORMAT(ts, '%d')",
+            },
+        )
+        self.validate_all(
+            "TO_CHAR(ts, 'hh')",
+            write={
+                "bigquery": "FORMAT_DATE('%H', ts)",
+                "presto": "DATE_FORMAT(ts, '%H')",
+            },
+        )
+        self.validate_all(
+            "TO_CHAR(ts, 'hh24')",
+            write={
+                "bigquery": "FORMAT_DATE('%H', ts)",
+                "presto": "DATE_FORMAT(ts, '%H')",
+            },
+        )
+        self.validate_all(
+            "TO_CHAR(ts, 'mi')",
+            write={
+                "bigquery": "FORMAT_DATE('%M', ts)",
+                "presto": "DATE_FORMAT(ts, '%i')",
+            },
+        )
+        self.validate_all(
+            "TO_CHAR(ts, 'mm')",
+            write={
+                "bigquery": "FORMAT_DATE('%m', ts)",
+                "presto": "DATE_FORMAT(ts, '%m')",
+            },
+        )
+        self.validate_all(
+            "TO_CHAR(ts, 'ss')",
+            write={
+                "bigquery": "FORMAT_DATE('%S', ts)",
+                "presto": "DATE_FORMAT(ts, '%s')",
+            },
+        )
+        self.validate_all(
+            "TO_CHAR(ts, 'yyyy')",
+            write={
+                "bigquery": "FORMAT_DATE('%Y', ts)",
+                "presto": "DATE_FORMAT(ts, '%Y')",
+            },
+        )
+        self.validate_all(
+            "TO_CHAR(ts, 'yy')",
+            write={
+                "bigquery": "FORMAT_DATE('%y', ts)",
+                "presto": "DATE_FORMAT(ts, '%y')",
+            },
         )

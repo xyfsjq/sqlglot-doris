@@ -485,7 +485,7 @@ class Expression(metaclass=_Expression):
 
     def flatten(self, unnest=True):
         """
-        Returns a generator which yields child nodes who's parents are the same class.
+        Returns a generator which yields child nodes whose parents are the same class.
 
         A AND B AND C -> [A, B, C]
         """
@@ -512,7 +512,7 @@ class Expression(metaclass=_Expression):
         """
         from sqlglot.dialects import Dialect
 
-        return Dialect.get_or_raise(dialect)().generate(self, **opts)
+        return Dialect.get_or_raise(dialect).generate(self, **opts)
 
     def _to_s(self, hide_missing: bool = True, level: int = 0) -> str:
         indent = "" if not level else "\n"
@@ -1105,14 +1105,7 @@ class Create(DDL):
 # https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#create_table_clone_statement
 # https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#create_table_copy
 class Clone(Expression):
-    arg_types = {
-        "this": True,
-        "when": False,
-        "kind": False,
-        "shallow": False,
-        "expression": False,
-        "copy": False,
-    }
+    arg_types = {"this": True, "shallow": False, "copy": False}
 
 
 class Describe(Expression):
@@ -1440,6 +1433,11 @@ class NotNullColumnConstraint(ColumnConstraintKind):
 
 # https://dev.mysql.com/doc/refman/5.7/en/timestamp-initialization.html
 class OnUpdateColumnConstraint(ColumnConstraintKind):
+    pass
+
+
+# https://docs.snowflake.com/en/sql-reference/sql/create-external-table#optional-parameters
+class TransformColumnConstraint(ColumnConstraintKind):
     pass
 
 
@@ -2517,6 +2515,11 @@ class IndexTableHint(Expression):
     arg_types = {"this": True, "expressions": False, "target": False}
 
 
+# https://docs.snowflake.com/en/sql-reference/constructs/at-before
+class HistoricalData(Expression):
+    arg_types = {"this": True, "kind": True, "expression": True}
+
+
 class Table(Expression):
     arg_types = {
         "this": True,
@@ -2533,6 +2536,7 @@ class Table(Expression):
         "pattern": False,
         "index": False,
         "ordinality": False,
+        "when": False,
     }
 
     @property
@@ -3944,11 +3948,7 @@ class Dot(Binary):
 
 
 class DPipe(Binary):
-    pass
-
-
-class SafeDPipe(DPipe):
-    pass
+    arg_types = {"this": True, "expression": True, "safe": False}
 
 
 class EQ(Binary, Predicate):
@@ -4108,7 +4108,8 @@ class Between(Predicate):
 
 
 class Bracket(Condition):
-    arg_types = {"this": True, "expressions": True}
+    # https://cloud.google.com/bigquery/docs/reference/standard-sql/operators#array_subscript_operator
+    arg_types = {"this": True, "expressions": True, "offset": False, "safe": False}
 
     @property
     def output_name(self) -> str:
@@ -4116,10 +4117,6 @@ class Bracket(Condition):
             return self.expressions[0].output_name
 
         return super().output_name
-
-
-class SafeBracket(Bracket):
-    """Represents array lookup where OOB index yields NULL instead of causing a failure."""
 
 
 class Distinct(Expression):
@@ -4686,12 +4683,8 @@ class Chr(Func):
 
 
 class Concat(Func):
-    arg_types = {"expressions": True}
+    arg_types = {"expressions": True, "safe": False, "coalesce": False}
     is_var_len_args = True
-
-
-class SafeConcat(Concat):
-    pass
 
 
 class ConcatWs(Concat):
@@ -5471,6 +5464,19 @@ class UnixToTimeStr(Func):
     pass
 
 
+class TimestampFromParts(Func):
+    """Constructs a timestamp given its constituent parts."""
+
+    arg_types = {
+        "year": True,
+        "month": True,
+        "day": True,
+        "hour": True,
+        "min": True,
+        "sec": True,
+    }
+
+
 class Upper(Func):
     _sql_names = ["UPPER", "UCASE"]
 
@@ -5518,6 +5524,7 @@ def _norm_arg(arg):
 
 
 ALL_FUNCTIONS = subclasses(__name__, Func, (AggFunc, Anonymous, Func))
+FUNCTION_BY_NAME = {name: func for func in ALL_FUNCTIONS for name in func.sql_names()}
 
 
 # Helpers
@@ -6668,12 +6675,15 @@ def column_table_names(expression: Expression, exclude: str = "") -> t.Set[str]:
     }
 
 
-def table_name(table: Table | str, dialect: DialectType = None) -> str:
+def table_name(table: Table | str, dialect: DialectType = None, identify: bool = False) -> str:
     """Get the full name of a table as a string.
 
     Args:
         table: Table expression node or string.
         dialect: The dialect to generate the table name for.
+        identify: Determines when an identifier should be quoted. Possible values are:
+            False (default): Never quote, except in cases where it's mandatory by the dialect.
+            True: Always quote.
 
     Examples:
         >>> from sqlglot import exp, parse_one
@@ -6691,7 +6701,7 @@ def table_name(table: Table | str, dialect: DialectType = None) -> str:
 
     return ".".join(
         part.sql(dialect=dialect, identify=True)
-        if not SAFE_IDENTIFIER_RE.match(part.name)
+        if identify or not SAFE_IDENTIFIER_RE.match(part.name)
         else part.name
         for part in table.parts
     )
@@ -6733,7 +6743,7 @@ def replace_tables(
     Examples:
         >>> from sqlglot import exp, parse_one
         >>> replace_tables(parse_one("select * from a.b"), {"a.b": "c"}).sql()
-        'SELECT * FROM c'
+        'SELECT * FROM c /* a.b */'
 
     Returns:
         The mapped expression.
@@ -6743,13 +6753,16 @@ def replace_tables(
 
     def _replace_tables(node: Expression) -> Expression:
         if isinstance(node, Table):
-            new_name = mapping.get(normalize_table_name(node, dialect=dialect))
+            original = normalize_table_name(node, dialect=dialect)
+            new_name = mapping.get(original)
 
             if new_name:
-                return to_table(
+                table = to_table(
                     new_name,
                     **{k: v for k, v in node.args.items() if k not in TABLE_PARTS},
                 )
+                table.add_comments([original])
+                return table
         return node
 
     return expression.transform(_replace_tables, copy=copy)
@@ -6831,7 +6844,7 @@ def expand(
     return expression.transform(_expand, copy=copy)
 
 
-def func(name: str, *args, dialect: DialectType = None, **kwargs) -> Func:
+def func(name: str, *args, copy: bool = True, dialect: DialectType = None, **kwargs) -> Func:
     """
     Returns a Func expression.
 
@@ -6845,6 +6858,7 @@ def func(name: str, *args, dialect: DialectType = None, **kwargs) -> Func:
     Args:
         name: the name of the function to build.
         args: the args used to instantiate the function of interest.
+        copy: whether or not to copy the argument expressions.
         dialect: the source dialect.
         kwargs: the kwargs used to instantiate the function of interest.
 
@@ -6860,14 +6874,29 @@ def func(name: str, *args, dialect: DialectType = None, **kwargs) -> Func:
 
     from sqlglot.dialects.dialect import Dialect
 
-    converted: t.List[Expression] = [maybe_parse(arg, dialect=dialect) for arg in args]
-    kwargs = {key: maybe_parse(value, dialect=dialect) for key, value in kwargs.items()}
+    dialect = Dialect.get_or_raise(dialect)
 
-    parser = Dialect.get_or_raise(dialect)().parser()
-    from_args_list = parser.FUNCTIONS.get(name.upper())
+    converted: t.List[Expression] = [maybe_parse(arg, dialect=dialect, copy=copy) for arg in args]
+    kwargs = {key: maybe_parse(value, dialect=dialect, copy=copy) for key, value in kwargs.items()}
 
-    if from_args_list:
-        function = from_args_list(converted) if converted else from_args_list.__self__(**kwargs)  # type: ignore
+    constructor = dialect.parser_class.FUNCTIONS.get(name.upper())
+    if constructor:
+        if converted:
+            if "dialect" in constructor.__code__.co_varnames:
+                function = constructor(converted, dialect=dialect)
+            else:
+                function = constructor(converted)
+        elif constructor.__name__ == "from_arg_list":
+            function = constructor.__self__(**kwargs)  # type: ignore
+        else:
+            constructor = FUNCTION_BY_NAME.get(name.upper())
+            if constructor:
+                function = constructor(**kwargs)
+            else:
+                raise ValueError(
+                    f"Unable to convert '{name}' into a Func. Either manually construct "
+                    "the Func expression of interest or parse the function call."
+                )
     else:
         kwargs = kwargs or {"expressions": converted}
         function = Anonymous(this=name, **kwargs)
@@ -6897,6 +6926,27 @@ def case(
     else:
         this = None
     return Case(this=this, ifs=[])
+
+
+def cast_unless(
+    expression: ExpOrStr,
+    to: DATA_TYPE,
+    *types: DATA_TYPE,
+    **opts: t.Any,
+) -> Expression | Cast:
+    """
+    Cast an expression to a data type unless it is a specified type.
+
+    Args:
+        expression: The expression to cast.
+        to: The data type to cast to.
+        **types: The types to exclude from casting.
+        **opts: Extra keyword arguments for parsing `expression`
+    """
+    expr = maybe_parse(expression, **opts)
+    if expr.is_type(*types):
+        return expr
+    return cast(expr, to, **opts)
 
 
 def true() -> Boolean:

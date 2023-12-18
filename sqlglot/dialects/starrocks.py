@@ -4,7 +4,6 @@ from sqlglot import exp
 from sqlglot.dialects.dialect import (
     approx_count_distinct_sql,
     arrow_json_extract_sql,
-    parse_timestamp_trunc,
     rename_func,
 )
 from sqlglot.dialects.mysql import MySQL
@@ -15,7 +14,6 @@ class StarRocks(MySQL):
     class Parser(MySQL.Parser):
         FUNCTIONS = {
             **MySQL.Parser.FUNCTIONS,
-            "DATE_TRUNC": parse_timestamp_trunc,
             "DATEDIFF": lambda args: exp.DateDiff(
                 this=seq_get(args, 0), expression=seq_get(args, 1), unit=exp.Literal.string("DAY")
             ),
@@ -27,9 +25,9 @@ class StarRocks(MySQL):
             "ADDDATE": exp.TsOrDsAdd.from_arg_list,
             "DATE": exp.TimeStrToDate.from_arg_list,
             "DATE_TRUNC": exp.DateTrunc.from_arg_list,
-            "MICROSECONDS_SUB": lambda args: exp.MICROSECONDS_ADD(
-                this=seq_get(args, 0), expression=-seq_get(args, 1)
-            ),
+            # "MICROSECONDS_SUB": lambda args: exp.MICROSECONDS_ADD(
+            #     this=seq_get(args, 0), expression=-seq_get(args, 1)
+            # ),
             "STR2DATE": exp.StrToDate.from_arg_list,
             "JSON_EXISTS": exp.JSON_EXISTS_PATH.from_arg_list,
             "JSON_QUERY": exp.JSONExtract.from_arg_list,
@@ -39,9 +37,7 @@ class StarRocks(MySQL):
             "ARRAY_TO_BITMAP": exp.BitmapFromArray.from_arg_list,
             "UNNEST": exp.Explode.from_arg_list,
             "PERCENTILE_APPROX_RAW": exp.PERCENTILE_APPROX.from_arg_list,
-            "RETENTION": lambda args: exp.RETENTION(
-                this=", ".join(map(str, seq_get(args, 0)))
-            ),
+            # "RETENTION": lambda args: exp.RETENTION(this=", ".join(map(str, seq_get(args, 0)))),
         }
 
     class Generator(MySQL.Generator):

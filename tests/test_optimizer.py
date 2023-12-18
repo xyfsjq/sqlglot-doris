@@ -109,7 +109,9 @@ class TestOptimizer(unittest.TestCase):
             },
         }
 
-    def check_file(self, file, func, pretty=False, execute=False, set_dialect=False, **kwargs):
+    def check_file(
+        self, file, func, pretty=False, execute=False, set_dialect=False, only=None, **kwargs
+    ):
         with ProcessPoolExecutor() as pool:
             results = {}
 
@@ -117,6 +119,8 @@ class TestOptimizer(unittest.TestCase):
                 load_sql_fixture_pairs(f"optimizer/{file}.sql"), start=1
             ):
                 title = meta.get("title") or f"{i}, {sql}"
+                if only and title != only:
+                    continue
                 dialect = meta.get("dialect")
                 leave_tables_isolated = meta.get("leave_tables_isolated")
 
@@ -137,13 +141,14 @@ class TestOptimizer(unittest.TestCase):
                 )
 
         for future in as_completed(results):
-            optimized = future.result()
             sql, title, expected, dialect, execute = results[future]
 
             with self.subTest(title):
+                optimized = future.result()
+                actual = optimized.sql(pretty=pretty, dialect=dialect)
                 self.assertEqual(
                     expected,
-                    optimized.sql(pretty=pretty, dialect=dialect),
+                    actual,
                 )
 
             if string_to_bool(execute):
@@ -309,7 +314,7 @@ class TestOptimizer(unittest.TestCase):
         self.check_file("pushdown_projections", pushdown_projections, schema=self.schema)
 
     def test_simplify(self):
-        self.check_file("simplify", simplify)
+        self.check_file("simplify", simplify, set_dialect=True)
 
         expression = parse_one("TRUE AND TRUE AND TRUE")
         self.assertEqual(exp.true(), optimizer.simplify.simplify(expression))
@@ -323,8 +328,8 @@ class TestOptimizer(unittest.TestCase):
         safe_concat = parse_one("CONCAT('a', x, 'b', 'c')")
         simplified_safe_concat = optimizer.simplify.simplify(safe_concat)
 
-        self.assertIs(type(simplified_concat), exp.Concat)
-        self.assertIs(type(simplified_safe_concat), exp.SafeConcat)
+        self.assertEqual(simplified_concat.args["safe"], False)
+        self.assertEqual(simplified_safe_concat.args["safe"], True)
 
         self.assertEqual("CONCAT('a', x, 'bc')", simplified_concat.sql(dialect="presto"))
         self.assertEqual("CONCAT('a', x, 'bc')", simplified_safe_concat.sql())

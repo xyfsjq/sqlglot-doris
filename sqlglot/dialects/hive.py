@@ -6,6 +6,7 @@ from sqlglot import exp, generator, parser, tokens, transforms
 from sqlglot.dialects.dialect import (
     DATE_ADD_OR_SUB,
     Dialect,
+    NormalizationStrategy,
     approx_count_distinct_sql,
     arg_max_or_min_no_count,
     create_with_partitions_sql,
@@ -186,6 +187,8 @@ def _to_date_sql(self: Hive.Generator, expression: exp.TsOrDsToDate) -> str:
     time_format = self.format_time(expression)
     if time_format and time_format not in (Hive.TIME_FORMAT, Hive.DATE_FORMAT):
         return f"TO_DATE({this}, {time_format})"
+    if isinstance(expression.this, exp.TsOrDsToDate):
+        return this
     return f"TO_DATE({this})"
 
 
@@ -196,7 +199,7 @@ class Hive(Dialect):
     SAFE_DIVISION = True
 
     # https://spark.apache.org/docs/latest/sql-ref-identifier.html#description
-    RESOLVES_IDENTIFIERS_AS_UPPERCASE = None
+    NORMALIZATION_STRATEGY = NormalizationStrategy.CASE_INSENSITIVE
 
     TIME_MAPPING = {
         "y": "%Y",
@@ -237,7 +240,6 @@ class Hive(Dialect):
         QUOTES = ["'", '"']
         IDENTIFIERS = ["`"]
         STRING_ESCAPES = ["\\"]
-        ENCODE = "utf-8"
 
         SINGLE_TOKENS = {
             **tokens.Tokenizer.SINGLE_TOKENS,

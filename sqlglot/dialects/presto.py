@@ -5,6 +5,7 @@ import typing as t
 from sqlglot import exp, generator, parser, tokens, transforms
 from sqlglot.dialects.dialect import (
     Dialect,
+    NormalizationStrategy,
     binary_from_function,
     bool_xor_sql,
     date_trunc_to_time,
@@ -137,11 +138,11 @@ def _from_unixtime(args: t.List) -> exp.Expression:
     return exp.UnixToTime.from_arg_list(args)
 
 
-def _parse_element_at(args: t.List) -> exp.SafeBracket:
+def _parse_element_at(args: t.List) -> exp.Bracket:
     this = seq_get(args, 0)
     index = seq_get(args, 1)
     assert isinstance(this, exp.Expression) and isinstance(index, exp.Expression)
-    return exp.SafeBracket(this=this, expressions=apply_index_offset(this, [index], -1))
+    return exp.Bracket(this=this, expressions=[index], offset=1, safe=True)
 
 
 def _unnest_sequence(expression: exp.Expression) -> exp.Expression:
@@ -185,6 +186,27 @@ def _unix_to_time_sql(self: Presto.Generator, expression: exp.UnixToTime) -> str
     return ""
 
 
+def _to_int(expression: exp.Expression) -> exp.Expression:
+    if not expression.type:
+        from sqlglot.optimizer.annotate_types import annotate_types
+
+        annotate_types(expression)
+    if expression.type and expression.type.this not in exp.DataType.INTEGER_TYPES:
+        return exp.cast(expression, to=exp.DataType.Type.BIGINT)
+    return expression
+
+
+def _parse_to_char(args: t.List) -> exp.TimeToStr:
+    fmt = seq_get(args, 1)
+    if isinstance(fmt, exp.Literal):
+        # We uppercase this to match Teradata's format mapping keys
+        fmt.set("this", fmt.this.upper())
+
+    # We use "teradata" on purpose here, because the time formats are different in Presto.
+    # See https://prestodb.io/docs/current/functions/teradata.html?highlight=to_char#to_char
+    return format_time_lambda(exp.TimeToStr, "teradata")(args)
+
+
 class Presto(Dialect):
     INDEX_OFFSET = 1
     NULL_ORDERING = "nulls_are_last"
@@ -197,7 +219,7 @@ class Presto(Dialect):
     # https://github.com/trinodb/trino/issues/17
     # https://github.com/trinodb/trino/issues/12289
     # https://github.com/prestodb/presto/issues/2863
-    RESOLVES_IDENTIFIERS_AS_UPPERCASE = None
+    NORMALIZATION_STRATEGY = NormalizationStrategy.CASE_INSENSITIVE
 
     class Tokenizer(tokens.Tokenizer):
         QUOTES = ["'", '"']
@@ -259,8 +281,9 @@ class Presto(Dialect):
             "STRPOS": lambda args: exp.StrPosition(
                 this=seq_get(args, 0), substr=seq_get(args, 1), instance=seq_get(args, 2)
             ),
-            "TO_UNIXTIME": exp.TimeToUnix.from_arg_list,
+            "TO_CHAR": _parse_to_char,
             "TO_HEX": exp.Hex.from_arg_list,
+            "TO_UNIXTIME": exp.TimeToUnix.from_arg_list,
             "TO_UTF8": lambda args: exp.Encode(
                 this=seq_get(args, 0), charset=exp.Literal.string("utf-8")
             ),
@@ -285,6 +308,7 @@ class Presto(Dialect):
             ),
             "CODEPOINT": exp.Ascii.from_arg_list,
             "LAST_DAY_OF_MONTH": exp.LastDateOfMonth.from_arg_list,
+            "CHAR2HEXINT": exp.Hex.from_arg_list,
         }
 
         FUNCTION_PARSERS = parser.Parser.FUNCTION_PARSERS.copy()
@@ -300,6 +324,7 @@ class Presto(Dialect):
         NVL2_SUPPORTED = False
         STRUCT_DELIMITER = ("(", ")")
         LIMIT_ONLY_LITERALS = True
+        SUPPORTS_SINGLE_ARG_CONCAT = False
 
         PROPERTIES_LOCATION = {
             **generator.Generator.PROPERTIES_LOCATION,
@@ -341,7 +366,12 @@ class Presto(Dialect):
             exp.Cast: transforms.preprocess([transforms.epoch_cast_to_ts]),
             exp.CurrentTimestamp: lambda *_: "CURRENT_TIMESTAMP",
             exp.DateAdd: lambda self, e: self.func(
-                "DATE_ADD", exp.Literal.string(e.text("unit") or "day"), e.expression, e.this
+                "DATE_ADD",
+                exp.Literal.string(e.text("unit") or "day"),
+                _to_int(
+                    e.expression,
+                ),
+                e.this,
             ),
             exp.DateDiff: lambda self, e: self.func(
                 "DATE_DIFF", exp.Literal.string(e.text("unit") or "day"), e.expression, e.this
@@ -351,7 +381,7 @@ class Presto(Dialect):
             exp.DateSub: lambda self, e: self.func(
                 "DATE_ADD",
                 exp.Literal.string(e.text("unit") or "day"),
-                e.expression * -1,
+                _to_int(e.expression * -1),
                 e.this,
             ),
             exp.Decode: lambda self, e: encode_decode_sql(self, e, "FROM_UTF8"),
@@ -378,9 +408,6 @@ class Presto(Dialect):
             exp.Quantile: _quantile_sql,
             exp.RegexpExtract: regexp_extract_sql,
             exp.Right: right_to_substring_sql,
-            exp.SafeBracket: lambda self, e: self.func(
-                "ELEMENT_AT", e.this, seq_get(apply_index_offset(e.this, e.expressions, 1), 0)
-            ),
             exp.SafeDivide: no_safe_divide_sql,
             exp.Schema: _schema_sql,
             exp.Select: transforms.preprocess(
@@ -406,6 +433,7 @@ class Presto(Dialect):
             exp.TimeStrToUnix: lambda self, e: f"TO_UNIXTIME(DATE_PARSE({self.sql(e, 'this')}, {Presto.TIME_FORMAT}))",
             exp.TimeToStr: lambda self, e: f"DATE_FORMAT({self.sql(e, 'this')}, {self.format_time(e)})",
             exp.TimeToUnix: rename_func("TO_UNIXTIME"),
+            exp.ToChar: lambda self, e: f"DATE_FORMAT({self.sql(e, 'this')}, {self.format_time(e)})",
             exp.TryCast: transforms.preprocess([transforms.epoch_cast_to_ts]),
             exp.TsOrDiToDi: lambda self, e: f"CAST(SUBSTR(REPLACE(CAST({self.sql(e, 'this')} AS VARCHAR), '-', ''), 1, 8) AS INT)",
             exp.TsOrDsAdd: _ts_or_ds_add_sql,
@@ -422,6 +450,22 @@ class Presto(Dialect):
             ),
             exp.Xor: bool_xor_sql,
         }
+
+        def bracket_sql(self, expression: exp.Bracket) -> str:
+            if expression.args.get("safe"):
+                return self.func(
+                    "ELEMENT_AT",
+                    expression.this,
+                    seq_get(
+                        apply_index_offset(
+                            expression.this,
+                            expression.expressions,
+                            1 - expression.args.get("offset", 0),
+                        ),
+                        0,
+                    ),
+                )
+            return super().bracket_sql(expression)
 
         def struct_sql(self, expression: exp.Struct) -> str:
             if any(isinstance(arg, self.KEY_VALUE_DEFINITONS) for arg in expression.expressions):

@@ -363,6 +363,15 @@ x * (1 - y);
 (1.0 * 3) * 4 - 2 * (5 / 2);
 12.0 - 2 * (5 / 2);
 
+a * 0.5 / 10 / (2.0 + 3);
+a * 0.5 / 10 / 5.0;
+
+a * 0.5 - 10 - (2.0 + 3);
+a * 0.5 - 10 - 5.0;
+
+x * (10 - 5);
+x * 5;
+
 6 - 2 + 4 * 2 + a;
 12 + a;
 
@@ -636,6 +645,9 @@ x < 5 AND x > 3;
 x > 3 AND 5 < x AND x BETWEEN 9 AND 10;
 x <= 10 AND x >= 9;
 
+NOT x BETWEEN 0 AND 1;
+x < 0 OR x > 1;
+
 1 < x AND 3 < x;
 x > 3;
 
@@ -648,6 +660,42 @@ x <> 2018 OR x = 2018;
 t0.x = t1.x AND t0.y < t1.y AND t0.y <= t1.y;
 t0.x = t1.x AND t0.y < t1.y AND t0.y <= t1.y;
 
+1 < x;
+x > 1;
+
+1 <= x;
+x >= 1;
+
+1 > x;
+x < 1;
+
+1 >= x;
+x <= 1;
+
+1 = x;
+x = 1;
+
+1 <> x;
+x <> 1;
+
+NOT 1 < x;
+x <= 1;
+
+NOT 1 <= x;
+x < 1;
+
+NOT 1 > x;
+x >= 1;
+
+NOT 1 >= x;
+x > 1;
+
+NOT 1 = x;
+x <> 1;
+
+NOT 1 <> x;
+x = 1;
+
 --------------------------------------
 -- COALESCE
 --------------------------------------
@@ -658,7 +706,7 @@ COALESCE(x, 1) = 2;
 NOT x IS NULL AND x = 2;
 
 2 = COALESCE(x, 1);
-2 = x AND NOT x IS NULL;
+NOT x IS NULL AND x = 2;
 
 COALESCE(x, 1, 1) = 1 + 1;
 NOT x IS NULL AND x = 2;
@@ -706,7 +754,7 @@ CONCAT_WS(sep, x, y);
 CONCAT_WS(sep, x, y);
 
 CONCAT(x);
-x;
+CONCAT(x);
 
 CONCAT('a', 'b', 'c');
 'abc';
@@ -750,6 +798,20 @@ CONCAT(a, b) IN (SELECT * FROM foo WHERE cond);
 --------------------------------------
 -- DATE_TRUNC
 --------------------------------------
+DATE_TRUNC('week', CAST('2023-12-15' AS DATE));
+CAST('2023-12-11' AS DATE);
+
+DATE_TRUNC('week', CAST('2023-12-16' AS DATE));
+CAST('2023-12-11' AS DATE);
+
+# dialect: bigquery
+DATE_TRUNC(CAST('2023-12-15' AS DATE), WEEK);
+CAST('2023-12-10' AS DATE);
+
+# dialect: bigquery
+DATE_TRUNC(CAST('2023-12-16' AS DATE), WEEK);
+CAST('2023-12-10' AS DATE);
+
 DATE_TRUNC('year', x) = CAST('2021-01-01' AS DATE);
 x < CAST('2022-01-01' AS DATE) AND x >= CAST('2021-01-01' AS DATE);
 
@@ -792,7 +854,7 @@ DATE_TRUNC('year', x) < CAST('2021-01-01' AS DATE);
 x < CAST('2021-01-01' AS DATE);
 
 DATE_TRUNC('year', x) < CAST('2021-01-02' AS DATE);
-x < CAST('2021-01-01' AS DATE);
+x < CAST('2022-01-01' AS DATE);
 
 DATE_TRUNC('year', x) >= CAST('2021-01-01' AS DATE);
 x >= CAST('2021-01-01' AS DATE);
@@ -832,7 +894,7 @@ x < CAST('2022-01-01 00:00:00' AS DATETIME) AND x >= CAST('2021-01-01 00:00:00' 
 
 -- right side is not a date literal
 DATE_TRUNC('day', x) = CAST(y AS DATE);
-DATE_TRUNC('day', x) = CAST(y AS DATE);
+CAST(y AS DATE) = DATE_TRUNC('day', x);
 
 -- nested cast
 DATE_TRUNC('day', x) = CAST(CAST('2021-01-01 01:02:03' AS DATETIME) AS DATE);
@@ -896,10 +958,10 @@ DATE_SUB(x, 1, DAY) <> CAST('2021-01-01' AS DATE);
 x <> CAST('2021-01-02' AS DATE);
 
 DATE_ADD(DATE_ADD(DATE_TRUNC('week', DATE_SUB(x, 1, DAY)), 1, DAY), 1, YEAR) < CAST('2021-01-08' AS DATE);
-x < CAST('2020-01-07' AS DATE);
+x < CAST('2020-01-14' AS DATE);
 
 x - INTERVAL '1' day = CAST(y AS DATE);
-x - INTERVAL '1' day = CAST(y AS DATE);
+CAST(y AS DATE) = x - INTERVAL '1' day;
 
 --------------------------------------
 -- Constant Propagation
@@ -908,16 +970,16 @@ x = 5 AND y = x;
 x = 5 AND y = 5;
 
 5 = x AND y = x;
-5 = x AND y = 5;
+x = 5 AND y = 5;
 
 x = 5 OR y = x;
-x = 5 OR y = x;
+x = 5 OR x = y;
 
 (x = 5 AND y = x) OR y = 1;
 (x = 5 AND y = 5) OR y = 1;
 
 t.x = 5 AND y = x;
-t.x = 5 AND y = x;
+t.x = 5 AND x = y;
 
 t.x = 'a' AND y = CONCAT_WS('-', t.x, 'b');
 t.x = 'a' AND y = 'a-b';
@@ -929,7 +991,7 @@ x = 5 AND x = 6;
 FALSE;
 
 x = 5 AND (y = x OR z = 1);
-x = 5 AND (y = x OR z = 1);
+x = 5 AND (x = y OR z = 1);
 
 x = 5 AND x + 3 = 8;
 x = 5;
@@ -941,7 +1003,7 @@ x = 1 AND y > 0 AND (SELECT z = 5 FROM t WHERE y = 1);
 (SELECT z = 5 FROM t WHERE y = 1) AND x = 1 AND y > 0;
 
 x = 1 AND x = y AND (SELECT z FROM t WHERE a AND (b OR c));
-(SELECT z FROM t WHERE a AND (b OR c)) AND 1 = y AND x = 1;
+(SELECT z FROM t WHERE a AND (b OR c)) AND x = 1 AND y = 1;
 
 t1.a = 39 AND t2.b = t1.a AND t3.c = t2.b;
 t1.a = 39 AND t2.b = 39 AND t3.c = 39;
@@ -959,7 +1021,7 @@ x = y AND CASE WHEN x = 5 THEN FALSE ELSE TRUE END;
 CASE WHEN x = 5 THEN FALSE ELSE TRUE END AND x = y;
 
 x = 1 AND CASE WHEN y = 5 THEN x = z END;
-CASE WHEN y = 5 THEN 1 = z END AND x = 1;
+CASE WHEN y = 5 THEN z = 1 END AND x = 1;
 
 --------------------------------------
 -- Simplify Conditionals
@@ -1019,4 +1081,4 @@ CASE x WHEN y THEN z END;
 CASE WHEN x = y THEN z END;
 
 CASE x1 + x2 WHEN x3 THEN x4 WHEN x5 + x6 THEN x7 ELSE x8 END;
-CASE WHEN (x1 + x2) = x3 THEN x4 WHEN (x1 + x2) = (x5 + x6) THEN x7 ELSE x8 END;
+CASE WHEN x3 = (x1 + x2) THEN x4 WHEN (x1 + x2) = (x5 + x6) THEN x7 ELSE x8 END;

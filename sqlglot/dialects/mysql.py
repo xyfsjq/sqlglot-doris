@@ -5,6 +5,7 @@ import typing as t
 from sqlglot import exp, generator, parser, tokens, transforms
 from sqlglot.dialects.dialect import (
     Dialect,
+    NormalizationStrategy,
     arrow_json_extract_scalar_sql,
     date_add_interval_sql,
     datestrtodate_sql,
@@ -150,6 +151,13 @@ class MySQL(Dialect):
     # https://dev.mysql.com/doc/refman/8.0/en/identifiers.html
     IDENTIFIERS_CAN_START_WITH_DIGIT = True
 
+    # We default to treating all identifiers as case-sensitive, since it matches MySQL's
+    # behavior on Linux systems. For MacOS and Windows systems, one can override this
+    # setting by specifying `dialect="mysql, normalization_strategy = lowercase"`.
+    #
+    # See also https://dev.mysql.com/doc/refman/8.2/en/identifier-case-sensitivity.html
+    NORMALIZATION_STRATEGY = NormalizationStrategy.CASE_SENSITIVE
+
     TIME_FORMAT = "'%Y-%m-%d %T'"
     DPIPE_IS_STRING_CONCAT = False
     SUPPORTS_USER_DEFINED_TYPES = False
@@ -264,11 +272,6 @@ class MySQL(Dialect):
             TokenType.XOR: exp.Xor,
             TokenType.DPIPE: exp.Or,
         }
-
-        # MySQL uses || as a synonym to the logical OR operator
-        # https://dev.mysql.com/doc/refman/8.0/en/logical-operators.html#operator_or
-        BITWISE = parser.Parser.BITWISE.copy()
-        BITWISE.pop(TokenType.DPIPE)
 
         TABLE_ALIAS_TOKENS = (
             parser.Parser.TABLE_ALIAS_TOKENS - parser.Parser.TABLE_INDEX_HINT_TOKENS
@@ -647,7 +650,7 @@ class MySQL(Dialect):
             exp.Min: min_or_least,
             exp.Month: _remove_ts_or_ds_to_date(),
             exp.NullSafeEQ: lambda self, e: self.binary(e, "<=>"),
-            exp.NullSafeNEQ: lambda self, e: self.not_sql(self.binary(e, "<=>")),
+            exp.NullSafeNEQ: lambda self, e: f"NOT {self.binary(e, '<=>')}",
             exp.Pivot: no_pivot_sql,
             exp.Select: transforms.preprocess(
                 [

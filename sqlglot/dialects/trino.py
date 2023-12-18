@@ -7,6 +7,12 @@ from sqlglot.dialects.presto import Presto
 class Trino(Presto):
     SUPPORTS_USER_DEFINED_TYPES = False
 
+    class Parser(Presto.Parser):
+        FUNCTIONS = {
+            **Presto.Parser.FUNCTIONS,
+            "CONTAINS_SEQUENCE": exp.ArrayContains.from_arg_list,
+        }
+
     class Generator(Presto.Generator):
         TRANSFORMS = {
             **Presto.Generator.TRANSFORMS,

@@ -35,7 +35,6 @@ def _quantile_sql(self, e):
 class ClickHouse(Dialect):
     NORMALIZE_FUNCTIONS: bool | str = False
     NULL_ORDERING = "nulls_are_last"
-    STRICT_STRING_CONCAT = True
     SUPPORTS_USER_DEFINED_TYPES = False
     SAFE_DIVISION = True
 
@@ -84,6 +83,11 @@ class ClickHouse(Dialect):
         }
 
     class Parser(parser.Parser):
+        # Tested in ClickHouse's playground, it seems that the following two queries do the same thing
+        # * select x from t1 union all select x from t2 limit 1;
+        # * select x from t1 union all (select x from t2 limit 1);
+        MODIFIERS_ATTACHED_TO_UNION = False
+
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
             "ANY": exp.AnyValue.from_arg_list,
@@ -236,6 +240,7 @@ class ClickHouse(Dialect):
 
         FUNCTION_PARSERS = {
             **parser.Parser.FUNCTION_PARSERS,
+            "ARRAYJOIN": lambda self: self.expression(exp.Explode, this=self._parse_expression()),
             "QUANTILE": lambda self: self._parse_quantile(),
         }
 
@@ -510,6 +515,7 @@ class ClickHouse(Dialect):
             exp.DateDiff: lambda self, e: self.func(
                 "DATE_DIFF", exp.Literal.string(e.text("unit") or "day"), e.expression, e.this
             ),
+            exp.Explode: rename_func("arrayJoin"),
             exp.Final: lambda self, e: f"{self.sql(e, 'this')} FINAL",
             exp.IsNan: rename_func("isNaN"),
             exp.Map: lambda self, e: _lower_func(var_map_sql(self, e)),
@@ -584,16 +590,6 @@ class ClickHouse(Dialect):
                 return "String"
 
             return super().datatype_sql(expression)
-
-        def safeconcat_sql(self, expression: exp.SafeConcat) -> str:
-            # Clickhouse errors out if we try to cast a NULL value to TEXT
-            return self.func(
-                "CONCAT",
-                *[
-                    exp.func("if", e.is_(exp.null()), e, exp.cast(e, "text"))
-                    for e in t.cast(t.List[exp.Condition], expression.expressions)
-                ],
-            )
 
         def cte_sql(self, expression: exp.CTE) -> str:
             if expression.args.get("scalar"):
