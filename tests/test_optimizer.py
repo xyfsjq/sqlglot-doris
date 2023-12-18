@@ -145,9 +145,10 @@ class TestOptimizer(unittest.TestCase):
 
             with self.subTest(title):
                 optimized = future.result()
+                actual = optimized.sql(pretty=pretty, dialect=dialect)
                 self.assertEqual(
                     expected,
-                    optimized.sql(pretty=pretty, dialect=dialect),
+                    actual,
                 )
 
             if string_to_bool(execute):
@@ -313,7 +314,7 @@ class TestOptimizer(unittest.TestCase):
         self.check_file("pushdown_projections", pushdown_projections, schema=self.schema)
 
     def test_simplify(self):
-        self.check_file("simplify", simplify)
+        self.check_file("simplify", simplify, set_dialect=True)
 
         expression = parse_one("TRUE AND TRUE AND TRUE")
         self.assertEqual(exp.true(), optimizer.simplify.simplify(expression))
