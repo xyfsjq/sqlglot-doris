@@ -36,6 +36,8 @@ WHERE
   )""",
         )
 
+        self.validate_identity("SELECT TO_ARRAY(CAST(x AS ARRAY))")
+        self.validate_identity("SELECT TO_ARRAY(CAST(['test'] AS VARIANT))")
         self.validate_identity("SELECT user_id, value FROM table_name sample ($s) SEED (0)")
         self.validate_identity("SELECT ARRAY_UNIQUE_AGG(x)")
         self.validate_identity("SELECT OBJECT_CONSTRUCT()")
@@ -127,11 +129,37 @@ WHERE
             "SELECT TO_TIMESTAMP(x) FROM t",
             "SELECT CAST(x AS TIMESTAMPNTZ) FROM t",
         )
+        self.validate_identity(
+            "CAST(x AS BYTEINT)",
+            "CAST(x AS INT)",
+        )
+        self.validate_identity(
+            "CAST(x AS CHAR VARYING)",
+            "CAST(x AS VARCHAR)",
+        )
+        self.validate_identity(
+            "CAST(x AS CHARACTER VARYING)",
+            "CAST(x AS VARCHAR)",
+        )
+        self.validate_identity(
+            "CAST(x AS NCHAR VARYING)",
+            "CAST(x AS VARCHAR)",
+        )
 
-        self.validate_all("CAST(x AS BYTEINT)", write={"snowflake": "CAST(x AS INT)"})
-        self.validate_all("CAST(x AS CHAR VARYING)", write={"snowflake": "CAST(x AS VARCHAR)"})
-        self.validate_all("CAST(x AS CHARACTER VARYING)", write={"snowflake": "CAST(x AS VARCHAR)"})
-        self.validate_all("CAST(x AS NCHAR VARYING)", write={"snowflake": "CAST(x AS VARCHAR)"})
+        self.validate_all(
+            "SELECT TO_ARRAY(['test'])",
+            write={
+                "snowflake": "SELECT TO_ARRAY(['test'])",
+                "spark": "SELECT ARRAY('test')",
+            },
+        )
+        self.validate_all(
+            "SELECT TO_ARRAY(['test'])",
+            write={
+                "snowflake": "SELECT TO_ARRAY(['test'])",
+                "spark": "SELECT ARRAY('test')",
+            },
+        )
         self.validate_all(
             # We need to qualify the columns in this query because "value" would be ambiguous
             'WITH t(x, "value") AS (SELECT [1, 2, 3], 1) SELECT IFF(_u.pos = _u_2.pos_2, _u_2."value", NULL) AS "value" FROM t, TABLE(FLATTEN(INPUT => ARRAY_GENERATE_RANGE(0, (GREATEST(ARRAY_SIZE(t.x)) - 1) + 1))) AS _u(seq, key, path, index, pos, this) CROSS JOIN TABLE(FLATTEN(INPUT => t.x)) AS _u_2(seq, key, path, pos_2, "value", this) WHERE _u.pos = _u_2.pos_2 OR (_u.pos > (ARRAY_SIZE(t.x) - 1) AND _u_2.pos_2 = (ARRAY_SIZE(t.x) - 1))',
@@ -501,8 +529,8 @@ WHERE
         self.validate_all(
             "TO_ARRAY(x)",
             write={
-                "spark": "ARRAY(x)",
-                "snowflake": "[x]",
+                "spark": "IF(x IS NULL, NULL, ARRAY(x))",
+                "snowflake": "TO_ARRAY(x)",
             },
         )
         self.validate_all(

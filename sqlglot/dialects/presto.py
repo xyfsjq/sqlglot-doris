@@ -222,9 +222,12 @@ class Presto(Dialect):
     NORMALIZATION_STRATEGY = NormalizationStrategy.CASE_INSENSITIVE
 
     class Tokenizer(tokens.Tokenizer):
-        QUOTES = ["'", '"']
-        # 有冲突待解决
-        # IDENTIFIERS = ["`"]
+        UNICODE_STRINGS = [
+            (prefix + q, q)
+            for q in t.cast(t.List[str], tokens.Tokenizer.QUOTES)
+            for prefix in ("U&", "u&")
+        ]
+
         KEYWORDS = {
             **tokens.Tokenizer.KEYWORDS,
             "START": TokenType.BEGIN,
@@ -232,7 +235,6 @@ class Presto(Dialect):
             "ROW": TokenType.STRUCT,
             "IPADDRESS": TokenType.IPADDRESS,
             "IPPREFIX": TokenType.IPPREFIX,
-            "$": TokenType.PARAMETER,
         }
 
     class Parser(parser.Parser):
@@ -254,7 +256,6 @@ class Presto(Dialect):
                 this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
             ),
             "DATE_FORMAT": format_time_lambda(exp.TimeToStr, "presto"),
-            "FORMAT_DATETIME": format_time_lambda(exp.TimeToStr, "presto"),
             "DATE_PARSE": format_time_lambda(exp.StrToTime, "presto"),
             "DATE_TRUNC": date_trunc_to_time,
             "ELEMENT_AT": _parse_element_at,
@@ -273,8 +274,6 @@ class Presto(Dialect):
                 replacement=seq_get(args, 2) or exp.Literal.string(""),
             ),
             "ROW": exp.Struct.from_arg_list,
-            "RAND": exp.Random.from_arg_list,
-            "RANDOM": exp.Random.from_arg_list,
             "SEQUENCE": exp.GenerateSeries.from_arg_list,
             "SET_AGG": exp.ArrayUniqueAgg.from_arg_list,
             "SPLIT_TO_MAP": exp.StrToMap.from_arg_list,
@@ -287,28 +286,6 @@ class Presto(Dialect):
             "TO_UTF8": lambda args: exp.Encode(
                 this=seq_get(args, 0), charset=exp.Literal.string("utf-8")
             ),
-            "DOW": exp.DayOfWeek.from_arg_list,
-            "DOY": exp.DayOfYear.from_arg_list,
-            "SHUFFLE": exp.Shuffle.from_arg_list,
-            "SLICE": exp.ArraySlice.from_arg_list,
-            "URL_EXTRACT_HOST": lambda args: exp.ParseUrl(
-                this=seq_get(args, 0), expression="'HOST'"
-            ),
-            "URL_EXTRACT_PATH": lambda args: exp.ParseUrl(
-                this=seq_get(args, 0), expression="'PATH'"
-            ),
-            "URL_EXTRACT_PORT": lambda args: exp.ParseUrl(
-                this=seq_get(args, 0), expression="'PORT'"
-            ),
-            "URL_EXTRACT_PROTOCOL": lambda args: exp.ParseUrl(
-                this=seq_get(args, 0), expression="'PROTOCOL'"
-            ),
-            "URL_EXTRACT_QUERY": lambda args: exp.ParseUrl(
-                this=seq_get(args, 0), expression="'QUERY'"
-            ),
-            "CODEPOINT": exp.Ascii.from_arg_list,
-            "LAST_DAY_OF_MONTH": exp.LastDateOfMonth.from_arg_list,
-            "CHAR2HEXINT": exp.Hex.from_arg_list,
         }
 
         FUNCTION_PARSERS = parser.Parser.FUNCTION_PARSERS.copy()
@@ -410,6 +387,7 @@ class Presto(Dialect):
             exp.Right: right_to_substring_sql,
             exp.SafeDivide: no_safe_divide_sql,
             exp.Schema: _schema_sql,
+            exp.SchemaCommentProperty: lambda self, e: self.naked_property(e),
             exp.Select: transforms.preprocess(
                 [
                     transforms.eliminate_qualify,

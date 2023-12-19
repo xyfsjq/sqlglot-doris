@@ -293,7 +293,6 @@ class Snowflake(Dialect):
             "SQUARE": lambda args: exp.Pow(this=seq_get(args, 0), expression=exp.Literal.number(2)),
             "TIMEDIFF": _parse_datediff,
             "TIMESTAMPDIFF": _parse_datediff,
-            "TO_ARRAY": exp.Array.from_arg_list,
             "TO_TIMESTAMP": _parse_to_timestamp,
             "TO_VARCHAR": exp.ToChar.from_arg_list,
             "ZEROIFNULL": _zeroifnull_to_if,
@@ -590,6 +589,7 @@ class Snowflake(Dialect):
                 "TO_CHAR", exp.cast(e.this, "timestamp"), self.format_time(e)
             ),
             exp.TimeToUnix: lambda self, e: f"EXTRACT(epoch_second FROM {self.sql(e, 'this')})",
+            exp.ToArray: rename_func("TO_ARRAY"),
             exp.ToChar: lambda self, e: self.function_fallback_sql(e),
             exp.Trim: lambda self, e: self.func("TRIM", e.this, e.expression),
             exp.TsOrDsAdd: date_delta_sql("DATEADD", cast=True),

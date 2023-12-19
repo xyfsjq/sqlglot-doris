@@ -915,6 +915,14 @@ class Generator:
             return f"{self.dialect.BYTE_START}{this}{self.dialect.BYTE_END}"
         return this
 
+    def unicodestring_sql(self, expression: exp.UnicodeString) -> str:
+        this = self.sql(expression, "this")
+        if self.dialect.UNICODE_START:
+            escape = self.sql(expression, "escape")
+            escape = f" UESCAPE {escape}" if escape else ""
+            return f"{self.dialect.UNICODE_START}{this}{self.dialect.UNICODE_END}{escape}"
+        return this
+
     def rawstring_sql(self, expression: exp.RawString) -> str:
         string = self.escape_str(expression.this.replace("\\", "\\\\"))
         return f"{self.dialect.QUOTE_START}{string}{self.dialect.QUOTE_END}"
@@ -1786,7 +1794,24 @@ class Generator:
     def order_sql(self, expression: exp.Order, flat: bool = False) -> str:
         this = self.sql(expression, "this")
         this = f"{this} " if this else this
-        return self.op_expressions(f"{this}ORDER BY", expression, flat=this or flat)  # type: ignore
+        order = self.op_expressions(f"{this}ORDER BY", expression, flat=this or flat)  # type: ignore
+        interpolated_values = [
+            f"{self.sql(named_expression, 'alias')} AS {self.sql(named_expression, 'this')}"
+            for named_expression in expression.args.get("interpolate") or []
+        ]
+        interpolate = (
+            f" INTERPOLATE ({', '.join(interpolated_values)})" if interpolated_values else ""
+        )
+        return f"{order}{interpolate}"
+
+    def withfill_sql(self, expression: exp.WithFill) -> str:
+        from_sql = self.sql(expression, "from")
+        from_sql = f" FROM {from_sql}" if from_sql else ""
+        to_sql = self.sql(expression, "to")
+        to_sql = f" TO {to_sql}" if to_sql else ""
+        step_sql = self.sql(expression, "step")
+        step_sql = f" STEP {step_sql}" if step_sql else ""
+        return f"WITH FILL{from_sql}{to_sql}{step_sql}"
 
     def cluster_sql(self, expression: exp.Cluster) -> str:
         return self.op_expressions("CLUSTER BY", expression)
@@ -1828,7 +1853,10 @@ class Generator:
             this = f"CASE WHEN {this} IS NULL THEN 1 ELSE 0 END{null_sort_order}, {this}"
             nulls_sort_change = ""
 
-        return f"{this}{sort_order}{nulls_sort_change}"
+        with_fill = self.sql(expression, "with_fill")
+        with_fill = f" {with_fill}" if with_fill else ""
+
+        return f"{this}{sort_order}{nulls_sort_change}{with_fill}"
 
     def matchrecognize_sql(self, expression: exp.MatchRecognize) -> str:
         partition = self.partition_by_sql(expression)
@@ -3049,6 +3077,19 @@ class Generator:
 
     def operator_sql(self, expression: exp.Operator) -> str:
         return self.binary(expression, f"OPERATOR({self.sql(expression, 'operator')})")
+
+    def toarray_sql(self, expression: exp.ToArray) -> str:
+        arg = expression.this
+        if not arg.type:
+            from sqlglot.optimizer.annotate_types import annotate_types
+
+            arg = annotate_types(arg)
+
+        if arg.is_type(exp.DataType.Type.ARRAY):
+            return self.sql(arg)
+
+        cond_for_null = arg.is_(exp.null())
+        return self.sql(exp.func("IF", cond_for_null, exp.null(), exp.Array(expressions=[arg])))
 
     def _simplify_unless_literal(self, expression: E) -> E:
         if not isinstance(expression, exp.Literal):

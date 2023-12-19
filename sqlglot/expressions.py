@@ -1206,6 +1206,10 @@ class RawString(Condition):
     pass
 
 
+class UnicodeString(Condition):
+    arg_types = {"this": True, "escape": False}
+
+
 class Column(Condition):
     arg_types = {"this": True, "table": False, "db": False, "catalog": False, "join_mark": False}
 
@@ -1960,7 +1964,12 @@ class Offset(Expression):
 
 
 class Order(Expression):
-    arg_types = {"this": False, "expressions": True}
+    arg_types = {"this": False, "expressions": True, "interpolate": False}
+
+
+# https://clickhouse.com/docs/en/sql-reference/statements/select/order-by#order-by-expr-with-fill-modifier
+class WithFill(Expression):
+    arg_types = {"from": False, "to": False, "step": False}
 
 
 # hive specific sorts
@@ -1978,7 +1987,7 @@ class Sort(Order):
 
 
 class Ordered(Expression):
-    arg_types = {"this": True, "desc": False, "nulls_first": True}
+    arg_types = {"this": True, "desc": False, "nulls_first": True, "with_fill": False}
 
 
 class Property(Expression):
@@ -4307,6 +4316,11 @@ class ApproxDistinct(AggFunc):
 class Array(Func):
     arg_types = {"expressions": False}
     is_var_len_args = True
+
+
+# https://docs.snowflake.com/en/sql-reference/functions/to_array
+class ToArray(Func):
+    pass
 
 
 # https://docs.snowflake.com/en/sql-reference/functions/to_char

@@ -568,6 +568,7 @@ class Parser(metaclass=_Parser):
         exp.Sort: lambda self: self._parse_sort(exp.Sort, TokenType.SORT_BY),
         exp.Table: lambda self: self._parse_table_parts(),
         exp.TableAlias: lambda self: self._parse_table_alias(),
+        exp.When: lambda self: seq_get(self._parse_when_matched(), 0),
         exp.Where: lambda self: self._parse_where(),
         exp.Window: lambda self: self._parse_named_window(),
         exp.With: lambda self: self._parse_with(),
@@ -634,6 +635,11 @@ class Parser(metaclass=_Parser):
         TokenType.RAW_STRING: lambda self, token: self.expression(exp.RawString, this=token.text),
         TokenType.HEREDOC_STRING: lambda self, token: self.expression(
             exp.RawString, this=token.text
+        ),
+        TokenType.UNICODE_STRING: lambda self, token: self.expression(
+            exp.UnicodeString,
+            this=token.text,
+            escape=self._match_text_seq("UESCAPE") and self._parse_string(),
         ),
         TokenType.SESSION_PARAMETER: lambda self, _: self._parse_session_parameter(),
     }
@@ -2463,13 +2469,7 @@ class Parser(metaclass=_Parser):
             pattern = None
 
         define = (
-            self._parse_csv(
-                lambda: self.expression(
-                    exp.Alias,
-                    alias=self._parse_id_var(any_token=True),
-                    this=self._match(TokenType.ALIAS) and self._parse_conjunction(),
-                )
-            )
+            self._parse_csv(self._parse_name_as_expression)
             if self._match_text_seq("DEFINE")
             else None
         )
@@ -3116,6 +3116,18 @@ class Parser(metaclass=_Parser):
 
         return self.expression(exp.Connect, start=start, connect=connect)
 
+    def _parse_name_as_expression(self) -> exp.Alias:
+        return self.expression(
+            exp.Alias,
+            alias=self._parse_id_var(any_token=True),
+            this=self._match(TokenType.ALIAS) and self._parse_conjunction(),
+        )
+
+    def _parse_interpolate(self) -> t.Optional[t.List[exp.Expression]]:
+        if self._match_text_seq("INTERPOLATE"):
+            return self._parse_wrapped_csv(self._parse_name_as_expression)
+        return None
+
     def _parse_order(
         self, this: t.Optional[exp.Expression] = None, skip_order_token: bool = False
     ) -> t.Optional[exp.Expression]:
@@ -3123,7 +3135,10 @@ class Parser(metaclass=_Parser):
             return this
 
         return self.expression(
-            exp.Order, this=this, expressions=self._parse_csv(self._parse_ordered)
+            exp.Order,
+            this=this,
+            expressions=self._parse_csv(self._parse_ordered),
+            interpolate=self._parse_interpolate(),
         )
 
     def _parse_sort(self, exp_class: t.Type[E], token: TokenType) -> t.Optional[E]:
@@ -3153,7 +3168,21 @@ class Parser(metaclass=_Parser):
         ):
             nulls_first = True
 
-        return self.expression(exp.Ordered, this=this, desc=desc, nulls_first=nulls_first)
+        if self._match_text_seq("WITH", "FILL"):
+            with_fill = self.expression(
+                exp.WithFill,
+                **{  # type: ignore
+                    "from": self._match(TokenType.FROM) and self._parse_bitwise(),
+                    "to": self._match_text_seq("TO") and self._parse_bitwise(),
+                    "step": self._match_text_seq("STEP") and self._parse_bitwise(),
+                },
+            )
+        else:
+            with_fill = None
+
+        return self.expression(
+            exp.Ordered, this=this, desc=desc, nulls_first=nulls_first, with_fill=with_fill
+        )
 
     def _parse_limit(
         self, this: t.Optional[exp.Expression] = None, top: bool = False
@@ -3599,7 +3628,7 @@ class Parser(metaclass=_Parser):
                     exp.DataType, this=exp.DataType.Type.INTERVAL, expressions=span
                 )
             else:
-                this = self.expression(exp.Interval, unit=unit)
+                this = self.expression(exp.DataType, this=self.expression(exp.Interval, unit=unit))
 
         if maybe_func and check_func:
             index2 = self._index
