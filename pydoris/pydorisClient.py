@@ -20,7 +20,7 @@ def test_create_database():
 
 
 def test_create_table():
-    doris_client.execute("""create table if not exists pydoris_client_test.write_test(
+    doris_client.execute("""create table if not exists test.write_test(
                                    f_id int,
                                    f_decimal decimal(18,6),
                                    f_timestamp bigint,
@@ -74,7 +74,7 @@ def test_write_json():
     options = WriteOptions()
     options.set_json_format()
     options.set_option("strip_outer_array", "true")
-    doris_client.write("pydoris_client_test.write_test", json_data, options=options)
+    doris_client.write("test.write_test", json_data, options=options)
 
 
 # data_df: pd.DataFrame, table_name: str, table_model: str is must
@@ -125,10 +125,11 @@ if __name__ == '__main__':
     # sql = "select t.col1 from (select t.col1 from (select * from table1) t union all select t.col2 from (select * from table2) t)t"
     # sql = "select user_id,,sum(cost) filter(where age='20') as avg_score from example_tbl_agg1 group by user_id"
     # sql = "select * from a where a = ${canc_date}"
-    sql = "select count(*) from (select * from example_db.example_tbl_agg1);"
-    import dorisApi
-
-    transform_sql = dorisApi.transpile(sql, read="presto", write="doris", case_sensitive=False, pretty=False)[0]
-    print(transform_sql)
-    test_query("set sql_dialect = \"presto\";")
-    test_query(transform_sql)
+    # sql = "select count(*) from (select * from example_db.example_tbl_agg1);"
+    # import dorisApi
+    #
+    # transform_sql = dorisApi.transpile(sql, read="presto", write="doris", case_sensitive=False, pretty=False)[0]
+    # print(transform_sql)
+    # test_query("set sql_dialect = \"presto\";")
+    # test_query(transform_sql)
+    test_write_json()
