@@ -352,6 +352,7 @@ class DuckDB(Dialect):
             ),
             exp.RegexpLike: rename_func("REGEXP_MATCHES"),
             exp.RegexpSplit: rename_func("STR_SPLIT_REGEX"),
+            exp.Rand: rename_func("RANDOM"),
             exp.SafeDivide: no_safe_divide_sql,
             exp.Split: rename_func("STR_SPLIT"),
             exp.SortArray: _sort_array_sql,
@@ -427,3 +428,8 @@ class DuckDB(Dialect):
             self, expression: exp.TableSample, seed_prefix: str = "SEED", sep: str = " AS "
         ) -> str:
             return super().tablesample_sql(expression, seed_prefix="REPEATABLE", sep=sep)
+
+        def columndef_sql(self, expression: exp.ColumnDef, sep: str = " ") -> str:
+            if isinstance(expression.parent, exp.UserDefinedFunction):
+                return self.sql(expression, "this")
+            return super().columndef_sql(expression, sep)

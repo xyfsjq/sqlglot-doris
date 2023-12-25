@@ -105,6 +105,7 @@ class ClickHouse(Dialect):
             ),
             "MAP": parse_var_map,
             "MATCH": exp.RegexpLike.from_arg_list,
+            "RANDCANONICAL": exp.Rand.from_arg_list,
             "UNIQ": exp.ApproxDistinct.from_arg_list,
             "XOR": lambda args: exp.Xor(expressions=args),
             "TODECIMAL64": exp.ToDecimal.from_arg_list,
@@ -269,9 +270,10 @@ class ClickHouse(Dialect):
 
         TABLE_ALIAS_TOKENS = parser.Parser.TABLE_ALIAS_TOKENS - {
             TokenType.ANY,
-            TokenType.SETTINGS,
-            TokenType.FORMAT,
             TokenType.ARRAY,
+            TokenType.FINAL,
+            TokenType.FORMAT,
+            TokenType.SETTINGS,
         }
 
         LOG_DEFAULTS_TO_LN = True
@@ -524,6 +526,7 @@ class ClickHouse(Dialect):
             exp.Pivot: no_pivot_sql,
             exp.Quantile: _quantile_sql,
             exp.RegexpLike: lambda self, e: f"match({self.format_args(e.this, e.expression)})",
+            exp.Rand: rename_func("randCanonical"),
             exp.StartsWith: rename_func("startsWith"),
             exp.StrPosition: lambda self, e: f"position({self.format_args(e.this, e.args.get('substr'), e.args.get('position'))})",
             exp.VarMap: lambda self, e: _lower_func(var_map_sql(self, e)),

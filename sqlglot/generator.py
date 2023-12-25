@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import typing as t
 from collections import defaultdict
 from functools import reduce
@@ -16,6 +17,8 @@ if t.TYPE_CHECKING:
     from sqlglot.dialects.dialect import DialectType
 
 logger = logging.getLogger("sqlglot")
+
+ESCAPED_UNICODE_RE = re.compile(r"\\(\d+)")
 
 
 class Generator:
@@ -65,6 +68,7 @@ class Generator:
         exp.CheckColumnConstraint: lambda self, e: f"CHECK ({self.sql(e, 'this')})",
         exp.ClusteredColumnConstraint: lambda self, e: f"CLUSTERED ({self.expressions(e, 'this', indent=False)})",
         exp.CollateColumnConstraint: lambda self, e: f"COLLATE {self.sql(e, 'this')}",
+        exp.AutoRefreshProperty: lambda self, e: f"AUTO REFRESH {self.sql(e, 'this').upper()}",
         exp.CopyGrantsProperty: lambda self, e: "COPY GRANTS",
         exp.CommentColumnConstraint: lambda self, e: f"COMMENT {self.sql(e, 'this')}",
         exp.DateFormatColumnConstraint: lambda self, e: f"FORMAT {self.sql(e, 'this')}",
@@ -269,6 +273,7 @@ class Generator:
     PROPERTIES_LOCATION = {
         exp.AlgorithmProperty: exp.Properties.Location.POST_CREATE,
         exp.AutoIncrementProperty: exp.Properties.Location.POST_SCHEMA,
+        exp.AutoRefreshProperty: exp.Properties.Location.POST_SCHEMA,
         exp.BlockCompressionProperty: exp.Properties.Location.POST_NAME,
         exp.CharacterSetProperty: exp.Properties.Location.POST_SCHEMA,
         exp.ChecksumProperty: exp.Properties.Location.POST_NAME,
@@ -917,11 +922,19 @@ class Generator:
 
     def unicodestring_sql(self, expression: exp.UnicodeString) -> str:
         this = self.sql(expression, "this")
+        escape = expression.args.get("escape")
+
         if self.dialect.UNICODE_START:
-            escape = self.sql(expression, "escape")
-            escape = f" UESCAPE {escape}" if escape else ""
+            escape = f" UESCAPE {self.sql(escape)}" if escape else ""
             return f"{self.dialect.UNICODE_START}{this}{self.dialect.UNICODE_END}{escape}"
-        return this
+
+        if escape:
+            pattern = re.compile(rf"{escape.name}(\d+)")
+        else:
+            pattern = ESCAPED_UNICODE_RE
+
+        this = pattern.sub(r"\\u\1", this)
+        return f"{self.dialect.QUOTE_START}{this}{self.dialect.QUOTE_END}"
 
     def rawstring_sql(self, expression: exp.RawString) -> str:
         string = self.escape_str(expression.this.replace("\\", "\\\\"))
@@ -1434,9 +1447,6 @@ class Generator:
             pattern = f", PATTERN => {pattern}" if pattern else ""
             file_format = f" (FILE_FORMAT => {file_format}{pattern})"
 
-        index = self.sql(expression, "index")
-        index = f" AT {index}" if index else ""
-
         ordinality = expression.args.get("ordinality") or ""
         if ordinality:
             ordinality = f" WITH ORDINALITY{alias}"
@@ -1446,7 +1456,7 @@ class Generator:
         if when:
             table = f"{table} {when}"
 
-        return f"{table}{version}{file_format}{alias}{index}{hints}{pivots}{joins}{laterals}{ordinality}"
+        return f"{table}{version}{file_format}{alias}{hints}{pivots}{joins}{laterals}{ordinality}"
 
     def tablesample_sql(
         self, expression: exp.TableSample, seed_prefix: str = "SEED", sep=" AS "
@@ -2427,6 +2437,11 @@ class Generator:
 
     def aliases_sql(self, expression: exp.Aliases) -> str:
         return f"{self.sql(expression, 'this')} AS ({self.expressions(expression, flat=True)})"
+
+    def atindex_sql(self, expression: exp.AtTimeZone) -> str:
+        this = self.sql(expression, "this")
+        index = self.sql(expression, "expression")
+        return f"{this} AT {index}"
 
     def attimezone_sql(self, expression: exp.AtTimeZone) -> str:
         this = self.sql(expression, "this")

@@ -305,6 +305,7 @@ class Parser(metaclass=_Parser):
         TokenType.FALSE,
         TokenType.FIRST,
         TokenType.FILTER,
+        TokenType.FINAL,
         TokenType.FORMAT,
         TokenType.FULL,
         TokenType.IS,
@@ -668,6 +669,7 @@ class Parser(metaclass=_Parser):
 
     PROPERTY_PARSERS: t.Dict[str, t.Callable] = {
         "ALGORITHM": lambda self: self._parse_property_assignment(exp.AlgorithmProperty),
+        "AUTO": lambda self: self._parse_auto_property(),
         "AUTO_INCREMENT": lambda self: self._parse_property_assignment(exp.AutoIncrementProperty),
         "BLOCKCOMPRESSION": lambda self: self._parse_blockcompression(),
         "CHARSET": lambda self, **kwargs: self._parse_character_set(**kwargs),
@@ -2163,13 +2165,13 @@ class Parser(metaclass=_Parser):
 
     def _parse_value(self) -> exp.Tuple:
         if self._match(TokenType.L_PAREN):
-            expressions = self._parse_csv(self._parse_conjunction)
+            expressions = self._parse_csv(self._parse_expression)
             self._match_r_paren()
             return self.expression(exp.Tuple, expressions=expressions)
 
         # In presto we can have VALUES 1, 2 which results in 1 column & 2 rows.
         # https://prestodb.io/docs/current/sql/values.html
-        return self.expression(exp.Tuple, expressions=[self._parse_conjunction()])
+        return self.expression(exp.Tuple, expressions=[self._parse_expression()])
 
     def _parse_projections(self) -> t.List[exp.Expression]:
         return self._parse_expressions()
@@ -2303,7 +2305,7 @@ class Parser(metaclass=_Parser):
         )
 
     def _parse_cte(self) -> exp.CTE:
-        alias = self._parse_table_alias()
+        alias = self._parse_table_alias(self.ID_VAR_TOKENS)
         if not alias or not alias.this:
             self.raise_error("Expected CTE to have alias")
 
@@ -2754,8 +2756,10 @@ class Parser(metaclass=_Parser):
         if alias:
             this.set("alias", alias)
 
-        if self._match_text_seq("AT"):
-            this.set("index", self._parse_id_var())
+        if isinstance(this, exp.Table) and self._match_text_seq("AT"):
+            return self.expression(
+                exp.AtIndex, this=this.to_column(copy=False), expression=self._parse_id_var()
+            )
 
         this.set("hints", self._parse_table_hints())
 
@@ -4023,6 +4027,12 @@ class Parser(metaclass=_Parser):
             return exp.GeneratedAsIdentityColumnConstraint(start=start, increment=increment)
 
         return exp.AutoIncrementColumnConstraint()
+
+    def _parse_auto_property(self) -> t.Optional[exp.AutoRefreshProperty]:
+        if not self._match_text_seq("REFRESH"):
+            self._retreat(self._index - 1)
+            return None
+        return self.expression(exp.AutoRefreshProperty, this=self._parse_var())
 
     def _parse_compress(self) -> exp.CompressColumnConstraint:
         if self._match(TokenType.L_PAREN, advance=False):

@@ -564,6 +564,7 @@ class Snowflake(Dialect):
                 [transforms.add_within_group_for_percentiles]
             ),
             exp.RegexpILike: _regexpilike_sql,
+            exp.Rand: rename_func("RANDOM"),
             exp.Select: transforms.preprocess(
                 [
                     transforms.eliminate_distinct_on,
