@@ -91,6 +91,9 @@ class Oracle(Dialect):
             **parser.Parser.FUNCTIONS,
             "SQUARE": lambda args: exp.Pow(this=seq_get(args, 0), expression=exp.Literal.number(2)),
             "TO_CHAR": to_char,
+            "TRUNC": exp.DateTrunc_oracle.from_arg_list,
+            "SUBSTR": exp.Substring.from_arg_list,
+            "TO_DATE": exp.TsOrDsToDate.from_arg_list,
         }
 
         FUNCTION_PARSERS: t.Dict[str, t.Callable] = {
