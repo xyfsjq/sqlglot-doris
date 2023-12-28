@@ -227,7 +227,9 @@ class Presto(Dialect):
             for q in t.cast(t.List[str], tokens.Tokenizer.QUOTES)
             for prefix in ("U&", "u&")
         ]
-
+        QUOTES = ["'", '"']
+        # 有冲突待解决
+        # IDENTIFIERS = ["`"]
         KEYWORDS = {
             **tokens.Tokenizer.KEYWORDS,
             "START": TokenType.BEGIN,
@@ -235,6 +237,7 @@ class Presto(Dialect):
             "ROW": TokenType.STRUCT,
             "IPADDRESS": TokenType.IPADDRESS,
             "IPPREFIX": TokenType.IPPREFIX,
+            "$": TokenType.PARAMETER,
         }
 
     class Parser(parser.Parser):
