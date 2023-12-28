@@ -237,4 +237,5 @@ class Oracle(Dialect):
             "START": TokenType.BEGIN,
             "TOP": TokenType.TOP,
             "VARCHAR2": TokenType.VARCHAR,
+            "SYSDATE": TokenType.CURRENT_TIMESTAMP,
         }
