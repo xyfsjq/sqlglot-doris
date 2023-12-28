@@ -93,7 +93,7 @@ def handle_array_concat(self, expression: exp.ArrayStringConcat) -> str:
 
 
 def handle_geography(
-        self, expression: exp.StAstext
+    self, expression: exp.StAstext
 ) -> str:  # Realize the identification of geography
     this = self.sql(expression, "this").upper()
     match = re.search(r"POINT\(([-\d.]+) ([-\d.]+)\)", this)
@@ -191,7 +191,7 @@ def _string_agg_sql(self: Doris.Generator, expression: exp.GroupConcat) -> str:
             this = this.this.pop()
         order = self.sql(expression.this)  # Order has a leading space
     if isinstance(separator, exp.Chr):
-        separator = '\\n'
+        separator = "\\n"
         return f"GROUP_CONCAT({self.format_args(this)}{order},'{separator}')"
     return f"GROUP_CONCAT({self.format_args(this, separator)}{order})"
 
@@ -237,7 +237,6 @@ class Doris(MySQL):
     # 后面考虑改成doris的默认格式，暂时doris的2.0.0由于str_to_date对yyyy-MM-dd这些格式有点问题，已修复https://github.com/apache/doris/pull/22981
     TIME_FORMAT = "'yyyy-MM-dd HH:mm:ss'"
     NULL_ORDERING = "nulls_are_frist"
-    # DPIPE_IS_STRING_CONCAT = True
     TIME_MAPPING = {
         **MySQL.TIME_MAPPING,
         "%Y": "yyyy",
@@ -293,9 +292,8 @@ class Doris(MySQL):
             exp.ArrayAgg: rename_func("COLLECT_LIST"),
             exp.ArrayStringConcat: handle_array_concat,
             exp.ArrayToString: lambda self, e: f"ARRAY_JOIN({self.sql(e, 'this')},{self.sql(e, 'sep')}"
-                                               + (f",{self.sql(e, 'null_replace')}" if self.sql(e,
-                                                                                                "null_replace") else "")
-                                               + ")",
+            + (f",{self.sql(e, 'null_replace')}" if self.sql(e, "null_replace") else "")
+            + ")",
             exp.ArrayFilter: lambda self, e: f"ARRAY_FILTER({self.sql(e, 'expression')},{self.sql(e, 'this')})",
             exp.ArrayUniq: lambda self, e: f"SIZE(ARRAY_DISTINCT({self.sql(e, 'this')}))",
             exp.ArrayOverlaps: rename_func("ARRAYS_OVERLAP"),
@@ -323,8 +321,7 @@ class Doris(MySQL):
             exp.JSONBExtract: arrow_jsonb_extract_sql,
             exp.JSONBExtractScalar: arrow_jsonb_extract_scalar_sql,
             exp.JSON_EXISTS_PATH: rename_func("JSON_EXISTS_PATH"),
-            exp.JSONArrayContains: lambda self,
-                                          e: f"JSON_CONTAINS({self.sql(e, 'this')},'{self.sql(e, 'expression')}')",
+            exp.JSONArrayContains: lambda self, e: f"JSON_CONTAINS({self.sql(e, 'this')},'{self.sql(e, 'expression')}')",
             exp.ParseJSON: rename_func("JSON_PARSE"),
             exp.JsonArrayLength: rename_func("JSON_LENGTH"),
             exp.LastDateOfMonth: rename_func("LAST_DAY"),
@@ -347,14 +344,13 @@ class Doris(MySQL):
             exp.StrPosition: lambda self, e: f"LOCATE({self.sql(e, 'substr')}, {self.sql(e, 'this')})",
             exp.StrToUnix: _str_to_unix_sql,
             exp.Split: rename_func("SPLIT_BY_STRING"),
-            # exp.SafePipe: rename_func("CONCAT"),
+            exp.DPipe: lambda self, e: f"CONCAT({self.sql(e,'this')},{self.sql(e,'expression')})",
             exp.Shuffle: rename_func("ARRAY_SHUFFLE"),
             exp.Slice: rename_func("ARRAY_SLICE"),
             exp.StAstext: handle_geography,
             exp.TimeStrToDate: rename_func("TO_DATE"),
             # exp.ToChar: handle_to_char,
-            exp.TsOrDsAdd: lambda self,
-                                  e: f"DATE_ADD({self.sql(e, 'this')}, INTERVAL {self.sql(e, 'expression')} {self.sql(e, 'unit')})",
+            exp.TsOrDsAdd: lambda self, e: f"DATE_ADD({self.sql(e, 'this')}, INTERVAL {self.sql(e, 'expression')} {self.sql(e, 'unit')})",
             exp.TsOrDsToDate: lambda self, e: f"CAST({self.sql(e, 'this')} AS DATE)",
             exp.TimeStrToUnix: rename_func("UNIX_TIMESTAMP"),
             exp.TimeToUnix: rename_func("UNIX_TIMESTAMP"),
@@ -380,7 +376,6 @@ class Doris(MySQL):
             exp.UnixToTime: rename_func("FROM_UNIXTIME"),
             exp.QuartersAdd: lambda self, e: f"MONTHS_ADD({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
             exp.QuartersSub: lambda self, e: f"MONTHS_SUB({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
-
         }
 
         def currentdate_sql(self, expression: exp.CurrentDate) -> str:
