@@ -115,3 +115,13 @@ ORDER BY
             result_1 == expected_result_1
         ), f"Transpile result doesn't match expected result. Expected: {expected_result_1}, Actual: {result_1}"
         print("Test6 passed!")
+
+    def test_presto(self):
+        expected_result_1 = "SELECT * FROM a WHERE a = ${canc_date}"
+        input_sql_1 = """select * from a where a = ${canc_date}"""
+        result_1 = sqlglot.transpile(input_sql_1, read="presto", write="doris")[0]
+        assert (
+                result_1 == expected_result_1
+        ), f"Transpile result doesn't match expected result. Expected: {expected_result_1}, Actual: {result_1}"
+        print("Test6 passed!")
+
