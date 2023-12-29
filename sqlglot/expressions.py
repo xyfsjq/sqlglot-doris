@@ -4533,6 +4533,10 @@ class ArrayToString(Func):
     arg_types = {"this": True, "sep": True, "null_replace": False}
 
 
+class DateFormat(Func):
+    arg_types = {"this": True, "format": True}
+
+
 class MICROSECONDS_ADD(Func):
     arg_types = {"this": True, "expression": True}
 

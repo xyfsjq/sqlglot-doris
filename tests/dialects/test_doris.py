@@ -114,14 +114,26 @@ ORDER BY
         assert (
             result_1 == expected_result_1
         ), f"Transpile result doesn't match expected result. Expected: {expected_result_1}, Actual: {result_1}"
-        print("Test6 passed!")
+        print("Test7 passed!")
 
     def test_presto(self):
         expected_result_1 = "SELECT * FROM a WHERE a = ${canc_date}"
         input_sql_1 = """select * from a where a = ${canc_date}"""
         result_1 = sqlglot.transpile(input_sql_1, read="presto", write="doris")[0]
         assert (
-                result_1 == expected_result_1
+            result_1 == expected_result_1
         ), f"Transpile result doesn't match expected result. Expected: {expected_result_1}, Actual: {result_1}"
-        print("Test6 passed!")
+        print("Test8 passed!")
 
+    def test_ck_date(self):
+        expected_result_1 = """SELECT DATE_FORMAT(DATE_SUB(TO_DATE('${LastDay}'), INTERVAL (DAYOFMONTH(TO_DATE('${LastDay}')) - 1) DAY), '%Y-%m-%d'), DATE_FORMAT(DATE_TRUNC(TO_DATE('${LastDay}') + INTERVAL '1' MONTH, 'Quarter'), '%Y-%m-%d')"""
+        input_sql_1 = """
+        select formatDateTime(subtractDays(toDate('${LastDay}'), toDayOfMonth(toDate('${LastDay}'))-1),
+            '%Y-%m-%d') , formatDateTime(toStartOfMonth(toDate('${LastDay}') + interval 1 month),
+            '%Y-%m-%d')   
+        """
+        result_1 = sqlglot.transpile(input_sql_1, read="clickhouse", write="doris")[0]
+        assert (
+            result_1 == expected_result_1
+        ), f"Transpile result doesn't match expected result. Expected: {expected_result_1}, Actual: {result_1}"
+        print("Test8 passed!")

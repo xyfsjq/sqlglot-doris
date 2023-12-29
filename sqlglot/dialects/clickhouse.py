@@ -223,6 +223,37 @@ class ClickHouse(Dialect):
             "STDDEVSAMP": exp.StddevSamp.from_arg_list,
             "VARPOP": exp.VarPop.from_arg_list,
             "VARSAMP": exp.VarSamp.from_arg_list,
+            "FORMATDATETIME": exp.DateFormat.from_arg_list,
+            "SUBTRACTYEARS": lambda args: exp.DateSub(
+                this=seq_get(args, 0),
+                expression=seq_get(args, 1),
+                unit="YEAR",
+            ),
+            "SUBTRACTMONTHS": lambda args: exp.DateSub(
+                this=seq_get(args, 0),
+                expression=seq_get(args, 1),
+                unit="MONTH",
+            ),
+            "SUBTRACTDAYS": lambda args: exp.DateSub(
+                this=seq_get(args, 0),
+                expression=seq_get(args, 1),
+                unit="DAY",
+            ),
+            "SUBTRACTHOURS": lambda args: exp.DateSub(
+                this=seq_get(args, 0),
+                expression=seq_get(args, 1),
+                unit="HOUR",
+            ),
+            "SUBTRACTMINUTES": lambda args: exp.DateSub(
+                this=seq_get(args, 0),
+                expression=seq_get(args, 1),
+                unit="MINUTE",
+            ),
+            "SUBTRACTSECONDS": lambda args: exp.DateSub(
+                this=seq_get(args, 0),
+                expression=seq_get(args, 1),
+                unit="SECOND",
+            ),
             "EXP2": lambda args: exp.Pow(
                 this="2",
                 expression=seq_get(args, 0),
