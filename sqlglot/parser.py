@@ -3414,7 +3414,12 @@ class Parser(metaclass=_Parser):
         else:
             this = self._parse_term()
 
-        if not this:
+        if not this or (
+            isinstance(this, exp.Column)
+            and not this.table
+            and not this.this.quoted
+            and this.name.upper() == "IS"
+        ):
             self._retreat(index)
             return None
 
@@ -4324,7 +4329,10 @@ class Parser(metaclass=_Parser):
             default = self._parse_conjunction()
 
         if not self._match(TokenType.END):
-            self.raise_error("Expected END after CASE", self._prev)
+            if isinstance(default, exp.Interval) and default.this.sql().upper() == "END":
+                default = exp.column("interval")
+            else:
+                self.raise_error("Expected END after CASE", self._prev)
 
         return self._parse_window(
             self.expression(exp.Case, comments=comments, this=expression, ifs=ifs, default=default)
