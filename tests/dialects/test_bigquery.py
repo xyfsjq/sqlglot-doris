@@ -191,6 +191,13 @@ class TestBigQuery(Validator):
         self.validate_all("x <> ''''''", write={"bigquery": "x <> ''"})
         self.validate_all("CAST(x AS DATETIME)", read={"": "x::timestamp"})
         self.validate_all(
+            "SELECT FORMAT_DATE('%Y%m%d', '2023-12-25')",
+            write={
+                "bigquery": "SELECT FORMAT_DATE('%Y%m%d', '2023-12-25')",
+                "duckdb": "SELECT STRFTIME(CAST('2023-12-25' AS DATE), '%Y%m%d')",
+            },
+        )
+        self.validate_all(
             "SELECT TIMESTAMP_DIFF(TIMESTAMP_SECONDS(60), TIMESTAMP_SECONDS(0), minute)",
             write={
                 "bigquery": "SELECT TIMESTAMP_DIFF(TIMESTAMP_SECONDS(60), TIMESTAMP_SECONDS(0), MINUTE)",
@@ -361,7 +368,7 @@ class TestBigQuery(Validator):
             },
         )
         self.validate_all(
-            "WITH cte AS (SELECT [1, 2, 3] AS arr) SELECT IF(pos = pos_2, col, NULL) AS col FROM cte, UNNEST(GENERATE_ARRAY(0, GREATEST(ARRAY_LENGTH(arr)) - 1)) AS pos CROSS JOIN UNNEST(arr) AS col WITH OFFSET AS pos_2 WHERE pos = pos_2 OR (pos > (ARRAY_LENGTH(arr) - 1) AND pos_2 = (ARRAY_LENGTH(arr) - 1))",
+            "WITH cte AS (SELECT [1, 2, 3] AS arr) SELECT IF(pos = pos_2, col, NULL) AS col FROM cte CROSS JOIN UNNEST(GENERATE_ARRAY(0, GREATEST(ARRAY_LENGTH(arr)) - 1)) AS pos CROSS JOIN UNNEST(arr) AS col WITH OFFSET AS pos_2 WHERE pos = pos_2 OR (pos > (ARRAY_LENGTH(arr) - 1) AND pos_2 = (ARRAY_LENGTH(arr) - 1))",
             read={
                 "spark": "WITH cte AS (SELECT ARRAY(1, 2, 3) AS arr) SELECT EXPLODE(arr) FROM cte"
             },
