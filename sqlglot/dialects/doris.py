@@ -245,6 +245,10 @@ class Doris(MySQL):
         "%H": "HH",
         "%i": "mm",
         "%s": "ss",
+        # 针对hive的日期格式的冲突
+        # "%Y": '%%Y',
+        # "%m": '%%-M',
+        # "%d": '%%-d',
     }
 
     class Tokenizer(MySQL.Tokenizer):
@@ -271,6 +275,10 @@ class Doris(MySQL):
             "SIZE": exp.ArraySize.from_arg_list,
             "SPLIT_BY_STRING": exp.RegexpSplit.from_arg_list,
             "SAMP": exp.StddevSamp.from_arg_list,
+            "DATE_ADD": exp.DateAdd.from_arg_list,
+            "DATE_SUB": exp.DateSub.from_arg_list,
+            "DATE_DIFF": exp.DateDiff.from_arg_list,
+            "TO_UNIXTIME": exp.UnixToStr.from_arg_list,
         }
 
     class Generator(MySQL.Generator):
