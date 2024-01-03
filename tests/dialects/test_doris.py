@@ -136,4 +136,13 @@ ORDER BY
         assert (
             result_1 == expected_result_1
         ), f"Transpile result doesn't match expected result. Expected: {expected_result_1}, Actual: {result_1}"
-        print("Test8 passed!")
+        print("Test9 passed!")
+
+    def test_presto_func(self):
+        expected_result_1 = """SELECT WEEK(CAST('2010-01-01' AS DATE), 3), LOCATE('a', 'abc'), ARRAY_MAP(x -> x + 1, ARRAY(5, 6)), SPLIT_PART('adsdmaif', 'a', 1)"""
+        input_sql_1 = """select week(DATE '2010-01-01'), index('abc','a'),transform(ARRAY [5, 6], x -> x + 1), split_part('adsdmaif','a',1);"""
+        result_1 = sqlglot.transpile(input_sql_1, read="presto", write="doris")[0]
+        assert (
+                result_1 == expected_result_1
+        ), f"Transpile result doesn't match expected result. Expected: {expected_result_1}, Actual: {result_1}"
+        print("Test10 passed!")

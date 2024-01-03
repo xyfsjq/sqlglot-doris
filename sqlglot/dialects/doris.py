@@ -341,7 +341,11 @@ class Doris(MySQL):
             exp.RETENTION: rename_func("RETENTION"),
             exp.SHA256: lambda self, e: f"SHA2({self.sql(e, 'this')},256)",
             exp.SortArray: rename_func("ARRAY_SORT"),
-            exp.StrPosition: lambda self, e: f"LOCATE({self.sql(e, 'substr')}, {self.sql(e, 'this')})",
+            exp.StrPosition: lambda self, e: (
+                f"LOCATE({self.sql(e, 'substr')}, {self.sql(e, 'this')}, {self.sql(e, 'instance')})"
+                if self.sql(e, 'instance') else
+                f"LOCATE({self.sql(e, 'substr')}, {self.sql(e, 'this')})"
+            ),
             exp.StrToUnix: _str_to_unix_sql,
             exp.Split: rename_func("SPLIT_BY_STRING"),
             exp.DPipe: lambda self, e: f"CONCAT({self.sql(e,'this')},{self.sql(e,'expression')})",
