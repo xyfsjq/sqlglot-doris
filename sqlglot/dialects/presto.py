@@ -18,6 +18,7 @@ from sqlglot.dialects.dialect import (
     no_pivot_sql,
     no_safe_divide_sql,
     no_timestamp_sql,
+    path_to_jsonpath,
     regexp_extract_sql,
     rename_func,
     right_to_substring_sql,
@@ -215,6 +216,7 @@ class Presto(Dialect):
     STRICT_STRING_CONCAT = True
     SUPPORTS_SEMI_ANTI_JOIN = False
     TYPED_DIVISION = True
+    TABLESAMPLE_SIZE_IS_PERCENT = True
 
     # https://github.com/trinodb/trino/issues/17
     # https://github.com/trinodb/trino/issues/12289
@@ -369,6 +371,7 @@ class Presto(Dialect):
             exp.Encode: lambda self, e: encode_decode_sql(self, e, "TO_UTF8"),
             exp.FileFormatProperty: lambda self, e: f"FORMAT='{e.name.upper()}'",
             exp.First: _first_last_sql,
+            exp.GetPath: path_to_jsonpath(),
             exp.Group: transforms.preprocess([transforms.unalias_group]),
             exp.GroupConcat: lambda self, e: self.func(
                 "ARRAY_JOIN", self.func("ARRAY_AGG", e.this), e.args.get("separator")
@@ -379,6 +382,7 @@ class Presto(Dialect):
             exp.Initcap: _initcap_sql,
             exp.ParseJSON: rename_func("JSON_PARSE"),
             exp.Last: _first_last_sql,
+            exp.LastDay: lambda self, e: self.func("LAST_DAY_OF_MONTH", e.this),
             exp.Lateral: _explode_to_unnest_sql,
             exp.Left: left_to_substring_sql,
             exp.Levenshtein: rename_func("LEVENSHTEIN_DISTANCE"),
@@ -449,7 +453,7 @@ class Presto(Dialect):
             return super().bracket_sql(expression)
 
         def struct_sql(self, expression: exp.Struct) -> str:
-            if any(isinstance(arg, self.KEY_VALUE_DEFINITONS) for arg in expression.expressions):
+            if any(isinstance(arg, self.KEY_VALUE_DEFINITIONS) for arg in expression.expressions):
                 self.unsupported("Struct with key-value definitions is unsupported.")
                 return self.function_fallback_sql(expression)
 

@@ -229,6 +229,15 @@ class TestOptimizer(unittest.TestCase):
     def test_qualify_columns(self, logger):
         self.assertEqual(
             optimizer.qualify_columns.qualify_columns(
+                parse_one("WITH x AS (SELECT a FROM db.y) SELECT * FROM db.x"),
+                schema={"db": {"x": {"z": "int"}, "y": {"a": "int"}}},
+                expand_stars=False,
+            ).sql(),
+            "WITH x AS (SELECT y.a AS a FROM db.y) SELECT * FROM db.x",
+        )
+
+        self.assertEqual(
+            optimizer.qualify_columns.qualify_columns(
                 parse_one("WITH x AS (SELECT a FROM db.y) SELECT z FROM db.x"),
                 schema={"db": {"x": {"z": "int"}, "y": {"a": "int"}}},
                 infer_schema=False,
@@ -284,6 +293,11 @@ class TestOptimizer(unittest.TestCase):
     def test_qualify_columns__with_invisible(self):
         schema = MappingSchema(self.schema, {"x": {"a"}, "y": {"b"}, "z": {"b"}})
         self.check_file("qualify_columns__with_invisible", qualify_columns, schema=schema)
+
+    def test_pushdown_cte_alias_columns(self):
+        self.check_file(
+            "pushdown_cte_alias_columns", optimizer.qualify_columns.pushdown_cte_alias_columns
+        )
 
     def test_qualify_columns__invalid(self):
         for sql in load_sql_fixtures("optimizer/qualify_columns__invalid.sql"):

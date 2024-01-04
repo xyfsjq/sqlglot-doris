@@ -14,10 +14,10 @@ from sqlglot.dialects.dialect import (
     format_time_lambda,
     max_or_greatest,
     min_or_least,
+    no_last_day_sql,
     no_map_from_entries_sql,
     no_paren_current_date_sql,
     no_pivot_sql,
-    no_tablesample_sql,
     no_trycast_sql,
     parse_timestamp_trunc,
     rename_func,
@@ -27,7 +27,6 @@ from sqlglot.dialects.dialect import (
     timestrtotime_sql,
     trim_sql,
     ts_or_ds_add_cast,
-    ts_or_ds_to_date_sql,
 )
 from sqlglot.helper import seq_get
 from sqlglot.parser import binary_range_parser
@@ -316,6 +315,8 @@ class Postgres(Dialect):
             **parser.Parser.FUNCTIONS,
             "DATE_TRUNC": parse_timestamp_trunc,
             "GENERATE_SERIES": _generate_series,
+            "MAKE_TIME": exp.TimeFromParts.from_arg_list,
+            "MAKE_TIMESTAMP": exp.TimestampFromParts.from_arg_list,
             "NOW": exp.CurrentTimestamp.from_arg_list,
             "TO_CHAR": format_time_lambda(exp.TimeToStr, "postgres"),
             "TO_TIMESTAMP": _to_timestamp,
@@ -409,12 +410,15 @@ class Postgres(Dialect):
 
     class Generator(generator.Generator):
         SINGLE_STRING_INTERVAL = True
+        RENAME_TABLE_WITH_DB = False
         LOCKING_READS_SUPPORTED = True
         JOIN_HINTS = False
         TABLE_HINTS = False
         QUERY_HINTS = False
         NVL2_SUPPORTED = False
         PARAMETER_TOKEN = "$"
+        TABLESAMPLE_SIZE_IS_ROWS = False
+        TABLESAMPLE_SEED_KEYWORD = "REPEATABLE"
 
         TYPE_MAPPING = {
             **generator.Generator.TYPE_MAPPING,
@@ -452,6 +456,7 @@ class Postgres(Dialect):
             exp.JSONBExtract: lambda self, e: self.binary(e, "#>"),
             exp.JSONBExtractScalar: lambda self, e: self.binary(e, "#>>"),
             exp.JSONBContains: lambda self, e: self.binary(e, "?"),
+            exp.LastDay: no_last_day_sql,
             exp.LogicalOr: rename_func("BOOL_OR"),
             exp.LogicalAnd: rename_func("BOOL_AND"),
             exp.Max: max_or_greatest,
@@ -480,16 +485,16 @@ class Postgres(Dialect):
             exp.StrToTime: lambda self, e: f"TO_TIMESTAMP({self.sql(e, 'this')}, {self.format_time(e)})",
             exp.StructExtract: struct_extract_sql,
             exp.Substring: _substring_sql,
+            exp.TimeFromParts: rename_func("MAKE_TIME"),
+            exp.TimestampFromParts: rename_func("MAKE_TIMESTAMP"),
             exp.TimestampTrunc: timestamptrunc_sql,
             exp.TimeStrToTime: timestrtotime_sql,
             exp.TimeToStr: lambda self, e: f"TO_CHAR({self.sql(e, 'this')}, {self.format_time(e)})",
-            exp.TableSample: no_tablesample_sql,
             exp.ToChar: lambda self, e: self.function_fallback_sql(e),
             exp.Trim: trim_sql,
             exp.TryCast: no_trycast_sql,
             exp.TsOrDsAdd: _date_add_sql("+"),
             exp.TsOrDsDiff: _date_diff_sql,
-            exp.TsOrDsToDate: ts_or_ds_to_date_sql("postgres"),
             exp.UnixToTime: lambda self, e: f"TO_TIMESTAMP({self.sql(e, 'this')})",
             exp.VariancePop: rename_func("VAR_POP"),
             exp.Variance: rename_func("VAR_SAMP"),

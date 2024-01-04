@@ -10,6 +10,9 @@ class TestTSQL(Validator):
         # tsql allows .. which means use the default schema
         self.validate_identity("SELECT * FROM a..b")
 
+        self.validate_identity("SELECT * FROM t TABLESAMPLE (10 PERCENT)")
+        self.validate_identity("SELECT * FROM t TABLESAMPLE (20 ROWS)")
+        self.validate_identity("SELECT * FROM t TABLESAMPLE (10 PERCENT) REPEATABLE (123)")
         self.validate_identity("SELECT CONCAT(column1, column2)")
         self.validate_identity("SELECT TestSpecialChar.Test# FROM TestSpecialChar")
         self.validate_identity("SELECT TestSpecialChar.Test@ FROM TestSpecialChar")
@@ -20,6 +23,30 @@ class TestTSQL(Validator):
         self.validate_identity("1 AND true", "1 <> 0 AND (1 = 1)")
         self.validate_identity("CAST(x AS int) OR y", "CAST(x AS INTEGER) <> 0 OR y <> 0")
 
+        self.validate_all(
+            "SELECT TIMEFROMPARTS(23, 59, 59, 0, 0)",
+            read={
+                "duckdb": "SELECT MAKE_TIME(23, 59, 59)",
+                "mysql": "SELECT MAKETIME(23, 59, 59)",
+                "postgres": "SELECT MAKE_TIME(23, 59, 59)",
+                "snowflake": "SELECT TIME_FROM_PARTS(23, 59, 59)",
+            },
+            write={
+                "tsql": "SELECT TIMEFROMPARTS(23, 59, 59, 0, 0)",
+            },
+        )
+        self.validate_all(
+            "SELECT DATETIMEFROMPARTS(2013, 4, 5, 12, 00, 00, 0)",
+            read={
+                # The nanoseconds are ignored since T-SQL doesn't support that precision
+                "snowflake": "SELECT TIMESTAMP_FROM_PARTS(2013, 4, 5, 12, 00, 00, 987654321)"
+            },
+            write={
+                "duckdb": "SELECT MAKE_TIMESTAMP(2013, 4, 5, 12, 00, 00 + (0 / 1000.0))",
+                "snowflake": "SELECT TIMESTAMP_FROM_PARTS(2013, 4, 5, 12, 00, 00, 0 * 1000000)",
+                "tsql": "SELECT DATETIMEFROMPARTS(2013, 4, 5, 12, 00, 00, 0)",
+            },
+        )
         self.validate_all(
             "SELECT TOP 1 * FROM (SELECT x FROM t1 UNION ALL SELECT x FROM t2) AS _l_0",
             read={
@@ -1324,11 +1351,36 @@ WHERE
     def test_eomonth(self):
         self.validate_all(
             "EOMONTH(GETDATE())",
-            write={"spark": "LAST_DAY(CURRENT_TIMESTAMP())"},
+            read={
+                "spark": "LAST_DAY(CURRENT_TIMESTAMP())",
+            },
+            write={
+                "bigquery": "LAST_DAY(CAST(CURRENT_TIMESTAMP() AS DATE))",
+                "clickhouse": "LAST_DAY(CAST(CURRENT_TIMESTAMP() AS DATE))",
+                "duckdb": "LAST_DAY(CAST(CURRENT_TIMESTAMP AS DATE))",
+                "mysql": "LAST_DAY(DATE(CURRENT_TIMESTAMP()))",
+                "postgres": "CAST(DATE_TRUNC('MONTH', CAST(CURRENT_TIMESTAMP AS DATE)) + INTERVAL '1 MONTH' - INTERVAL '1 DAY' AS DATE)",
+                "presto": "LAST_DAY_OF_MONTH(CAST(CAST(CURRENT_TIMESTAMP AS TIMESTAMP) AS DATE))",
+                "redshift": "LAST_DAY(CAST(SYSDATE AS DATE))",
+                "snowflake": "LAST_DAY(CAST(CURRENT_TIMESTAMP() AS DATE))",
+                "spark": "LAST_DAY(TO_DATE(CURRENT_TIMESTAMP()))",
+                "tsql": "EOMONTH(CAST(GETDATE() AS DATE))",
+            },
         )
         self.validate_all(
             "EOMONTH(GETDATE(), -1)",
-            write={"spark": "LAST_DAY(ADD_MONTHS(CURRENT_TIMESTAMP(), -1))"},
+            write={
+                "bigquery": "LAST_DAY(DATE_ADD(CAST(CURRENT_TIMESTAMP() AS DATE), INTERVAL -1 MONTH))",
+                "clickhouse": "LAST_DAY(DATE_ADD(MONTH, -1, CAST(CURRENT_TIMESTAMP() AS DATE)))",
+                "duckdb": "LAST_DAY(CAST(CURRENT_TIMESTAMP AS DATE) + INTERVAL (-1) MONTH)",
+                "mysql": "LAST_DAY(DATE_ADD(CURRENT_TIMESTAMP(), INTERVAL -1 MONTH))",
+                "postgres": "CAST(DATE_TRUNC('MONTH', CAST(CURRENT_TIMESTAMP AS DATE) + INTERVAL '-1 MONTH') + INTERVAL '1 MONTH' - INTERVAL '1 DAY' AS DATE)",
+                "presto": "LAST_DAY_OF_MONTH(DATE_ADD('MONTH', CAST(-1 AS BIGINT), CAST(CAST(CURRENT_TIMESTAMP AS TIMESTAMP) AS DATE)))",
+                "redshift": "LAST_DAY(DATEADD(MONTH, -1, CAST(SYSDATE AS DATE)))",
+                "snowflake": "LAST_DAY(DATEADD(MONTH, -1, CAST(CURRENT_TIMESTAMP() AS DATE)))",
+                "spark": "LAST_DAY(ADD_MONTHS(TO_DATE(CURRENT_TIMESTAMP()), -1))",
+                "tsql": "EOMONTH(DATEADD(MONTH, -1, CAST(GETDATE() AS DATE)))",
+            },
         )
 
     def test_identifier_prefixes(self):

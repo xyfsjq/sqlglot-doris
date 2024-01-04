@@ -422,13 +422,13 @@ class Hive(Dialect):
     class Generator(generator.Generator):
         LIMIT_FETCH = "LIMIT"
         TABLESAMPLE_WITH_METHOD = False
-        TABLESAMPLE_SIZE_IS_PERCENT = True
         JOIN_HINTS = False
         TABLE_HINTS = False
         QUERY_HINTS = False
         INDEX_ON = "ON TABLE"
         EXTRACT_ALLOWS_QUOTES = False
         NVL2_SUPPORTED = False
+        LAST_DAY_SUPPORTS_DATE_PART = False
 
         EXPRESSIONS_WITHOUT_NESTED_CTES = {
             exp.Insert,
@@ -527,7 +527,6 @@ class Hive(Dialect):
             exp.PartitionedByProperty: lambda self, e: f"PARTITIONED BY {self.sql(e, 'this')}",
             exp.SerdeProperties: lambda self, e: self.properties(e, prefix="WITH SERDEPROPERTIES"),
             exp.NumberToStr: rename_func("FORMAT_NUMBER"),
-            exp.LastDateOfMonth: rename_func("LAST_DAY"),
             exp.National: lambda self, e: self.national_sql(e, prefix=""),
             exp.ClusteredColumnConstraint: lambda self, e: f"({self.expressions(e, 'this', indent=False)})",
             exp.NonClusteredColumnConstraint: lambda self, e: f"({self.expressions(e, 'this', indent=False)})",

@@ -582,6 +582,8 @@ class TestPresto(Validator):
                 },
             )
 
+        self.validate_identity("SELECT a FROM test TABLESAMPLE BERNOULLI (50)")
+        self.validate_identity("SELECT a FROM test TABLESAMPLE SYSTEM (75)")
         self.validate_identity("string_agg(x, ',')", "ARRAY_JOIN(ARRAY_AGG(x), ',')")
         self.validate_identity("SELECT * FROM x OFFSET 1 LIMIT 1")
         self.validate_identity("SELECT * FROM x OFFSET 1 FETCH FIRST 1 ROWS ONLY")
@@ -600,6 +602,16 @@ class TestPresto(Validator):
             "SELECT * FROM example.testdb.customer_orders FOR TIMESTAMP AS OF CAST('2022-03-23 09:59:29.803 Europe/Vienna' AS TIMESTAMP)"
         )
 
+        self.validate_all(
+            "SELECT LAST_DAY_OF_MONTH(CAST('2008-11-25' AS DATE))",
+            read={
+                "duckdb": "SELECT LAST_DAY(CAST('2008-11-25' AS DATE))",
+            },
+            write={
+                "duckdb": "SELECT LAST_DAY(CAST('2008-11-25' AS DATE))",
+                "presto": "SELECT LAST_DAY_OF_MONTH(CAST('2008-11-25' AS DATE))",
+            },
+        )
         self.validate_all(
             "SELECT MAX_BY(a.id, a.timestamp) FROM a",
             read={

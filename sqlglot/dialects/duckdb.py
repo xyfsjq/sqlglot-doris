@@ -22,15 +22,15 @@ from sqlglot.dialects.dialect import (
     no_safe_divide_sql,
     no_timestamp_sql,
     pivot_column_names,
+    prepend_dollar_to_path,
     regexp_extract_sql,
     rename_func,
     str_position_sql,
     str_to_time_sql,
     timestamptrunc_sql,
     timestrtotime_sql,
-    ts_or_ds_to_date_sql,
 )
-from sqlglot.helper import seq_get
+from sqlglot.helper import flatten, seq_get
 from sqlglot.tokens import TokenType
 
 
@@ -148,6 +148,16 @@ def _unix_to_time_sql(self: DuckDB.Generator, expression: exp.UnixToTime) -> str
     return ""
 
 
+def _rename_unless_within_group(
+    a: str, b: str
+) -> t.Callable[[DuckDB.Generator, exp.Expression], str]:
+    return (
+        lambda self, expression: self.func(a, *flatten(expression.args.values()))
+        if isinstance(expression.find_ancestor(exp.Select, exp.WithinGroup), exp.WithinGroup)
+        else self.func(b, *flatten(expression.args.values()))
+    )
+
+
 class DuckDB(Dialect):
     NULL_ORDERING = "nulls_are_last"
     SUPPORTS_USER_DEFINED_TYPES = False
@@ -183,6 +193,11 @@ class DuckDB(Dialect):
             "TIMESTAMP_US": TokenType.TIMESTAMP,
         }
 
+        SINGLE_TOKENS = {
+            **tokens.Tokenizer.SINGLE_TOKENS,
+            "$": TokenType.PARAMETER,
+        }
+
     class Parser(parser.Parser):
         BITWISE = {
             **parser.Parser.BITWISE,
@@ -209,10 +224,12 @@ class DuckDB(Dialect):
             "EPOCH_MS": lambda args: exp.UnixToTime(
                 this=seq_get(args, 0), scale=exp.UnixToTime.MILLIS
             ),
+            "JSON": exp.ParseJSON.from_arg_list,
             "LIST_HAS": exp.ArrayContains.from_arg_list,
             "LIST_REVERSE_SORT": _sort_array_reverse,
             "LIST_SORT": exp.SortArray.from_arg_list,
             "LIST_VALUE": exp.Array.from_arg_list,
+            "MAKE_TIME": exp.TimeFromParts.from_arg_list,
             "MAKE_TIMESTAMP": _parse_make_timestamp,
             "MEDIAN": lambda args: exp.PercentileCont(
                 this=seq_get(args, 0), expression=exp.Literal.number(0.5)
@@ -250,6 +267,13 @@ class DuckDB(Dialect):
             TokenType.ANTI,
         }
 
+        PLACEHOLDER_PARSERS = {
+            **parser.Parser.PLACEHOLDER_PARSERS,
+            TokenType.PARAMETER: lambda self: self.expression(exp.Placeholder, this=self._prev.text)
+            if self._match(TokenType.NUMBER) or self._match_set(self.ID_VAR_TOKENS)
+            else None,
+        }
+
         def _parse_types(
             self, check_func: bool = False, schema: bool = False, allow_identifiers: bool = True
         ) -> t.Optional[exp.Expression]:
@@ -285,6 +309,9 @@ class DuckDB(Dialect):
         RENAME_TABLE_WITH_DB = False
         NVL2_SUPPORTED = False
         SEMI_ANTI_JOIN_WITH_SIDE = False
+        TABLESAMPLE_KEYWORDS = "USING SAMPLE"
+        TABLESAMPLE_SEED_KEYWORD = "REPEATABLE"
+        LAST_DAY_SUPPORTS_DATE_PART = False
 
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
@@ -336,8 +363,8 @@ class DuckDB(Dialect):
                 exp.cast(e.this, "timestamp", copy=True),
             ),
             exp.ParseJSON: rename_func("JSON"),
-            exp.PercentileCont: rename_func("QUANTILE_CONT"),
-            exp.PercentileDisc: rename_func("QUANTILE_DISC"),
+            exp.PercentileCont: _rename_unless_within_group("PERCENTILE_CONT", "QUANTILE_CONT"),
+            exp.PercentileDisc: _rename_unless_within_group("PERCENTILE_DISC", "QUANTILE_DISC"),
             # DuckDB doesn't allow qualified columns inside of PIVOT expressions.
             # See: https://github.com/duckdb/duckdb/blob/671faf92411182f81dce42ac43de8bfb05d9909e/src/planner/binder/tableref/bind_pivot.cpp#L61-L62
             exp.Pivot: transforms.preprocess([transforms.unqualify_columns]),
@@ -365,7 +392,6 @@ class DuckDB(Dialect):
             exp.TimestampDiff: lambda self, e: self.func(
                 "DATE_DIFF", exp.Literal.string(e.unit), e.expression, e.this
             ),
-            exp.TimestampFromParts: rename_func("MAKE_TIMESTAMP"),
             exp.TimestampTrunc: timestamptrunc_sql,
             exp.TimeStrToDate: lambda self, e: f"CAST({self.sql(e, 'this')} AS DATE)",
             exp.TimeStrToTime: timestrtotime_sql,
@@ -380,7 +406,6 @@ class DuckDB(Dialect):
                 exp.cast(e.expression, "TIMESTAMP"),
                 exp.cast(e.this, "TIMESTAMP"),
             ),
-            exp.TsOrDsToDate: ts_or_ds_to_date_sql("duckdb"),
             exp.UnixToStr: lambda self, e: f"STRFTIME(TO_TIMESTAMP({self.sql(e, 'this')}), {self.format_time(e)})",
             exp.UnixToTime: _unix_to_time_sql,
             exp.UnixToTimeStr: lambda self, e: f"CAST(TO_TIMESTAMP({self.sql(e, 'this')}) AS TEXT)",
@@ -413,6 +438,49 @@ class DuckDB(Dialect):
             exp.VolatileProperty: exp.Properties.Location.UNSUPPORTED,
         }
 
+        def timefromparts_sql(self, expression: exp.TimeFromParts) -> str:
+            nano = expression.args.get("nano")
+            if nano is not None:
+                expression.set(
+                    "sec", expression.args["sec"] + nano.pop() / exp.Literal.number(1000000000.0)
+                )
+
+            return rename_func("MAKE_TIME")(self, expression)
+
+        def timestampfromparts_sql(self, expression: exp.TimestampFromParts) -> str:
+            sec = expression.args["sec"]
+
+            milli = expression.args.get("milli")
+            if milli is not None:
+                sec += milli.pop() / exp.Literal.number(1000.0)
+
+            nano = expression.args.get("nano")
+            if nano is not None:
+                sec += nano.pop() / exp.Literal.number(1000000000.0)
+
+            if milli or nano:
+                expression.set("sec", sec)
+
+            return rename_func("MAKE_TIMESTAMP")(self, expression)
+
+        def tablesample_sql(
+            self,
+            expression: exp.TableSample,
+            sep: str = " AS ",
+            tablesample_keyword: t.Optional[str] = None,
+        ) -> str:
+            if not isinstance(expression.parent, exp.Select):
+                # This sample clause only applies to a single source, not the entire resulting relation
+                tablesample_keyword = "TABLESAMPLE"
+
+            return super().tablesample_sql(
+                expression, sep=sep, tablesample_keyword=tablesample_keyword
+            )
+
+        def getpath_sql(self, expression: exp.GetPath) -> str:
+            expression = prepend_dollar_to_path(expression)
+            return f"{self.sql(expression, 'this')} -> {self.sql(expression, 'expression')}"
+
         def interval_sql(self, expression: exp.Interval) -> str:
             multiplier: t.Optional[int] = None
             unit = expression.text("unit").lower()
@@ -427,12 +495,10 @@ class DuckDB(Dialect):
 
             return super().interval_sql(expression)
 
-        def tablesample_sql(
-            self, expression: exp.TableSample, seed_prefix: str = "SEED", sep: str = " AS "
-        ) -> str:
-            return super().tablesample_sql(expression, seed_prefix="REPEATABLE", sep=sep)
-
         def columndef_sql(self, expression: exp.ColumnDef, sep: str = " ") -> str:
             if isinstance(expression.parent, exp.UserDefinedFunction):
                 return self.sql(expression, "this")
             return super().columndef_sql(expression, sep)
+
+        def placeholder_sql(self, expression: exp.Placeholder) -> str:
+            return f"${expression.name}" if expression.name else "?"

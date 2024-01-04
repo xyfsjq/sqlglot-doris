@@ -134,12 +134,6 @@ class Generator:
     # Whether or not the plural form of date parts like day (i.e. "days") is supported in INTERVALs
     INTERVAL_ALLOWS_PLURAL_FORM = True
 
-    # Whether or not the TABLESAMPLE clause supports a method name, like BERNOULLI
-    TABLESAMPLE_WITH_METHOD = True
-
-    # Whether or not to treat the number in TABLESAMPLE (50) as a percentage
-    TABLESAMPLE_SIZE_IS_PERCENT = False
-
     # Whether or not limit and fetch are supported (possible values: "ALL", "LIMIT", "FETCH")
     LIMIT_FETCH = "ALL"
 
@@ -220,6 +214,18 @@ class Generator:
     # Whether or not parentheses are required around the table sample's expression
     TABLESAMPLE_REQUIRES_PARENS = True
 
+    # Whether or not a table sample clause's size needs to be followed by the ROWS keyword
+    TABLESAMPLE_SIZE_IS_ROWS = True
+
+    # The keyword(s) to use when generating a sample clause
+    TABLESAMPLE_KEYWORDS = "TABLESAMPLE"
+
+    # Whether or not the TABLESAMPLE clause supports a method name, like BERNOULLI
+    TABLESAMPLE_WITH_METHOD = True
+
+    # The keyword to use when specifying the seed of a sample clause
+    TABLESAMPLE_SEED_KEYWORD = "SEED"
+
     # Whether or not COLLATE is a function instead of a binary operator
     COLLATE_IS_FUNC = False
 
@@ -234,6 +240,9 @@ class Generator:
 
     # Whether or not CONCAT requires >1 arguments
     SUPPORTS_SINGLE_ARG_CONCAT = True
+
+    # Whether or not LAST_DAY function supports a date part argument
+    LAST_DAY_SUPPORTS_DATE_PART = True
 
     TYPE_MAPPING = {
         exp.DataType.Type.NCHAR: "CHAR",
@@ -372,7 +381,7 @@ class Generator:
     # Expressions that need to have all CTEs under them bubbled up to them
     EXPRESSIONS_WITHOUT_NESTED_CTES: t.Set[t.Type[exp.Expression]] = set()
 
-    KEY_VALUE_DEFINITONS = (exp.Bracket, exp.EQ, exp.PropertyEQ, exp.Slice)
+    KEY_VALUE_DEFINITIONS = (exp.Bracket, exp.EQ, exp.PropertyEQ, exp.Slice)
 
     SENTINEL_LINE_BREAK = "__SQLGLOT__LB__"
 
@@ -1459,7 +1468,10 @@ class Generator:
         return f"{table}{version}{file_format}{alias}{hints}{pivots}{joins}{laterals}{ordinality}"
 
     def tablesample_sql(
-        self, expression: exp.TableSample, seed_prefix: str = "SEED", sep=" AS "
+        self,
+        expression: exp.TableSample,
+        sep: str = " AS ",
+        tablesample_keyword: t.Optional[str] = None,
     ) -> str:
         if self.dialect.ALIAS_POST_TABLESAMPLE and expression.this and expression.this.alias:
             table = expression.this.copy()
@@ -1477,24 +1489,24 @@ class Generator:
         field = self.sql(expression, "bucket_field")
         field = f" ON {field}" if field else ""
         bucket = f"BUCKET {numerator} OUT OF {denominator}{field}" if numerator else ""
-        percent = self.sql(expression, "percent")
-        percent = f"{percent} PERCENT" if percent else ""
-        rows = self.sql(expression, "rows")
-        rows = f"{rows} ROWS" if rows else ""
+        seed = self.sql(expression, "seed")
+        seed = f" {self.TABLESAMPLE_SEED_KEYWORD} ({seed})" if seed else ""
 
         size = self.sql(expression, "size")
-        if size and self.TABLESAMPLE_SIZE_IS_PERCENT:
-            size = f"{size} PERCENT"
+        if size and self.TABLESAMPLE_SIZE_IS_ROWS:
+            size = f"{size} ROWS"
 
-        seed = self.sql(expression, "seed")
-        seed = f" {seed_prefix} ({seed})" if seed else ""
-        kind = expression.args.get("kind", "TABLESAMPLE")
+        percent = self.sql(expression, "percent")
+        if percent and not self.dialect.TABLESAMPLE_SIZE_IS_PERCENT:
+            percent = f"{percent} PERCENT"
 
-        expr = f"{bucket}{percent}{rows}{size}"
+        expr = f"{bucket}{percent}{size}"
         if self.TABLESAMPLE_REQUIRES_PARENS:
             expr = f"({expr})"
 
-        return f"{this} {kind} {method}{expr}{seed}{alias}"
+        return (
+            f"{this} {tablesample_keyword or self.TABLESAMPLE_KEYWORDS} {method}{expr}{seed}{alias}"
+        )
 
     def pivot_sql(self, expression: exp.Pivot) -> str:
         expressions = self.expressions(expression, flat=True)
@@ -3105,6 +3117,47 @@ class Generator:
 
         cond_for_null = arg.is_(exp.null())
         return self.sql(exp.func("IF", cond_for_null, exp.null(), exp.Array(expressions=[arg])))
+
+    def tsordstotime_sql(self, expression: exp.TsOrDsToTime) -> str:
+        this = expression.this
+        if isinstance(this, exp.TsOrDsToTime) or this.is_type(exp.DataType.Type.TIME):
+            return self.sql(this)
+
+        return self.sql(exp.cast(this, "time"))
+
+    def tsordstodate_sql(self, expression: exp.TsOrDsToDate) -> str:
+        this = expression.this
+        time_format = self.format_time(expression)
+
+        if time_format and time_format not in (self.dialect.TIME_FORMAT, self.dialect.DATE_FORMAT):
+            return self.sql(
+                exp.cast(exp.StrToTime(this=this, format=expression.args["format"]), "date")
+            )
+
+        if isinstance(this, exp.TsOrDsToDate) or this.is_type(exp.DataType.Type.DATE):
+            return self.sql(this)
+
+        return self.sql(exp.cast(this, "date"))
+
+    def unixdate_sql(self, expression: exp.UnixDate) -> str:
+        return self.sql(
+            exp.func(
+                "DATEDIFF",
+                expression.this,
+                exp.cast(exp.Literal.string("1970-01-01"), "date"),
+                "day",
+            )
+        )
+
+    def lastday_sql(self, expression: exp.LastDay) -> str:
+        if self.LAST_DAY_SUPPORTS_DATE_PART:
+            return self.function_fallback_sql(expression)
+
+        unit = expression.text("unit")
+        if unit and unit != "MONTH":
+            self.unsupported("Date parts are not supported in LAST_DAY.")
+
+        return self.func("LAST_DAY", expression.this)
 
     def _simplify_unless_literal(self, expression: E) -> E:
         if not isinstance(expression, exp.Literal):

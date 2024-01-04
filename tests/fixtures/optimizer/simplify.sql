@@ -884,7 +884,7 @@ DATE_TRUNC('year', x) > TS_OR_DS_TO_DATE(TS_OR_DS_TO_DATE('2021-01-02'));
 x >= CAST('2022-01-01' AS DATE);
 
 DATE_TRUNC('year', x) > TS_OR_DS_TO_DATE(TS_OR_DS_TO_DATE('2021-01-02', '%Y'));
-DATE_TRUNC('YEAR', x) > TS_OR_DS_TO_DATE(TS_OR_DS_TO_DATE('2021-01-02', '%Y'));
+DATE_TRUNC('YEAR', x) > CAST(STR_TO_TIME('2021-01-02', '%Y') AS DATE);
 
 -- right is not a date
 DATE_TRUNC('year', x) <> '2021-01-02';
@@ -1094,3 +1094,33 @@ CASE WHEN x = y THEN z END;
 
 CASE x1 + x2 WHEN x3 THEN x4 WHEN x5 + x6 THEN x7 ELSE x8 END;
 CASE WHEN x3 = (x1 + x2) THEN x4 WHEN (x1 + x2) = (x5 + x6) THEN x7 ELSE x8 END;
+
+--------------------------------------
+-- Simplify STARTSWITH
+--------------------------------------
+STARTS_WITH('foo', 'f');
+TRUE;
+
+STARTS_WITH('foo', 'g');
+FALSE;
+
+STARTS_WITH('', 'f');
+FALSE;
+
+STARTS_WITH('', '');
+TRUE;
+
+STARTS_WITH('foo', '');
+TRUE;
+
+STARTS_WITH(NULL, y);
+STARTS_WITH(NULL, y);
+
+STARTS_WITH(x, y);
+STARTS_WITH(x, y);
+
+STARTS_WITH('x', y);
+STARTS_WITH('x', y);
+
+STARTS_WITH(x, 'y');
+STARTS_WITH(x, 'y');

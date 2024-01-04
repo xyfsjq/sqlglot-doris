@@ -19,7 +19,6 @@ from sqlglot.dialects.dialect import (
     rename_func,
     timestamptrunc_sql,
     timestrtotime_sql,
-    ts_or_ds_to_date_sql,
     var_map_sql,
 )
 from sqlglot.expressions import Literal
@@ -91,7 +90,9 @@ def _parse_object_construct(args: t.List) -> t.Union[exp.StarMap, exp.Struct]:
 
 
 def _parse_datediff(args: t.List) -> exp.DateDiff:
-    return exp.DateDiff(this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0))
+    return exp.DateDiff(
+        this=seq_get(args, 2), expression=seq_get(args, 1), unit=_map_date_part(seq_get(args, 0))
+    )
 
 
 def _unix_to_time_sql(self: Snowflake.Generator, expression: exp.UnixToTime) -> str:
@@ -120,14 +121,15 @@ def _parse_date_part(self: Snowflake.Parser) -> t.Optional[exp.Expression]:
 
     self._match(TokenType.COMMA)
     expression = self._parse_bitwise()
-
+    this = _map_date_part(this)
     name = this.name.upper()
+
     if name.startswith("EPOCH"):
-        if name.startswith("EPOCH_MILLISECOND"):
+        if name == "EPOCH_MILLISECOND":
             scale = 10**3
-        elif name.startswith("EPOCH_MICROSECOND"):
+        elif name == "EPOCH_MICROSECOND":
             scale = 10**6
-        elif name.startswith("EPOCH_NANOSECOND"):
+        elif name == "EPOCH_NANOSECOND":
             scale = 10**9
         else:
             scale = None
@@ -204,6 +206,139 @@ def _show_parser(*args: t.Any, **kwargs: t.Any) -> t.Callable[[Snowflake.Parser]
     return _parse
 
 
+DATE_PART_MAPPING = {
+    "Y": "YEAR",
+    "YY": "YEAR",
+    "YYY": "YEAR",
+    "YYYY": "YEAR",
+    "YR": "YEAR",
+    "YEARS": "YEAR",
+    "YRS": "YEAR",
+    "MM": "MONTH",
+    "MON": "MONTH",
+    "MONS": "MONTH",
+    "MONTHS": "MONTH",
+    "D": "DAY",
+    "DD": "DAY",
+    "DAYS": "DAY",
+    "DAYOFMONTH": "DAY",
+    "WEEKDAY": "DAYOFWEEK",
+    "DOW": "DAYOFWEEK",
+    "DW": "DAYOFWEEK",
+    "WEEKDAY_ISO": "DAYOFWEEKISO",
+    "DOW_ISO": "DAYOFWEEKISO",
+    "DW_ISO": "DAYOFWEEKISO",
+    "YEARDAY": "DAYOFYEAR",
+    "DOY": "DAYOFYEAR",
+    "DY": "DAYOFYEAR",
+    "W": "WEEK",
+    "WK": "WEEK",
+    "WEEKOFYEAR": "WEEK",
+    "WOY": "WEEK",
+    "WY": "WEEK",
+    "WEEK_ISO": "WEEKISO",
+    "WEEKOFYEARISO": "WEEKISO",
+    "WEEKOFYEAR_ISO": "WEEKISO",
+    "Q": "QUARTER",
+    "QTR": "QUARTER",
+    "QTRS": "QUARTER",
+    "QUARTERS": "QUARTER",
+    "H": "HOUR",
+    "HH": "HOUR",
+    "HR": "HOUR",
+    "HOURS": "HOUR",
+    "HRS": "HOUR",
+    "M": "MINUTE",
+    "MI": "MINUTE",
+    "MIN": "MINUTE",
+    "MINUTES": "MINUTE",
+    "MINS": "MINUTE",
+    "S": "SECOND",
+    "SEC": "SECOND",
+    "SECONDS": "SECOND",
+    "SECS": "SECOND",
+    "MS": "MILLISECOND",
+    "MSEC": "MILLISECOND",
+    "MILLISECONDS": "MILLISECOND",
+    "US": "MICROSECOND",
+    "USEC": "MICROSECOND",
+    "MICROSECONDS": "MICROSECOND",
+    "NS": "NANOSECOND",
+    "NSEC": "NANOSECOND",
+    "NANOSEC": "NANOSECOND",
+    "NSECOND": "NANOSECOND",
+    "NSECONDS": "NANOSECOND",
+    "NANOSECS": "NANOSECOND",
+    "NSECONDS": "NANOSECOND",
+    "EPOCH": "EPOCH_SECOND",
+    "EPOCH_SECONDS": "EPOCH_SECOND",
+    "EPOCH_MILLISECONDS": "EPOCH_MILLISECOND",
+    "EPOCH_MICROSECONDS": "EPOCH_MICROSECOND",
+    "EPOCH_NANOSECONDS": "EPOCH_NANOSECOND",
+    "TZH": "TIMEZONE_HOUR",
+    "TZM": "TIMEZONE_MINUTE",
+}
+
+
+@t.overload
+def _map_date_part(part: exp.Expression) -> exp.Var:
+    pass
+
+
+@t.overload
+def _map_date_part(part: t.Optional[exp.Expression]) -> t.Optional[exp.Expression]:
+    pass
+
+
+def _map_date_part(part):
+    mapped = DATE_PART_MAPPING.get(part.name.upper()) if part else None
+    return exp.var(mapped) if mapped else part
+
+
+def _date_trunc_to_time(args: t.List) -> exp.DateTrunc | exp.TimestampTrunc:
+    trunc = date_trunc_to_time(args)
+    trunc.set("unit", _map_date_part(trunc.args["unit"]))
+    return trunc
+
+
+def _parse_colon_get_path(
+    self: parser.Parser, this: t.Optional[exp.Expression]
+) -> t.Optional[exp.Expression]:
+    while True:
+        path = self._parse_bitwise()
+
+        # The cast :: operator has a lower precedence than the extraction operator :, so
+        # we rearrange the AST appropriately to avoid casting the 2nd argument of GET_PATH
+        if isinstance(path, exp.Cast):
+            target_type = path.to
+            path = path.this
+        else:
+            target_type = None
+
+        if isinstance(path, exp.Expression):
+            path = exp.Literal.string(path.sql(dialect="snowflake"))
+
+        # The extraction operator : is left-associative
+        this = self.expression(exp.GetPath, this=this, expression=path)
+
+        if target_type:
+            this = exp.cast(this, target_type)
+
+        if not self._match(TokenType.COLON):
+            break
+
+    return this
+
+
+def _parse_timestamp_from_parts(args: t.List) -> exp.Func:
+    if len(args) == 2:
+        # Other dialects don't have the TIMESTAMP_FROM_PARTS(date, time) concept,
+        # so we parse this into Anonymous for now instead of introducing complexity
+        return exp.Anonymous(this="TIMESTAMP_FROM_PARTS", expressions=args)
+
+    return exp.TimestampFromParts.from_arg_list(args)
+
+
 class Snowflake(Dialect):
     # https://docs.snowflake.com/en/sql-reference/identifiers-syntax
     NORMALIZATION_STRATEGY = NormalizationStrategy.UPPERCASE
@@ -211,6 +346,8 @@ class Snowflake(Dialect):
     TIME_FORMAT = "'YYYY-MM-DD HH24:MI:SS'"
     SUPPORTS_USER_DEFINED_TYPES = False
     SUPPORTS_SEMI_ANTI_JOIN = False
+    PREFER_CTE_ALIAS_COLUMN = True
+    TABLESAMPLE_SIZE_IS_PERCENT = True
 
     TIME_MAPPING = {
         "YYYY": "%Y",
@@ -276,14 +413,19 @@ class Snowflake(Dialect):
             "BIT_XOR": binary_from_function(exp.BitwiseXor),
             "BOOLXOR": binary_from_function(exp.Xor),
             "CONVERT_TIMEZONE": _parse_convert_timezone,
-            "DATE_TRUNC": date_trunc_to_time,
+            "DATE_TRUNC": _date_trunc_to_time,
             "DATEADD": lambda args: exp.DateAdd(
-                this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
+                this=seq_get(args, 2),
+                expression=seq_get(args, 1),
+                unit=_map_date_part(seq_get(args, 0)),
             ),
             "DATEDIFF": _parse_datediff,
             "DIV0": _div0_to_if,
             "FLATTEN": exp.Explode.from_arg_list,
             "IFF": exp.If.from_arg_list,
+            "LAST_DAY": lambda args: exp.LastDay(
+                this=seq_get(args, 0), unit=_map_date_part(seq_get(args, 1))
+            ),
             "LISTAGG": exp.GroupConcat.from_arg_list,
             "NULLIFZERO": _nullifzero_to_if,
             "OBJECT_CONSTRUCT": _parse_object_construct,
@@ -293,6 +435,8 @@ class Snowflake(Dialect):
             "SQUARE": lambda args: exp.Pow(this=seq_get(args, 0), expression=exp.Literal.number(2)),
             "TIMEDIFF": _parse_datediff,
             "TIMESTAMPDIFF": _parse_datediff,
+            "TIMESTAMPFROMPARTS": _parse_timestamp_from_parts,
+            "TIMESTAMP_FROM_PARTS": _parse_timestamp_from_parts,
             "TO_TIMESTAMP": _parse_to_timestamp,
             "TO_VARCHAR": exp.ToChar.from_arg_list,
             "ZEROIFNULL": _zeroifnull_to_if,
@@ -310,19 +454,13 @@ class Snowflake(Dialect):
         }
         FUNCTION_PARSERS.pop("TRIM")
 
-        COLUMN_OPERATORS = {
-            **parser.Parser.COLUMN_OPERATORS,
-            TokenType.COLON: lambda self, this, path: self.expression(
-                exp.Bracket, this=this, expressions=[path]
-            ),
-        }
-
         TIMESTAMPS = parser.Parser.TIMESTAMPS - {TokenType.TIME}
 
         RANGE_PARSERS = {
             **parser.Parser.RANGE_PARSERS,
             TokenType.LIKE_ANY: parser.binary_range_parser(exp.LikeAny),
             TokenType.ILIKE_ANY: parser.binary_range_parser(exp.ILikeAny),
+            TokenType.COLON: _parse_colon_get_path,
         }
 
         ALTER_PARSERS = {
@@ -357,7 +495,17 @@ class Snowflake(Dialect):
             TokenType.MOD,
             TokenType.SLASH,
         }
+
         FLATTEN_COLUMNS = ["SEQ", "KEY", "PATH", "INDEX", "VALUE", "THIS"]
+
+        def _parse_bracket_key_value(self, is_map: bool = False) -> t.Optional[exp.Expression]:
+            if is_map:
+                # Keys are strings in Snowflake's objects, see also:
+                # - https://docs.snowflake.com/en/sql-reference/data-types-semistructured
+                # - https://docs.snowflake.com/en/sql-reference/functions/object_construct
+                return self._parse_slice(self._parse_string())
+
+            return self._parse_slice(self._parse_alias(self._parse_conjunction(), explicit=True))
 
         def _parse_lateral(self) -> t.Optional[exp.Lateral]:
             lateral = super()._parse_lateral()
@@ -551,6 +699,7 @@ class Snowflake(Dialect):
             ),
             exp.GroupConcat: rename_func("LISTAGG"),
             exp.If: if_sql(name="IFF", false_value="NULL"),
+            exp.JSONExtract: lambda self, e: f"{self.sql(e, 'this')}[{self.sql(e, 'expression')}]",
             exp.LogicalAnd: rename_func("BOOLAND_AGG"),
             exp.LogicalOr: rename_func("BOOLOR_AGG"),
             exp.Map: lambda self, e: var_map_sql(self, e, "OBJECT_CONSTRUCT"),
@@ -598,7 +747,6 @@ class Snowflake(Dialect):
             exp.Trim: lambda self, e: self.func("TRIM", e.this, e.expression),
             exp.TsOrDsAdd: date_delta_sql("DATEADD", cast=True),
             exp.TsOrDsDiff: date_delta_sql("DATEDIFF"),
-            exp.TsOrDsToDate: ts_or_ds_to_date_sql("snowflake"),
             exp.UnixToTime: _unix_to_time_sql,
             exp.VarMap: lambda self, e: var_map_sql(self, e, "OBJECT_CONSTRUCT"),
             exp.WeekOfYear: rename_func("WEEKOFYEAR"),
@@ -620,6 +768,14 @@ class Snowflake(Dialect):
             exp.SetProperty: exp.Properties.Location.UNSUPPORTED,
             exp.VolatileProperty: exp.Properties.Location.UNSUPPORTED,
         }
+
+        def timestampfromparts_sql(self, expression: exp.TimestampFromParts) -> str:
+            milli = expression.args.get("milli")
+            if milli is not None:
+                milli_to_nano = milli.pop() * exp.Literal.number(1000000)
+                expression.set("nano", milli_to_nano)
+
+            return rename_func("TIMESTAMP_FROM_PARTS")(self, expression)
 
         def trycast_sql(self, expression: exp.TryCast) -> str:
             value = expression.this

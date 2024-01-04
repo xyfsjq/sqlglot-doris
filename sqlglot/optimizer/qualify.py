@@ -3,10 +3,11 @@ from __future__ import annotations
 import typing as t
 
 from sqlglot import exp
-from sqlglot.dialects.dialect import DialectType
+from sqlglot.dialects.dialect import Dialect, DialectType
 from sqlglot.optimizer.isolate_table_selects import isolate_table_selects
 from sqlglot.optimizer.normalize_identifiers import normalize_identifiers
 from sqlglot.optimizer.qualify_columns import (
+    pushdown_cte_alias_columns as pushdown_cte_alias_columns_func,
     qualify_columns as qualify_columns_func,
     quote_identifiers as quote_identifiers_func,
     validate_qualify_columns as validate_qualify_columns_func,
@@ -22,6 +23,7 @@ def qualify(
     catalog: t.Optional[str] = None,
     schema: t.Optional[dict | Schema] = None,
     expand_alias_refs: bool = True,
+    expand_stars: bool = True,
     infer_schema: t.Optional[bool] = None,
     isolate_tables: bool = False,
     qualify_columns: bool = True,
@@ -47,6 +49,9 @@ def qualify(
         catalog: Default catalog name for tables.
         schema: Schema to infer column names and types.
         expand_alias_refs: Whether or not to expand references to aliases.
+        expand_stars: Whether or not to expand star queries. This is a necessary step
+            for most of the optimizer's rules to work; do not set to False unless you
+            know what you're doing!
         infer_schema: Whether or not to infer the schema if missing.
         isolate_tables: Whether or not to isolate table selects.
         qualify_columns: Whether or not to qualify columns.
@@ -66,9 +71,16 @@ def qualify(
     if isolate_tables:
         expression = isolate_table_selects(expression, schema=schema)
 
+    if Dialect.get_or_raise(dialect).PREFER_CTE_ALIAS_COLUMN:
+        expression = pushdown_cte_alias_columns_func(expression)
+
     if qualify_columns:
         expression = qualify_columns_func(
-            expression, schema, expand_alias_refs=expand_alias_refs, infer_schema=infer_schema
+            expression,
+            schema,
+            expand_alias_refs=expand_alias_refs,
+            expand_stars=expand_stars,
+            infer_schema=infer_schema,
         )
 
     if quote_identifiers:

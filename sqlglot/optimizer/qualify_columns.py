@@ -17,6 +17,7 @@ def qualify_columns(
     expression: exp.Expression,
     schema: t.Optional[dict | Schema] = None,
     expand_alias_refs: bool = True,
+    expand_stars: bool = True,
     infer_schema: t.Optional[bool] = None,
 ) -> exp.Expression:
     """
@@ -33,6 +34,9 @@ def qualify_columns(
         expression: Expression to qualify.
         schema: Database schema.
         expand_alias_refs: Whether or not to expand references to aliases.
+        expand_stars: Whether or not to expand star queries. This is a necessary step
+            for most of the optimizer's rules to work; do not set to False unless you
+            know what you're doing!
         infer_schema: Whether or not to infer the schema if missing.
 
     Returns:
@@ -57,7 +61,8 @@ def qualify_columns(
             _expand_alias_refs(scope, resolver)
 
         if not isinstance(scope.expression, exp.UDTF):
-            _expand_stars(scope, resolver, using_column_tables, pseudocolumns)
+            if expand_stars:
+                _expand_stars(scope, resolver, using_column_tables, pseudocolumns)
             qualify_outputs(scope)
 
         _expand_group_by(scope)
@@ -493,6 +498,38 @@ def quote_identifiers(expression: E, dialect: DialectType = None, identify: bool
     return expression.transform(
         Dialect.get_or_raise(dialect).quote_identifier, identify=identify, copy=False
     )
+
+
+def pushdown_cte_alias_columns(expression: exp.Expression) -> exp.Expression:
+    """
+    Pushes down the CTE alias columns into the projection,
+
+    This step is useful in Snowflake where the CTE alias columns can be referenced in the HAVING.
+
+    Example:
+        >>> import sqlglot
+        >>> expression = sqlglot.parse_one("WITH y (c) AS (SELECT SUM(a) FROM ( SELECT 1 a ) AS x HAVING c > 0) SELECT c FROM y")
+        >>> pushdown_cte_alias_columns(expression).sql()
+        'WITH y(c) AS (SELECT SUM(a) AS c FROM (SELECT 1 AS a) AS x HAVING c > 0) SELECT c FROM y'
+
+    Args:
+        expression: Expression to pushdown.
+
+    Returns:
+        The expression with the CTE aliases pushed down into the projection.
+    """
+    for cte in expression.find_all(exp.CTE):
+        if cte.alias_column_names:
+            new_expressions = []
+            for _alias, projection in zip(cte.alias_column_names, cte.this.expressions):
+                if isinstance(projection, exp.Alias):
+                    projection.set("alias", _alias)
+                else:
+                    projection = alias(projection, alias=_alias)
+                new_expressions.append(projection)
+            cte.this.set("expressions", new_expressions)
+
+    return expression
 
 
 class Resolver:

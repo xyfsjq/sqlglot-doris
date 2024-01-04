@@ -21,6 +21,7 @@ from sqlglot.dialects.dialect import (
     no_tablesample_sql,
     no_trycast_sql,
     parse_date_delta_with_interval,
+    path_to_jsonpath,
     rename_func,
     strposition_to_locate_sql,
 )
@@ -292,9 +293,15 @@ class MySQL(Dialect):
             "DATE_ADD": parse_date_delta_with_interval(exp.DateAdd),
             "DATE_FORMAT": format_time_lambda(exp.TimeToStr, "mysql"),
             "DATE_SUB": parse_date_delta_with_interval(exp.DateSub),
+            "DAY": lambda args: exp.Day(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
+            "DAYOFMONTH": lambda args: exp.DayOfMonth(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
+            "DAYOFWEEK": lambda args: exp.DayOfWeek(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
+            "DAYOFYEAR": lambda args: exp.DayOfYear(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
             "INSTR": lambda args: exp.StrPosition(substr=seq_get(args, 1), this=seq_get(args, 0)),
             "ISNULL": isnull_to_is_null,
             "LOCATE": locate_to_strposition,
+            "MAKETIME": exp.TimeFromParts.from_arg_list,
+            "MONTH": lambda args: exp.Month(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
             "MONTHNAME": lambda args: exp.TimeToStr(
                 this=exp.TsOrDsToDate(this=seq_get(args, 0)),
                 format=exp.Literal.string("%B"),
@@ -308,11 +315,6 @@ class MySQL(Dialect):
                 )
                 + 1
             ),
-            "DAY": lambda args: exp.Day(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
-            "DAYOFMONTH": lambda args: exp.DayOfMonth(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
-            "DAYOFWEEK": lambda args: exp.DayOfWeek(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
-            "DAYOFYEAR": lambda args: exp.DayOfYear(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
-            "MONTH": lambda args: exp.Month(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
             "WEEK": lambda args: exp.Week(
                 this=exp.TsOrDsToDate(this=seq_get(args, 0)), mode=seq_get(args, 1)
             ),
@@ -627,6 +629,7 @@ class MySQL(Dialect):
         QUERY_HINT_SEP = " "
         VALUES_AS_TABLE = False
         NVL2_SUPPORTED = False
+        LAST_DAY_SUPPORTS_DATE_PART = False
 
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
@@ -642,6 +645,7 @@ class MySQL(Dialect):
             exp.DayOfMonth: _remove_ts_or_ds_to_date(rename_func("DAYOFMONTH")),
             exp.DayOfWeek: _remove_ts_or_ds_to_date(rename_func("DAYOFWEEK")),
             exp.DayOfYear: _remove_ts_or_ds_to_date(rename_func("DAYOFYEAR")),
+            exp.GetPath: path_to_jsonpath(),
             exp.GroupConcat: lambda self, e: f"""GROUP_CONCAT({self.sql(e, "this")} SEPARATOR {self.sql(e, "separator") or "','"})""",
             exp.ILike: no_ilike_sql,
             exp.JSONExtractScalar: arrow_json_extract_scalar_sql,
@@ -651,6 +655,7 @@ class MySQL(Dialect):
             exp.Month: _remove_ts_or_ds_to_date(),
             exp.NullSafeEQ: lambda self, e: self.binary(e, "<=>"),
             exp.NullSafeNEQ: lambda self, e: f"NOT {self.binary(e, '<=>')}",
+            exp.ParseJSON: lambda self, e: self.sql(e, "this"),
             exp.Pivot: no_pivot_sql,
             exp.Select: transforms.preprocess(
                 [
@@ -665,6 +670,7 @@ class MySQL(Dialect):
             exp.StrToTime: _str_to_date_sql,
             exp.Stuff: rename_func("INSERT"),
             exp.TableSample: no_tablesample_sql,
+            exp.TimeFromParts: rename_func("MAKETIME"),
             exp.TimestampAdd: date_add_interval_sql("DATE", "ADD"),
             exp.TimestampSub: date_add_interval_sql("DATE", "SUB"),
             exp.TimeStrToUnix: rename_func("UNIX_TIMESTAMP"),

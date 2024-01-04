@@ -60,6 +60,9 @@ class TestClickhouse(Validator):
         self.validate_identity("SELECT * FROM foo GLOBAL LEFT ANY JOIN bla")
         self.validate_identity("SELECT quantile(0.5)(a)")
         self.validate_identity("SELECT quantiles(0.5)(a) AS x FROM t")
+        self.validate_identity("SELECT quantilesIf(0.5)(a, a > 1) AS x FROM t")
+        self.validate_identity("SELECT quantileState(0.5)(a) AS x FROM t")
+        self.validate_identity("SELECT deltaSumMerge(a) AS x FROM t")
         self.validate_identity("SELECT quantiles(0.1, 0.2, 0.3)(a)")
         self.validate_identity("SELECT quantileTiming(0.5)(RANGE(100))")
         self.validate_identity("SELECT histogram(5)(a)")
@@ -175,25 +178,25 @@ class TestClickhouse(Validator):
             },
         )
         self.validate_all(
-            "DATE_ADD('DAY', 1, x)",
+            "DATE_ADD(DAY, 1, x)",
             read={
                 "clickhouse": "dateAdd(DAY, 1, x)",
                 "presto": "DATE_ADD('DAY', 1, x)",
             },
             write={
-                "clickhouse": "DATE_ADD('DAY', 1, x)",
+                "clickhouse": "DATE_ADD(DAY, 1, x)",
                 "presto": "DATE_ADD('DAY', 1, x)",
                 "": "DATE_ADD(x, 1, 'DAY')",
             },
         )
         self.validate_all(
-            "DATE_DIFF('DAY', a, b)",
+            "DATE_DIFF(DAY, a, b)",
             read={
-                "clickhouse": "dateDiff('DAY', a, b)",
+                "clickhouse": "dateDiff(DAY, a, b)",
                 "presto": "DATE_DIFF('DAY', a, b)",
             },
             write={
-                "clickhouse": "DATE_DIFF('DAY', a, b)",
+                "clickhouse": "DATE_DIFF(DAY, a, b)",
                 "presto": "DATE_DIFF('DAY', a, b)",
                 "": "DATEDIFF(b, a, DAY)",
             },

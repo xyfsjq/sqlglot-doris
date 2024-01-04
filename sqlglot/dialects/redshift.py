@@ -9,8 +9,8 @@ from sqlglot.dialects.dialect import (
     concat_ws_to_dpipe_sql,
     date_delta_sql,
     generatedasidentitycolumnconstraint_sql,
+    no_tablesample_sql,
     rename_func,
-    ts_or_ds_to_date_sql,
 )
 from sqlglot.dialects.postgres import Postgres
 from sqlglot.helper import seq_get
@@ -165,11 +165,11 @@ class Redshift(Postgres):
 
     class Generator(Postgres.Generator):
         LOCKING_READS_SUPPORTED = False
-        RENAME_TABLE_WITH_DB = False
         QUERY_HINTS = False
         VALUES_AS_TABLE = False
         TZ_TO_WITH_TIME_ZONE = True
         NVL2_SUPPORTED = True
+        LAST_DAY_SUPPORTS_DATE_PART = False
 
         TYPE_MAPPING = {
             **Postgres.Generator.TYPE_MAPPING,
@@ -205,9 +205,9 @@ class Redshift(Postgres):
                 [transforms.eliminate_distinct_on, transforms.eliminate_semi_and_anti_joins]
             ),
             exp.SortKeyProperty: lambda self, e: f"{'COMPOUND ' if e.args['compound'] else ''}SORTKEY({self.format_args(*e.this)})",
+            exp.TableSample: no_tablesample_sql,
             exp.TsOrDsAdd: date_delta_sql("DATEADD"),
             exp.TsOrDsDiff: date_delta_sql("DATEDIFF"),
-            exp.TsOrDsToDate: ts_or_ds_to_date_sql("redshift"),
         }
 
         # Postgres maps exp.Pivot to no_pivot_sql, but Redshift support pivots
@@ -218,6 +218,9 @@ class Redshift(Postgres):
 
         # Redshift supports ANY_VALUE(..)
         TRANSFORMS.pop(exp.AnyValue)
+
+        # Redshift supports LAST_DAY(..)
+        TRANSFORMS.pop(exp.LastDay)
 
         RESERVED_KEYWORDS = {*Postgres.Generator.RESERVED_KEYWORDS, "snapshot", "type"}
 

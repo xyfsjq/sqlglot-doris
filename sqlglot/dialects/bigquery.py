@@ -21,11 +21,11 @@ from sqlglot.dialects.dialect import (
     min_or_least,
     no_ilike_sql,
     parse_date_delta_with_interval,
+    path_to_jsonpath,
     regexp_replace_sql,
     rename_func,
     timestrtotime_sql,
     ts_or_ds_add_cast,
-    ts_or_ds_to_date_sql,
 )
 from sqlglot.helper import seq_get, split_num_words
 from sqlglot.tokens import TokenType
@@ -214,6 +214,15 @@ def _unix_to_time_sql(self: BigQuery.Generator, expression: exp.UnixToTime) -> s
     return ""
 
 
+def _parse_time(args: t.List) -> exp.Func:
+    if len(args) == 1:
+        return exp.TsOrDsToTime(this=args[0])
+    if len(args) == 3:
+        return exp.TimeFromParts.from_arg_list(args)
+
+    return exp.Anonymous(this="TIME", expressions=args)
+
+
 class BigQuery(Dialect):
     WEEK_OFFSET = -1
     UNNEST_COLUMN_ONLY = True
@@ -329,6 +338,9 @@ class BigQuery(Dialect):
             "DATETIME_ADD": parse_date_delta_with_interval(exp.DatetimeAdd),
             "DATETIME_SUB": parse_date_delta_with_interval(exp.DatetimeSub),
             "DIV": binary_from_function(exp.IntDiv),
+            "FORMAT_DATE": lambda args: exp.TimeToStr(
+                this=exp.TsOrDsToDate(this=seq_get(args, 1)), format=seq_get(args, 0)
+            ),
             "GENERATE_ARRAY": exp.GenerateSeries.from_arg_list,
             "JSON_EXTRACT_SCALAR": lambda args: exp.JSONExtractScalar(
                 this=seq_get(args, 0), expression=seq_get(args, 1) or exp.Literal.string("$")
@@ -354,6 +366,7 @@ class BigQuery(Dialect):
                 this=seq_get(args, 0),
                 expression=seq_get(args, 1) or exp.Literal.string(","),
             ),
+            "TIME": _parse_time,
             "TIME_ADD": parse_date_delta_with_interval(exp.TimeAdd),
             "TIME_SUB": parse_date_delta_with_interval(exp.TimeSub),
             "TIMESTAMP_ADD": parse_date_delta_with_interval(exp.TimestampAdd),
@@ -528,6 +541,7 @@ class BigQuery(Dialect):
             exp.CollateProperty: lambda self, e: f"DEFAULT COLLATE {self.sql(e, 'this')}"
             if e.args.get("default")
             else f"COLLATE {self.sql(e, 'this')}",
+            exp.CountIf: rename_func("COUNTIF"),
             exp.Create: _create_sql,
             exp.CTE: transforms.preprocess([_pushdown_cte_column_names]),
             exp.DateAdd: date_add_interval_sql("DATE", "ADD"),
@@ -539,6 +553,7 @@ class BigQuery(Dialect):
             exp.DatetimeSub: date_add_interval_sql("DATETIME", "SUB"),
             exp.DateTrunc: lambda self, e: self.func("DATE_TRUNC", e.this, e.text("unit")),
             exp.GenerateSeries: rename_func("GENERATE_ARRAY"),
+            exp.GetPath: path_to_jsonpath(),
             exp.GroupConcat: rename_func("STRING_AGG"),
             exp.Hex: rename_func("TO_HEX"),
             exp.If: if_sql(false_value="NULL"),
@@ -581,16 +596,17 @@ class BigQuery(Dialect):
                 "PARSE_TIMESTAMP", self.format_time(e), e.this, e.args.get("zone")
             ),
             exp.TimeAdd: date_add_interval_sql("TIME", "ADD"),
+            exp.TimeFromParts: rename_func("TIME"),
             exp.TimeSub: date_add_interval_sql("TIME", "SUB"),
             exp.TimestampAdd: date_add_interval_sql("TIMESTAMP", "ADD"),
             exp.TimestampSub: date_add_interval_sql("TIMESTAMP", "SUB"),
             exp.TimeStrToTime: timestrtotime_sql,
-            exp.TimeToStr: lambda self, e: f"FORMAT_DATE({self.format_time(e)}, {self.sql(e, 'this')})",
             exp.Trim: lambda self, e: self.func(f"TRIM", e.this, e.expression),
             exp.TsOrDsAdd: _ts_or_ds_add_sql,
             exp.TsOrDsDiff: _ts_or_ds_diff_sql,
-            exp.TsOrDsToDate: ts_or_ds_to_date_sql("bigquery"),
+            exp.TsOrDsToTime: rename_func("TIME"),
             exp.Unhex: rename_func("FROM_HEX"),
+            exp.UnixDate: rename_func("UNIX_DATE"),
             exp.UnixToTime: _unix_to_time_sql,
             exp.Values: _derived_table_values_to_unnest,
             exp.VariancePop: rename_func("VAR_POP"),
@@ -727,6 +743,26 @@ class BigQuery(Dialect):
             "within",
         }
 
+        def timetostr_sql(self, expression: exp.TimeToStr) -> str:
+            if isinstance(expression.this, exp.TsOrDsToDate):
+                this: exp.Expression = expression.this
+            else:
+                this = expression
+
+            return f"FORMAT_DATE({self.format_time(expression)}, {self.sql(this, 'this')})"
+
+        def struct_sql(self, expression: exp.Struct) -> str:
+            args = []
+            for expr in expression.expressions:
+                if isinstance(expr, self.KEY_VALUE_DEFINITIONS):
+                    arg = f"{self.sql(expr, 'expression')} AS {expr.this.name}"
+                else:
+                    arg = self.sql(expr)
+
+                args.append(arg)
+
+            return self.func("STRUCT", *args)
+
         def eq_sql(self, expression: exp.EQ) -> str:
             # Operands of = cannot be NULL in BigQuery
             if isinstance(expression.left, exp.Null) or isinstance(expression.right, exp.Null):
@@ -763,7 +799,20 @@ class BigQuery(Dialect):
             return inline_array_sql(self, expression)
 
         def bracket_sql(self, expression: exp.Bracket) -> str:
+            this = self.sql(expression, "this")
             expressions = expression.expressions
+
+            if len(expressions) == 1:
+                arg = expressions[0]
+                if arg.type is None:
+                    from sqlglot.optimizer.annotate_types import annotate_types
+
+                    arg = annotate_types(arg)
+
+                if arg.type and arg.type.this in exp.DataType.TEXT_TYPES:
+                    # BQ doesn't support bracket syntax with string values
+                    return f"{this}.{arg.name}"
+
             expressions_sql = ", ".join(self.sql(e) for e in expressions)
             offset = expression.args.get("offset")
 
@@ -771,13 +820,13 @@ class BigQuery(Dialect):
                 expressions_sql = f"OFFSET({expressions_sql})"
             elif offset == 1:
                 expressions_sql = f"ORDINAL({expressions_sql})"
-            else:
+            elif offset is not None:
                 self.unsupported(f"Unsupported array offset: {offset}")
 
             if expression.args.get("safe"):
                 expressions_sql = f"SAFE_{expressions_sql}"
 
-            return f"{self.sql(expression, 'this')}[{expressions_sql}]"
+            return f"{this}[{expressions_sql}]"
 
         def transaction_sql(self, *_) -> str:
             return "BEGIN TRANSACTION"

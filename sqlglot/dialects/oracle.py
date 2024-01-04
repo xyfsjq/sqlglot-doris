@@ -53,6 +53,7 @@ def to_char(args: t.List) -> exp.TimeToStr | exp.ToChar:
 class Oracle(Dialect):
     ALIAS_POST_TABLESAMPLE = True
     LOCKING_READS_SUPPORTED = True
+    TABLESAMPLE_SIZE_IS_PERCENT = True
 
     # See section 8: https://docs.oracle.com/cd/A97630_01/server.920/a96540/sql_elements9a.htm
     NORMALIZATION_STRATEGY = NormalizationStrategy.UPPERCASE
@@ -156,8 +157,9 @@ class Oracle(Dialect):
         COLUMN_JOIN_MARKS_SUPPORTED = True
         DATA_TYPE_SPECIFIERS_ALLOWED = True
         ALTER_TABLE_INCLUDE_COLUMN_KEYWORD = False
-
         LIMIT_FETCH = "FETCH"
+        TABLESAMPLE_KEYWORDS = "SAMPLE"
+        LAST_DAY_SUPPORTS_DATE_PART = False
 
         TYPE_MAPPING = {
             **generator.Generator.TYPE_MAPPING,

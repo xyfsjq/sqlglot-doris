@@ -2870,15 +2870,10 @@ class Parser(metaclass=_Parser):
         bucket_denominator = None
         bucket_field = None
         percent = None
-        rows = None
         size = None
         seed = None
 
-        kind = (
-            self._prev.text if self._prev.token_type == TokenType.TABLE_SAMPLE else "USING SAMPLE"
-        )
         method = self._parse_var(tokens=(TokenType.ROW,), upper=True)
-
         matched_l_paren = self._match(TokenType.L_PAREN)
 
         if self.TABLESAMPLE_CSV:
@@ -2900,10 +2895,10 @@ class Parser(metaclass=_Parser):
             bucket_field = self._parse_field()
         elif self._match_set((TokenType.PERCENT, TokenType.MOD)):
             percent = num
-        elif self._match(TokenType.ROWS):
-            rows = num
-        elif num:
+        elif self._match(TokenType.ROWS) or not self.dialect.TABLESAMPLE_SIZE_IS_PERCENT:
             size = num
+        else:
+            percent = num
 
         if matched_l_paren:
             self._match_r_paren()
@@ -2923,10 +2918,8 @@ class Parser(metaclass=_Parser):
             bucket_denominator=bucket_denominator,
             bucket_field=bucket_field,
             percent=percent,
-            rows=rows,
             size=size,
             seed=seed,
-            kind=kind,
         )
 
     def _parse_pivots(self) -> t.Optional[t.List[exp.Pivot]]:
@@ -3414,7 +3407,12 @@ class Parser(metaclass=_Parser):
         else:
             this = self._parse_term()
 
-        if not this:
+        if not this or (
+            isinstance(this, exp.Column)
+            and not this.table
+            and not this.this.quoted
+            and this.name.upper() == "IS"
+        ):
             self._retreat(index)
             return None
 
@@ -4268,22 +4266,17 @@ class Parser(metaclass=_Parser):
         options = self._parse_key_constraint_options()
         return self.expression(exp.PrimaryKey, expressions=expressions, options=options)
 
+    def _parse_bracket_key_value(self, is_map: bool = False) -> t.Optional[exp.Expression]:
+        return self._parse_slice(self._parse_alias(self._parse_conjunction(), explicit=True))
+
     def _parse_bracket(self, this: t.Optional[exp.Expression]) -> t.Optional[exp.Expression]:
         if not self._match_set((TokenType.L_BRACKET, TokenType.L_BRACE)):
             return this
 
         bracket_kind = self._prev.token_type
-
-        if self._match(TokenType.COLON):
-            expressions: t.List[exp.Expression] = [
-                self.expression(exp.Slice, expression=self._parse_conjunction())
-            ]
-        else:
-            expressions = self._parse_csv(
-                lambda: self._parse_slice(
-                    self._parse_alias(self._parse_conjunction(), explicit=True)
-                )
-            )
+        expressions = self._parse_csv(
+            lambda: self._parse_bracket_key_value(is_map=bracket_kind == TokenType.L_BRACE)
+        )
 
         if not self._match(TokenType.R_BRACKET) and bracket_kind == TokenType.L_BRACKET:
             self.raise_error("Expected ]")
@@ -4324,7 +4317,10 @@ class Parser(metaclass=_Parser):
             default = self._parse_conjunction()
 
         if not self._match(TokenType.END):
-            self.raise_error("Expected END after CASE", self._prev)
+            if isinstance(default, exp.Interval) and default.this.sql().upper() == "END":
+                default = exp.column("interval")
+            else:
+                self.raise_error("Expected END after CASE", self._prev)
 
         return self._parse_window(
             self.expression(exp.Case, comments=comments, this=expression, ifs=ifs, default=default)

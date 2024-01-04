@@ -16,6 +16,7 @@ import datetime
 import math
 import numbers
 import re
+import textwrap
 import typing as t
 from collections import deque
 from copy import deepcopy
@@ -241,6 +242,9 @@ class Expression(metaclass=_Expression):
 
     def is_type(self, *dtypes) -> bool:
         return self.type is not None and self.type.is_type(*dtypes)
+
+    def is_leaf(self) -> bool:
+        return not any(isinstance(v, (Expression, list)) for v in self.args.values())
 
     @property
     def meta(self) -> t.Dict[str, t.Any]:
@@ -497,7 +501,14 @@ class Expression(metaclass=_Expression):
         return self.sql()
 
     def __repr__(self) -> str:
-        return self._to_s()
+        return _to_s(self)
+
+    def to_s(self) -> str:
+        """
+        Same as __repr__, but includes additional information which can be useful
+        for debugging, like empty or missing args and the AST nodes' object IDs.
+        """
+        return _to_s(self, verbose=True)
 
     def sql(self, dialect: DialectType = None, **opts) -> str:
         """
@@ -513,30 +524,6 @@ class Expression(metaclass=_Expression):
         from sqlglot.dialects import Dialect
 
         return Dialect.get_or_raise(dialect).generate(self, **opts)
-
-    def _to_s(self, hide_missing: bool = True, level: int = 0) -> str:
-        indent = "" if not level else "\n"
-        indent += "".join(["  "] * level)
-        left = f"({self.key.upper()} "
-
-        args: t.Dict[str, t.Any] = {
-            k: ", ".join(
-                v._to_s(hide_missing=hide_missing, level=level + 1)
-                if hasattr(v, "_to_s")
-                else str(v)
-                for v in ensure_list(vs)
-                if v is not None
-            )
-            for k, vs in self.args.items()
-        }
-        args["comments"] = self.comments
-        args["type"] = self.type
-        args = {k: v for k, v in args.items() if v or not hide_missing}
-
-        right = ", ".join(f"{k}: {v}" for k, v in args.items())
-        right += ")"
-
-        return indent + left + right
 
     def transform(self, fun, *args, copy=True, **kwargs):
         """
@@ -580,8 +567,9 @@ class Expression(metaclass=_Expression):
         For example::
 
             >>> tree = Select().select("x").from_("tbl")
-            >>> tree.find(Column).replace(Column(this="y"))
-            (COLUMN this: y)
+            >>> tree.find(Column).replace(column("y"))
+            Column(
+              this=Identifier(this=y, quoted=False))
             >>> tree.sql()
             'SELECT y FROM tbl'
 
@@ -3500,7 +3488,6 @@ class TableSample(Expression):
         "rows": False,
         "size": False,
         "seed": False,
-        "kind": False,
     }
 
 
@@ -4320,6 +4307,20 @@ class Anonymous(Func):
     is_var_len_args = True
 
 
+class AnonymousAggFunc(AggFunc):
+    arg_types = {"this": True, "expressions": False}
+    is_var_len_args = True
+
+
+# https://clickhouse.com/docs/en/sql-reference/aggregate-functions/combinators
+class CombinedAggFunc(AnonymousAggFunc):
+    arg_types = {"this": True, "expressions": False, "parts": True}
+
+
+class CombinedParameterizedAgg(ParameterizedAgg):
+    arg_types = {"this": True, "expressions": True, "params": True, "parts": True}
+
+
 # https://docs.snowflake.com/en/sql-reference/functions/hll
 # https://docs.aws.amazon.com/redshift/latest/dg/r_HLL_function.html
 class Hll(AggFunc):
@@ -4730,7 +4731,7 @@ class Count(AggFunc):
 
 
 class CountIf(AggFunc):
-    pass
+    _sql_names = ["COUNT_IF", "COUNTIF"]
 
 
 class CurrentDate(Func):
@@ -4834,8 +4835,9 @@ class MonthsBetween(Func):
     arg_types = {"this": True, "expression": True, "roundoff": False}
 
 
-class LastDateOfMonth(Func):
-    pass
+class LastDay(Func, TimeUnit):
+    _sql_names = ["LAST_DAY", "LAST_DAY_OF_MONTH"]
+    arg_types = {"this": True, "unit": False}
 
 
 class Extract(Func):
@@ -4879,8 +4881,20 @@ class TimeTrunc(Func, TimeUnit):
 
 
 class DateFromParts(Func):
-    _sql_names = ["DATEFROMPARTS"]
+    _sql_names = ["DATE_FROM_PARTS", "DATEFROMPARTS"]
     arg_types = {"year": True, "month": True, "day": True}
+
+
+class TimeFromParts(Func):
+    _sql_names = ["TIME_FROM_PARTS", "TIMEFROMPARTS"]
+    arg_types = {
+        "hour": True,
+        "min": True,
+        "sec": True,
+        "nano": False,
+        "fractions": False,
+        "precision": False,
+    }
 
 
 class DateStrToDate(Func):
@@ -5096,6 +5110,15 @@ class ParseJSON(Func):
 class JsonArrayLength(Func):
     _sql_names = ["JSON_ARRAY_LENGTH"]
     arg_types = {"this": True, "expressions": False}
+
+
+# https://docs.snowflake.com/en/sql-reference/functions/get_path
+class GetPath(Func):
+    arg_types = {"this": True, "expression": True}
+
+    @property
+    def output_name(self) -> str:
+        return self.expression.output_name
 
 
 class Least(Func):
@@ -5490,11 +5513,20 @@ class TsOrDsToDate(Func):
     arg_types = {"this": True, "format": False}
 
 
+class TsOrDsToTime(Func):
+    pass
+
+
 class TsOrDiToDi(Func):
     pass
 
 
 class Unhex(Func):
+    pass
+
+
+# https://cloud.google.com/bigquery/docs/reference/standard-sql/date_functions#unix_date
+class UnixDate(Func):
     pass
 
 
@@ -5518,8 +5550,7 @@ class UnixToTimeStr(Func):
 
 
 class TimestampFromParts(Func):
-    """Constructs a timestamp given its constituent parts."""
-
+    _sql_names = ["TIMESTAMP_FROM_PARTS", "TIMESTAMPFROMPARTS"]
     arg_types = {
         "year": True,
         "month": True,
@@ -5529,6 +5560,7 @@ class TimestampFromParts(Func):
         "sec": True,
         "nano": False,
         "zone": False,
+        "milli": False,
     }
 
 
@@ -5622,9 +5654,9 @@ def maybe_parse(
 
     Example:
         >>> maybe_parse("1")
-        (LITERAL this: 1, is_string: False)
+        Literal(this=1, is_string=False)
         >>> maybe_parse(to_identifier("x"))
-        (IDENTIFIER this: x, quoted: False)
+        Identifier(this=x, quoted=False)
 
     Args:
         sql_or_expression: the SQL code string or an expression
@@ -5669,6 +5701,39 @@ def maybe_copy(instance: E, copy: bool = True) -> E:
 
 def maybe_copy(instance, copy=True):
     return instance.copy() if copy and instance else instance
+
+
+def _to_s(node: t.Any, verbose: bool = False, level: int = 0) -> str:
+    """Generate a textual representation of an Expression tree"""
+    indent = "\n" + ("  " * (level + 1))
+    delim = f",{indent}"
+
+    if isinstance(node, Expression):
+        args = {k: v for k, v in node.args.items() if (v is not None and v != []) or verbose}
+
+        if (node.type or verbose) and not isinstance(node, DataType):
+            args["_type"] = node.type
+        if node.comments or verbose:
+            args["_comments"] = node.comments
+
+        if verbose:
+            args["_id"] = id(node)
+
+        # Inline leaves for a more compact representation
+        if node.is_leaf():
+            indent = ""
+            delim = ", "
+
+        items = delim.join([f"{k}={_to_s(v, verbose, level + 1)}" for k, v in args.items()])
+        return f"{node.__class__.__name__}({indent}{items})"
+
+    if isinstance(node, list):
+        items = delim.join(_to_s(i, verbose, level + 1) for i in node)
+        items = f"{indent}{items}" if items else ""
+        return f"[{items}]"
+
+    # Indent multiline strings to match the current level
+    return indent.join(textwrap.dedent(str(node).strip("\n")).splitlines())
 
 
 def _is_wrong_expression(expression, into):
@@ -6612,10 +6677,10 @@ def var(name: t.Optional[ExpOrStr]) -> Var:
 
     Example:
         >>> repr(var('x'))
-        '(VAR this: x)'
+        'Var(this=x)'
 
         >>> repr(var(column('x', table='y')))
-        '(VAR this: x)'
+        'Var(this=x)'
 
     Args:
         name: The name of the var or an expression who's name will become the var.

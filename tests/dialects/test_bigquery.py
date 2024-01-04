@@ -17,6 +17,14 @@ class TestBigQuery(Validator):
     maxDiff = None
 
     def test_bigquery(self):
+        self.validate_all(
+            "SELECT UNIX_DATE(DATE '2008-12-25')",
+            write={
+                "bigquery": "SELECT UNIX_DATE(CAST('2008-12-25' AS DATE))",
+                "duckdb": "SELECT DATE_DIFF('DAY', CAST('1970-01-01' AS DATE), CAST('2008-12-25' AS DATE))",
+            },
+        )
+
         with self.assertLogs(helper_logger) as cm:
             self.validate_all(
                 "SELECT a[1], b[OFFSET(1)], c[ORDINAL(1)], d[SAFE_OFFSET(1)], e[SAFE_ORDINAL(1)]",
@@ -76,6 +84,9 @@ class TestBigQuery(Validator):
             ["FOR record IN (SELECT word FROM shakespeare) DO SELECT record.word", "END FOR"],
         )
 
+        self.validate_identity("SELECT * FROM dataset.my_table TABLESAMPLE SYSTEM (10 PERCENT)")
+        self.validate_identity("TIME('2008-12-25 15:30:00+08')")
+        self.validate_identity("TIME('2008-12-25 15:30:00+08', 'America/Los_Angeles')")
         self.validate_identity("SELECT test.Unknown FROM test")
         self.validate_identity(r"SELECT '\n\r\a\v\f\t'")
         self.validate_identity("SELECT * FROM tbl FOR SYSTEM_TIME AS OF z")
@@ -130,6 +141,7 @@ class TestBigQuery(Validator):
         self.validate_identity("SELECT y + 1 FROM x GROUP BY y + 1 ORDER BY 1")
         self.validate_identity("SELECT TIMESTAMP_SECONDS(2) AS t")
         self.validate_identity("SELECT TIMESTAMP_MILLIS(2) AS t")
+        self.validate_identity("""SELECT JSON_EXTRACT_SCALAR('{"a": 5}', '$.a')""")
         self.validate_identity(
             "FOR record IN (SELECT word, word_count FROM bigquery-public-data.samples.shakespeare LIMIT 5) DO SELECT record.word, record.word_count"
         )
@@ -155,6 +167,33 @@ class TestBigQuery(Validator):
             "SELECT LAST_VALUE(a IGNORE NULLS) OVER y FROM x WINDOW y AS (PARTITION BY CATEGORY)",
         )
         self.validate_identity(
+            """SELECT JSON_EXTRACT_SCALAR('5')""", """SELECT JSON_EXTRACT_SCALAR('5', '$')"""
+        )
+        self.validate_identity(
+            "SELECT SPLIT(foo)",
+            "SELECT SPLIT(foo, ',')",
+        )
+        self.validate_identity(
+            "SELECT 1 AS hash",
+            "SELECT 1 AS `hash`",
+        )
+        self.validate_identity(
+            "SELECT 1 AS at",
+            "SELECT 1 AS `at`",
+        )
+        self.validate_identity(
+            'x <> ""',
+            "x <> ''",
+        )
+        self.validate_identity(
+            'x <> """"""',
+            "x <> ''",
+        )
+        self.validate_identity(
+            "x <> ''''''",
+            "x <> ''",
+        )
+        self.validate_identity(
             "SELECT a overlaps",
             "SELECT a AS overlaps",
         )
@@ -178,18 +217,86 @@ class TestBigQuery(Validator):
             "SELECT * FROM UNNEST(x) WITH OFFSET EXCEPT DISTINCT SELECT * FROM UNNEST(y) WITH OFFSET",
             "SELECT * FROM UNNEST(x) WITH OFFSET AS offset EXCEPT DISTINCT SELECT * FROM UNNEST(y) WITH OFFSET AS offset",
         )
-        self.validate_identity("""SELECT JSON_EXTRACT_SCALAR('{"a": 5}', '$.a')""")
-        self.validate_identity(
-            """SELECT JSON_EXTRACT_SCALAR('5')""", """SELECT JSON_EXTRACT_SCALAR('5', '$')"""
-        )
 
-        self.validate_all("SELECT SPLIT(foo)", write={"bigquery": "SELECT SPLIT(foo, ',')"})
-        self.validate_all("SELECT 1 AS hash", write={"bigquery": "SELECT 1 AS `hash`"})
-        self.validate_all("SELECT 1 AS at", write={"bigquery": "SELECT 1 AS `at`"})
-        self.validate_all('x <> ""', write={"bigquery": "x <> ''"})
-        self.validate_all('x <> """"""', write={"bigquery": "x <> ''"})
-        self.validate_all("x <> ''''''", write={"bigquery": "x <> ''"})
-        self.validate_all("CAST(x AS DATETIME)", read={"": "x::timestamp"})
+        self.validate_all(
+            "SELECT LAST_DAY(CAST('2008-11-25' AS DATE), MONTH)",
+            read={
+                "snowflake": "SELECT LAST_DAY(CAST('2008-11-25' AS DATE), MONS)",
+            },
+            write={
+                "bigquery": "SELECT LAST_DAY(CAST('2008-11-25' AS DATE), MONTH)",
+                "duckdb": "SELECT LAST_DAY(CAST('2008-11-25' AS DATE))",
+                "clickhouse": "SELECT LAST_DAY(CAST('2008-11-25' AS DATE))",
+                "mysql": "SELECT LAST_DAY(CAST('2008-11-25' AS DATE))",
+                "oracle": "SELECT LAST_DAY(CAST('2008-11-25' AS DATE))",
+                "postgres": "SELECT CAST(DATE_TRUNC('MONTH', CAST('2008-11-25' AS DATE)) + INTERVAL '1 MONTH' - INTERVAL '1 DAY' AS DATE)",
+                "presto": "SELECT LAST_DAY_OF_MONTH(CAST('2008-11-25' AS DATE))",
+                "redshift": "SELECT LAST_DAY(CAST('2008-11-25' AS DATE))",
+                "snowflake": "SELECT LAST_DAY(CAST('2008-11-25' AS DATE), MONTH)",
+                "spark": "SELECT LAST_DAY(CAST('2008-11-25' AS DATE))",
+                "tsql": "SELECT EOMONTH(CAST('2008-11-25' AS DATE))",
+            },
+        )
+        self.validate_all(
+            "SELECT LAST_DAY(CAST('2008-11-25' AS DATE), QUARTER)",
+            read={
+                "snowflake": "SELECT LAST_DAY(CAST('2008-11-25' AS DATE), QUARTER)",
+            },
+            write={
+                "duckdb": UnsupportedError,
+                "bigquery": "SELECT LAST_DAY(CAST('2008-11-25' AS DATE), QUARTER)",
+                "snowflake": "SELECT LAST_DAY(CAST('2008-11-25' AS DATE), QUARTER)",
+            },
+        )
+        self.validate_all(
+            "CAST(x AS DATETIME)",
+            read={
+                "": "x::timestamp",
+            },
+        )
+        self.validate_all(
+            "SELECT TIME(15, 30, 00)",
+            read={
+                "duckdb": "SELECT MAKE_TIME(15, 30, 00)",
+                "mysql": "SELECT MAKETIME(15, 30, 00)",
+                "postgres": "SELECT MAKE_TIME(15, 30, 00)",
+                "snowflake": "SELECT TIME_FROM_PARTS(15, 30, 00)",
+            },
+            write={
+                "bigquery": "SELECT TIME(15, 30, 00)",
+                "duckdb": "SELECT MAKE_TIME(15, 30, 00)",
+                "mysql": "SELECT MAKETIME(15, 30, 00)",
+                "postgres": "SELECT MAKE_TIME(15, 30, 00)",
+                "snowflake": "SELECT TIME_FROM_PARTS(15, 30, 00)",
+                "tsql": "SELECT TIMEFROMPARTS(15, 30, 00, 0, 0)",
+            },
+        )
+        self.validate_all(
+            "SELECT TIME('2008-12-25 15:30:00')",
+            write={
+                "bigquery": "SELECT TIME('2008-12-25 15:30:00')",
+                "duckdb": "SELECT CAST('2008-12-25 15:30:00' AS TIME)",
+                "mysql": "SELECT CAST('2008-12-25 15:30:00' AS TIME)",
+                "postgres": "SELECT CAST('2008-12-25 15:30:00' AS TIME)",
+                "redshift": "SELECT CAST('2008-12-25 15:30:00' AS TIME)",
+                "spark": "SELECT CAST('2008-12-25 15:30:00' AS TIMESTAMP)",
+                "tsql": "SELECT CAST('2008-12-25 15:30:00' AS TIME)",
+            },
+        )
+        self.validate_all(
+            "SELECT FORMAT_DATE('%Y%m%d', '2023-12-25')",
+            write={
+                "bigquery": "SELECT FORMAT_DATE('%Y%m%d', '2023-12-25')",
+                "duckdb": "SELECT STRFTIME(CAST('2023-12-25' AS DATE), '%Y%m%d')",
+            },
+        )
+        self.validate_all(
+            "SELECT COUNTIF(x)",
+            write={
+                "bigquery": "SELECT COUNTIF(x)",
+                "duckdb": "SELECT COUNT_IF(x)",
+            },
+        )
         self.validate_all(
             "SELECT TIMESTAMP_DIFF(TIMESTAMP_SECONDS(60), TIMESTAMP_SECONDS(0), minute)",
             write={
@@ -361,7 +468,7 @@ class TestBigQuery(Validator):
             },
         )
         self.validate_all(
-            "WITH cte AS (SELECT [1, 2, 3] AS arr) SELECT IF(pos = pos_2, col, NULL) AS col FROM cte, UNNEST(GENERATE_ARRAY(0, GREATEST(ARRAY_LENGTH(arr)) - 1)) AS pos CROSS JOIN UNNEST(arr) AS col WITH OFFSET AS pos_2 WHERE pos = pos_2 OR (pos > (ARRAY_LENGTH(arr) - 1) AND pos_2 = (ARRAY_LENGTH(arr) - 1))",
+            "WITH cte AS (SELECT [1, 2, 3] AS arr) SELECT IF(pos = pos_2, col, NULL) AS col FROM cte CROSS JOIN UNNEST(GENERATE_ARRAY(0, GREATEST(ARRAY_LENGTH(arr)) - 1)) AS pos CROSS JOIN UNNEST(arr) AS col WITH OFFSET AS pos_2 WHERE pos = pos_2 OR (pos > (ARRAY_LENGTH(arr) - 1) AND pos_2 = (ARRAY_LENGTH(arr) - 1))",
             read={
                 "spark": "WITH cte AS (SELECT ARRAY(1, 2, 3) AS arr) SELECT EXPLODE(arr) FROM cte"
             },

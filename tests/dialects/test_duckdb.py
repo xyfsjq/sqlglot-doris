@@ -11,6 +11,9 @@ class TestDuckDB(Validator):
             "CREATE TEMPORARY FUNCTION f1(a, b) AS (a + b)",
             read={"bigquery": "CREATE TEMP FUNCTION f1(a INT64, b INT64) AS (a + b)"},
         )
+        self.validate_identity("SELECT 1 WHERE x > $1")
+        self.validate_identity("SELECT 1 WHERE x > $name")
+
         self.assertEqual(
             parse_one("select * from t limit (select 5)").sql(dialect="duckdb"),
             exp.select("*").from_("t").limit(exp.select("5").subquery()).sql(dialect="duckdb"),
@@ -59,10 +62,34 @@ class TestDuckDB(Validator):
             )
 
         self.validate_all(
+            """SELECT JSON('{"fruit":"banana"}') -> 'fruit'""",
+            write={
+                "duckdb": """SELECT JSON('{"fruit":"banana"}') -> 'fruit'""",
+                "snowflake": """SELECT PARSE_JSON('{"fruit":"banana"}')['fruit']""",
+            },
+        )
+        self.validate_all(
+            """SELECT JSON('{"fruit": {"foo": "banana"}}') -> 'fruit' -> 'foo'""",
+            write={
+                "duckdb": """SELECT JSON('{"fruit": {"foo": "banana"}}') -> 'fruit' -> 'foo'""",
+                "snowflake": """SELECT PARSE_JSON('{"fruit": {"foo": "banana"}}')['fruit']['foo']""",
+            },
+        )
+        self.validate_all(
+            "WITH _data AS (SELECT [{'a': 1, 'b': 2}, {'a': 2, 'b': 3}] AS col) SELECT (SELECT col['b'] FROM UNNEST(col) AS t(col) WHERE col['a'] = 1) FROM _data",
+            write={
+                "bigquery": "WITH _data AS (SELECT [STRUCT(1 AS a, 2 AS b), STRUCT(2 AS a, 3 AS b)] AS col) SELECT (SELECT col.b FROM UNNEST(col) AS col WHERE col.a = 1) FROM _data",
+                "duckdb": "WITH _data AS (SELECT [{'a': 1, 'b': 2}, {'a': 2, 'b': 3}] AS col) SELECT (SELECT col['b'] FROM UNNEST(col) AS t(col) WHERE col['a'] = 1) FROM _data",
+            },
+        )
+        self.validate_all(
             "SELECT {'bla': column1, 'foo': column2, 'bar': column3} AS data FROM source_table",
             read={
                 "bigquery": "SELECT STRUCT(column1 AS bla, column2 AS foo, column3 AS bar) AS data FROM source_table",
                 "duckdb": "SELECT {'bla': column1, 'foo': column2, 'bar': column3} AS data FROM source_table",
+            },
+            write={
+                "bigquery": "SELECT STRUCT(column1 AS bla, column2 AS foo, column3 AS bar) AS data FROM source_table",
             },
         )
         self.validate_all(
@@ -90,8 +117,8 @@ class TestDuckDB(Validator):
         self.validate_all(
             "SELECT UNNEST(ARRAY[1, 2, 3]), UNNEST(ARRAY[4, 5]), UNNEST(ARRAY[6]) FROM x",
             write={
-                "bigquery": "SELECT IF(pos = pos_2, col, NULL) AS col, IF(pos = pos_3, col_2, NULL) AS col_2, IF(pos = pos_4, col_3, NULL) AS col_3 FROM x, UNNEST(GENERATE_ARRAY(0, GREATEST(ARRAY_LENGTH([1, 2, 3]), ARRAY_LENGTH([4, 5]), ARRAY_LENGTH([6])) - 1)) AS pos CROSS JOIN UNNEST([1, 2, 3]) AS col WITH OFFSET AS pos_2 CROSS JOIN UNNEST([4, 5]) AS col_2 WITH OFFSET AS pos_3 CROSS JOIN UNNEST([6]) AS col_3 WITH OFFSET AS pos_4 WHERE ((pos = pos_2 OR (pos > (ARRAY_LENGTH([1, 2, 3]) - 1) AND pos_2 = (ARRAY_LENGTH([1, 2, 3]) - 1))) AND (pos = pos_3 OR (pos > (ARRAY_LENGTH([4, 5]) - 1) AND pos_3 = (ARRAY_LENGTH([4, 5]) - 1)))) AND (pos = pos_4 OR (pos > (ARRAY_LENGTH([6]) - 1) AND pos_4 = (ARRAY_LENGTH([6]) - 1)))",
-                "presto": "SELECT IF(_u.pos = _u_2.pos_2, _u_2.col) AS col, IF(_u.pos = _u_3.pos_3, _u_3.col_2) AS col_2, IF(_u.pos = _u_4.pos_4, _u_4.col_3) AS col_3 FROM x, UNNEST(SEQUENCE(1, GREATEST(CARDINALITY(ARRAY[1, 2, 3]), CARDINALITY(ARRAY[4, 5]), CARDINALITY(ARRAY[6])))) AS _u(pos) CROSS JOIN UNNEST(ARRAY[1, 2, 3]) WITH ORDINALITY AS _u_2(col, pos_2) CROSS JOIN UNNEST(ARRAY[4, 5]) WITH ORDINALITY AS _u_3(col_2, pos_3) CROSS JOIN UNNEST(ARRAY[6]) WITH ORDINALITY AS _u_4(col_3, pos_4) WHERE ((_u.pos = _u_2.pos_2 OR (_u.pos > CARDINALITY(ARRAY[1, 2, 3]) AND _u_2.pos_2 = CARDINALITY(ARRAY[1, 2, 3]))) AND (_u.pos = _u_3.pos_3 OR (_u.pos > CARDINALITY(ARRAY[4, 5]) AND _u_3.pos_3 = CARDINALITY(ARRAY[4, 5])))) AND (_u.pos = _u_4.pos_4 OR (_u.pos > CARDINALITY(ARRAY[6]) AND _u_4.pos_4 = CARDINALITY(ARRAY[6])))",
+                "bigquery": "SELECT IF(pos = pos_2, col, NULL) AS col, IF(pos = pos_3, col_2, NULL) AS col_2, IF(pos = pos_4, col_3, NULL) AS col_3 FROM x CROSS JOIN UNNEST(GENERATE_ARRAY(0, GREATEST(ARRAY_LENGTH([1, 2, 3]), ARRAY_LENGTH([4, 5]), ARRAY_LENGTH([6])) - 1)) AS pos CROSS JOIN UNNEST([1, 2, 3]) AS col WITH OFFSET AS pos_2 CROSS JOIN UNNEST([4, 5]) AS col_2 WITH OFFSET AS pos_3 CROSS JOIN UNNEST([6]) AS col_3 WITH OFFSET AS pos_4 WHERE ((pos = pos_2 OR (pos > (ARRAY_LENGTH([1, 2, 3]) - 1) AND pos_2 = (ARRAY_LENGTH([1, 2, 3]) - 1))) AND (pos = pos_3 OR (pos > (ARRAY_LENGTH([4, 5]) - 1) AND pos_3 = (ARRAY_LENGTH([4, 5]) - 1)))) AND (pos = pos_4 OR (pos > (ARRAY_LENGTH([6]) - 1) AND pos_4 = (ARRAY_LENGTH([6]) - 1)))",
+                "presto": "SELECT IF(_u.pos = _u_2.pos_2, _u_2.col) AS col, IF(_u.pos = _u_3.pos_3, _u_3.col_2) AS col_2, IF(_u.pos = _u_4.pos_4, _u_4.col_3) AS col_3 FROM x CROSS JOIN UNNEST(SEQUENCE(1, GREATEST(CARDINALITY(ARRAY[1, 2, 3]), CARDINALITY(ARRAY[4, 5]), CARDINALITY(ARRAY[6])))) AS _u(pos) CROSS JOIN UNNEST(ARRAY[1, 2, 3]) WITH ORDINALITY AS _u_2(col, pos_2) CROSS JOIN UNNEST(ARRAY[4, 5]) WITH ORDINALITY AS _u_3(col_2, pos_3) CROSS JOIN UNNEST(ARRAY[6]) WITH ORDINALITY AS _u_4(col_3, pos_4) WHERE ((_u.pos = _u_2.pos_2 OR (_u.pos > CARDINALITY(ARRAY[1, 2, 3]) AND _u_2.pos_2 = CARDINALITY(ARRAY[1, 2, 3]))) AND (_u.pos = _u_3.pos_3 OR (_u.pos > CARDINALITY(ARRAY[4, 5]) AND _u_3.pos_3 = CARDINALITY(ARRAY[4, 5])))) AND (_u.pos = _u_4.pos_4 OR (_u.pos > CARDINALITY(ARRAY[6]) AND _u_4.pos_4 = CARDINALITY(ARRAY[6])))",
             },
         )
         self.validate_all(
@@ -378,6 +405,7 @@ class TestDuckDB(Validator):
         self.validate_all(
             "STRUCT_PACK(x := 1, y := '2')",
             write={
+                "bigquery": "STRUCT(1 AS x, '2' AS y)",
                 "duckdb": "{'x': 1, 'y': '2'}",
                 "spark": "STRUCT(1 AS x, '2' AS y)",
             },
@@ -385,6 +413,7 @@ class TestDuckDB(Validator):
         self.validate_all(
             "STRUCT_PACK(key1 := 'value1', key2 := 42)",
             write={
+                "bigquery": "STRUCT('value1' AS key1, 42 AS key2)",
                 "duckdb": "{'key1': 'value1', 'key2': 42}",
                 "spark": "STRUCT('value1' AS key1, 42 AS key2)",
             },
@@ -482,6 +511,8 @@ class TestDuckDB(Validator):
             "SELECT CAST('2020-05-06' AS DATE) + INTERVAL 5 DAY",
             read={"bigquery": "SELECT DATE_ADD(CAST('2020-05-06' AS DATE), INTERVAL 5 DAY)"},
         )
+        self.validate_identity("SELECT PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY y DESC) FROM t")
+        self.validate_identity("SELECT PERCENTILE_DISC(0.25) WITHIN GROUP (ORDER BY y DESC) FROM t")
         self.validate_all(
             "SELECT QUANTILE_CONT(x, q) FROM t",
             write={
@@ -516,6 +547,14 @@ class TestDuckDB(Validator):
             )
 
         self.validate_identity("SELECT ISNAN(x)")
+
+        self.validate_all(
+            "SELECT COUNT_IF(x)",
+            write={
+                "duckdb": "SELECT COUNT_IF(x)",
+                "bigquery": "SELECT COUNTIF(x)",
+            },
+        )
 
     def test_array_index(self):
         with self.assertLogs(helper_logger) as cm:
@@ -663,36 +702,44 @@ class TestDuckDB(Validator):
         )
 
     def test_sample(self):
-        self.validate_all(
+        self.validate_identity(
             "SELECT * FROM tbl USING SAMPLE 5",
-            write={"duckdb": "SELECT * FROM tbl USING SAMPLE (5)"},
+            "SELECT * FROM tbl USING SAMPLE (5 ROWS)",
         )
-        self.validate_all(
+        self.validate_identity(
             "SELECT * FROM tbl USING SAMPLE 10%",
-            write={"duckdb": "SELECT * FROM tbl USING SAMPLE (10 PERCENT)"},
+            "SELECT * FROM tbl USING SAMPLE (10 PERCENT)",
         )
-        self.validate_all(
+        self.validate_identity(
             "SELECT * FROM tbl USING SAMPLE 10 PERCENT (bernoulli)",
-            write={"duckdb": "SELECT * FROM tbl USING SAMPLE BERNOULLI (10 PERCENT)"},
+            "SELECT * FROM tbl USING SAMPLE BERNOULLI (10 PERCENT)",
         )
-        self.validate_all(
+        self.validate_identity(
             "SELECT * FROM tbl USING SAMPLE reservoir(50 ROWS) REPEATABLE (100)",
-            write={"duckdb": "SELECT * FROM tbl USING SAMPLE RESERVOIR (50 ROWS) REPEATABLE (100)"},
+            "SELECT * FROM tbl USING SAMPLE RESERVOIR (50 ROWS) REPEATABLE (100)",
         )
-        self.validate_all(
+        self.validate_identity(
             "SELECT * FROM tbl USING SAMPLE 10% (system, 377)",
-            write={"duckdb": "SELECT * FROM tbl USING SAMPLE SYSTEM (10 PERCENT) REPEATABLE (377)"},
+            "SELECT * FROM tbl USING SAMPLE SYSTEM (10 PERCENT) REPEATABLE (377)",
         )
-        self.validate_all(
+        self.validate_identity(
             "SELECT * FROM tbl TABLESAMPLE RESERVOIR(20%), tbl2 WHERE tbl.i=tbl2.i",
-            write={
-                "duckdb": "SELECT * FROM tbl TABLESAMPLE RESERVOIR (20 PERCENT), tbl2 WHERE tbl.i = tbl2.i"
-            },
+            "SELECT * FROM tbl TABLESAMPLE RESERVOIR (20 PERCENT), tbl2 WHERE tbl.i = tbl2.i",
         )
-        self.validate_all(
+        self.validate_identity(
             "SELECT * FROM tbl, tbl2 WHERE tbl.i=tbl2.i USING SAMPLE RESERVOIR(20%)",
+            "SELECT * FROM tbl, tbl2 WHERE tbl.i = tbl2.i USING SAMPLE RESERVOIR (20 PERCENT)",
+        )
+
+        self.validate_all(
+            "SELECT * FROM example TABLESAMPLE (3 ROWS) REPEATABLE (82)",
+            read={
+                "duckdb": "SELECT * FROM example TABLESAMPLE (3) REPEATABLE (82)",
+                "snowflake": "SELECT * FROM example SAMPLE (3 ROWS) SEED (82)",
+            },
             write={
-                "duckdb": "SELECT * FROM tbl, tbl2 WHERE tbl.i = tbl2.i USING SAMPLE RESERVOIR (20 PERCENT)"
+                "duckdb": "SELECT * FROM example TABLESAMPLE (3 ROWS) REPEATABLE (82)",
+                "snowflake": "SELECT * FROM example TABLESAMPLE (3 ROWS) SEED (82)",
             },
         )
 
