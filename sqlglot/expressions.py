@@ -4534,6 +4534,14 @@ class ArrayToString(Func):
     arg_types = {"this": True, "sep": True, "null_replace": False}
 
 
+class DateFormat(Func):
+    arg_types = {"this": True, "format": True}
+
+
+class Split_PART(Func):
+    arg_types = {"this": True, "delimiter": True, "index": True}
+
+
 class MICROSECONDS_ADD(Func):
     arg_types = {"this": True, "expression": True}
 
@@ -4812,7 +4820,7 @@ class DatetimeTrunc(Func, TimeUnit):
 
 
 class DayOfWeek(Func):
-    _sql_names = ["DAY_OF_WEEK", "DAYOFWEEK", "TODAYOFWEEK"]
+    _sql_names = ["DAY_OF_WEEK", "DAYOFWEEK", "TODAYOFWEEK", "DOW"]
 
 
 class DayOfMonth(Func):

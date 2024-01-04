@@ -269,6 +269,7 @@ class Presto(Dialect):
             "FROM_UTF8": lambda args: exp.Decode(
                 this=seq_get(args, 0), replace=seq_get(args, 1), charset=exp.Literal.string("utf-8")
             ),
+            "INDEX": exp.StrPosition.from_arg_list,
             "NOW": exp.CurrentTimestamp.from_arg_list,
             "REGEXP_EXTRACT": lambda args: exp.RegexpExtract(
                 this=seq_get(args, 0), expression=seq_get(args, 1), group=seq_get(args, 2)
@@ -291,6 +292,14 @@ class Presto(Dialect):
             "TO_UTF8": lambda args: exp.Encode(
                 this=seq_get(args, 0), charset=exp.Literal.string("utf-8")
             ),
+            "WEEK": lambda args: exp.Week(
+                this=seq_get(args, 0), mode='3',
+            ),
+            "FORMAT_DATETIME": exp.DateFormat.from_arg_list,
+            "TRANSFORM": lambda args: exp.ArrayMap(
+                this=seq_get(args, 1), expression=seq_get(args, 0),
+            ),
+
         }
 
         FUNCTION_PARSERS = parser.Parser.FUNCTION_PARSERS.copy()
