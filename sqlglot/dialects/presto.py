@@ -293,13 +293,14 @@ class Presto(Dialect):
                 this=seq_get(args, 0), charset=exp.Literal.string("utf-8")
             ),
             "WEEK": lambda args: exp.Week(
-                this=seq_get(args, 0), mode='3',
+                this=seq_get(args, 0),
+                mode="3",
             ),
             "FORMAT_DATETIME": exp.DateFormat.from_arg_list,
             "TRANSFORM": lambda args: exp.ArrayMap(
-                this=seq_get(args, 1), expression=seq_get(args, 0),
+                this=seq_get(args, 1),
+                expression=seq_get(args, 0),
             ),
-
         }
 
         FUNCTION_PARSERS = parser.Parser.FUNCTION_PARSERS.copy()
