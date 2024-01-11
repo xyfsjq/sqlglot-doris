@@ -19,9 +19,21 @@ class Doris(MySQL):
     class Parser(MySQL.Parser):
         FUNCTIONS = {
             **MySQL.Parser.FUNCTIONS,
+            "ARRAY_SORT": exp.SortArray.from_arg_list,
+            "COUNTEQUAL": exp.Repeat.from_arg_list,
+            "COLLECT_LIST": exp.ArrayAgg.from_arg_list,
             "COLLECT_SET": exp.ArrayUniqueAgg.from_arg_list,
             "DATE_TRUNC": parse_timestamp_trunc,
+            "DATE_ADD": exp.DateAdd.from_arg_list,
+            "DATE_SUB": exp.DateSub.from_arg_list,
+            "DATEDIFF": exp.DateDiff.from_arg_list,
+            "FROM_UNIXTIME": exp.StrToUnix.from_arg_list,
+            "GROUP_ARRAY": exp.ArrayAgg.from_arg_list,
+            "NOW": exp.CurrentTimestamp.from_arg_list,
             "REGEXP": exp.RegexpLike.from_arg_list,
+            "SIZE": exp.ArraySize.from_arg_list,
+            "SPLIT_BY_STRING": exp.RegexpSplit.from_arg_list,
+            "VAR_SAMP": exp.StddevSamp.from_arg_list,
             "TO_DATE": exp.TsOrDsToDate.from_arg_list,
         }
 
