@@ -1497,6 +1497,7 @@ class TestDialect(Validator):
                 "presto": "FILTER(the_array, x -> x > 0)",
                 "hive": "FILTER(the_array, x -> x > 0)",
                 "spark": "FILTER(the_array, x -> x > 0)",
+                "doris": "ARRAY_FILTER(x -> x > 0,the_array)",
             },
         )
         self.validate_all(
