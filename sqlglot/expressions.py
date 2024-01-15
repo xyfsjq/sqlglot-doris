@@ -5419,6 +5419,15 @@ ALL_FUNCTIONS = subclasses(__name__, Func, (AggFunc, Anonymous, Func))
 FUNCTION_BY_NAME = {name: func for func in ALL_FUNCTIONS for name in func.sql_names()}
 
 
+# @liujiwen add expr
+class Shuffle(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class Range(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
 # Helpers
 @t.overload
 def maybe_parse(

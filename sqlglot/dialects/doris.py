@@ -15,10 +15,13 @@ class Doris(MySQL):
     DATE_FORMAT = "'yyyy-MM-dd'"
     DATEINT_FORMAT = "'yyyyMMdd'"
     TIME_FORMAT = "'yyyy-MM-dd HH:mm:ss'"
+    NULL_ORDERING = "nulls_are_frist"
 
     class Parser(MySQL.Parser):
         FUNCTIONS = {
             **MySQL.Parser.FUNCTIONS,
+            "ARRAY_SHUFFLE": exp.Shuffle.from_arg_list,
+            "ARRAY_RANGE": exp.Range.from_arg_list,
             "ARRAY_SORT": exp.SortArray.from_arg_list,
             "COUNTEQUAL": exp.Repeat.from_arg_list,
             "COLLECT_LIST": exp.ArrayAgg.from_arg_list,
@@ -39,7 +42,7 @@ class Doris(MySQL):
 
     class Generator(MySQL.Generator):
         CAST_MAPPING = {}
-
+        INTERVAL_ALLOWS_PLURAL_FORM = False
         TYPE_MAPPING = {
             **MySQL.Generator.TYPE_MAPPING,
             exp.DataType.Type.TEXT: "STRING",
