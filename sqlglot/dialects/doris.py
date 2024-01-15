@@ -49,12 +49,15 @@ class Doris(MySQL):
             exp.DataType.Type.TIMESTAMP: "DATETIME",
             exp.DataType.Type.TIMESTAMPTZ: "DATETIME",
         }
+        LAST_DAY_SUPPORTS_DATE_PART = False
 
         TIMESTAMP_FUNC_TYPES = set()
 
         TRANSFORMS = {
             **MySQL.Generator.TRANSFORMS,
             exp.ApproxDistinct: approx_count_distinct_sql,
+            exp.ArgMax: rename_func("MAX_BY"),
+            exp.ArgMin: rename_func("MIN_BY"),
             exp.ApproxQuantile: rename_func("PERCENTILE_APPROX"),
             exp.ArrayAgg: rename_func("COLLECT_LIST"),
             exp.ArrayUniqueAgg: rename_func("COLLECT_SET"),

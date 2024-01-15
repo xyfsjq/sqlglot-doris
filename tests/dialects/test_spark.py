@@ -237,6 +237,7 @@ TBLPROPERTIES (
             "REFRESH TABLE t",
         )
 
+        self.validate_identity("DESCRIBE EXTENDED db.table")
         self.validate_identity("SELECT * FROM test TABLESAMPLE (50 PERCENT)")
         self.validate_identity("SELECT * FROM test TABLESAMPLE (5 ROWS)")
         self.validate_identity("SELECT * FROM test TABLESAMPLE (BUCKET 4 OUT OF 10)")
@@ -254,6 +255,14 @@ TBLPROPERTIES (
         self.validate_identity("TRIM(LEADING 'SL' FROM 'SSparkSQLS')")
         self.validate_identity("TRIM(TRAILING 'SL' FROM 'SSparkSQLS')")
         self.validate_identity("SPLIT(str, pattern, lim)")
+        self.validate_identity(
+            "SELECT INTERVAL '5' HOURS '30' MINUTES '5' SECONDS '6' MILLISECONDS '7' MICROSECONDS",
+            "SELECT INTERVAL '5' HOURS + INTERVAL '30' MINUTES + INTERVAL '5' SECONDS + INTERVAL '6' MILLISECONDS + INTERVAL '7' MICROSECONDS",
+        )
+        self.validate_identity(
+            "SELECT INTERVAL 5 HOURS 30 MINUTES 5 SECONDS 6 MILLISECONDS 7 MICROSECONDS",
+            "SELECT INTERVAL '5' HOURS + INTERVAL '30' MINUTES + INTERVAL '5' SECONDS + INTERVAL '6' MILLISECONDS + INTERVAL '7' MICROSECONDS",
+        )
         self.validate_identity(
             "SELECT REGEXP_REPLACE('100-200', r'([^0-9])', '')",
             "SELECT REGEXP_REPLACE('100-200', '([^0-9])', '')",

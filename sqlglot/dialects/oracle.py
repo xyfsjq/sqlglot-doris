@@ -82,6 +82,7 @@ class Oracle(Dialect):
         "WW": "%W",  # Week of year (1-53)
         "YY": "%y",  # 15
         "YYYY": "%Y",  # 2015
+        "FF6": "%f",  # only 6 digits are supported in python formats
     }
 
     class Parser(parser.Parser):
@@ -92,6 +93,8 @@ class Oracle(Dialect):
             **parser.Parser.FUNCTIONS,
             "SQUARE": lambda args: exp.Pow(this=seq_get(args, 0), expression=exp.Literal.number(2)),
             "TO_CHAR": to_char,
+            "TO_TIMESTAMP": format_time_lambda(exp.StrToTime, "oracle"),
+            "TO_DATE": format_time_lambda(exp.StrToDate, "oracle"),
         }
 
         FUNCTION_PARSERS: t.Dict[str, t.Callable] = {
@@ -106,6 +109,11 @@ class Oracle(Dialect):
                 order=self._parse_order(),
             ),
             "XMLTABLE": _parse_xml_table,
+        }
+
+        QUERY_MODIFIER_PARSERS = {
+            **parser.Parser.QUERY_MODIFIER_PARSERS,
+            TokenType.ORDER_SIBLINGS_BY: lambda self: ("order", self._parse_order()),
         }
 
         TYPE_LITERAL_PARSERS = {
@@ -188,6 +196,7 @@ class Oracle(Dialect):
                 ]
             ),
             exp.StrToTime: lambda self, e: f"TO_TIMESTAMP({self.sql(e, 'this')}, {self.format_time(e)})",
+            exp.StrToDate: lambda self, e: f"TO_DATE({self.sql(e, 'this')}, {self.format_time(e)})",
             exp.Subquery: lambda self, e: self.subquery_sql(e, sep=" "),
             exp.Substring: rename_func("SUBSTR"),
             exp.Table: lambda self, e: self.table_sql(e, sep=" "),
@@ -239,6 +248,7 @@ class Oracle(Dialect):
             "MATCH_RECOGNIZE": TokenType.MATCH_RECOGNIZE,
             "MINUS": TokenType.EXCEPT,
             "NVARCHAR2": TokenType.NVARCHAR,
+            "ORDER SIBLINGS BY": TokenType.ORDER_SIBLINGS_BY,
             "SAMPLE": TokenType.TABLE_SAMPLE,
             "START": TokenType.BEGIN,
             "SYSDATE": TokenType.CURRENT_TIMESTAMP,
