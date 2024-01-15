@@ -63,6 +63,7 @@ class ClickHouse(Dialect):
         KEYWORDS = {
             **tokens.Tokenizer.KEYWORDS,
             "ATTACH": TokenType.COMMAND,
+            "DATE32": TokenType.DATE32,
             "DATETIME64": TokenType.DATETIME64,
             "DICTIONARY": TokenType.DICTIONARY,
             "ENUM": TokenType.ENUM,
@@ -85,6 +86,8 @@ class ClickHouse(Dialect):
             "UINT32": TokenType.UINT,
             "UINT64": TokenType.UBIGINT,
             "UINT8": TokenType.UTINYINT,
+            "IPV4": TokenType.IPV4,
+            "IPV6": TokenType.IPV6,
         }
 
         SINGLE_TOKENS = {
@@ -517,6 +520,7 @@ class ClickHouse(Dialect):
             **STRING_TYPE_MAPPING,
             exp.DataType.Type.ARRAY: "Array",
             exp.DataType.Type.BIGINT: "Int64",
+            exp.DataType.Type.DATE32: "Date32",
             exp.DataType.Type.DATETIME64: "DateTime64",
             exp.DataType.Type.DOUBLE: "Float64",
             exp.DataType.Type.ENUM: "Enum",
@@ -541,6 +545,8 @@ class ClickHouse(Dialect):
             exp.DataType.Type.UINT256: "UInt256",
             exp.DataType.Type.USMALLINT: "UInt16",
             exp.DataType.Type.UTINYINT: "UInt8",
+            exp.DataType.Type.IPV4: "IPv4",
+            exp.DataType.Type.IPV6: "IPv6",
         }
 
         TRANSFORMS = {

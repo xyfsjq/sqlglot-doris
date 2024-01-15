@@ -663,7 +663,9 @@ class Snowflake(Dialect):
             "MINUS": TokenType.EXCEPT,
             "NCHAR VARYING": TokenType.VARCHAR,
             "PUT": TokenType.COMMAND,
+            "REMOVE": TokenType.COMMAND,
             "RENAME": TokenType.REPLACE,
+            "RM": TokenType.COMMAND,
             "SAMPLE": TokenType.TABLE_SAMPLE,
             "SQL_DOUBLE": TokenType.DOUBLE,
             "SQL_VARCHAR": TokenType.VARCHAR,
@@ -695,6 +697,7 @@ class Snowflake(Dialect):
         COLLATE_IS_FUNC = True
         LIMIT_ONLY_LITERALS = True
         JSON_KEY_VALUE_PAIR_SEP = ","
+        INSERT_OVERWRITE = " OVERWRITE INTO"
 
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,

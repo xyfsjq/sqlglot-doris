@@ -195,6 +195,7 @@ class Parser(metaclass=_Parser):
         TokenType.DATETIME,
         TokenType.DATETIME64,
         TokenType.DATE,
+        TokenType.DATE32,
         TokenType.INT4RANGE,
         TokenType.INT4MULTIRANGE,
         TokenType.INT8RANGE,
@@ -234,6 +235,8 @@ class Parser(metaclass=_Parser):
         TokenType.INET,
         TokenType.IPADDRESS,
         TokenType.IPPREFIX,
+        TokenType.IPV4,
+        TokenType.IPV6,
         TokenType.UNKNOWN,
         TokenType.NULL,
         *ENUM_TYPE_TOKENS,
@@ -1951,10 +1954,13 @@ class Parser(metaclass=_Parser):
 
     def _parse_describe(self) -> exp.Describe:
         kind = self._match_set(self.CREATABLES) and self._prev.text
+        extended = self._match_text_seq("EXTENDED")
         this = self._parse_table(schema=True)
         properties = self._parse_properties()
         expressions = properties.expressions if properties else None
-        return self.expression(exp.Describe, this=this, kind=kind, expressions=expressions)
+        return self.expression(
+            exp.Describe, this=this, extended=extended, kind=kind, expressions=expressions
+        )
 
     def _parse_insert(self) -> exp.Insert:
         comments = ensure_list(self._prev_comments)
@@ -3178,14 +3184,19 @@ class Parser(metaclass=_Parser):
     def _parse_order(
         self, this: t.Optional[exp.Expression] = None, skip_order_token: bool = False
     ) -> t.Optional[exp.Expression]:
+        siblings = None
         if not skip_order_token and not self._match(TokenType.ORDER_BY):
-            return this
+            if not self._match(TokenType.ORDER_SIBLINGS_BY):
+                return this
+
+            siblings = True
 
         return self.expression(
             exp.Order,
             this=this,
             expressions=self._parse_csv(self._parse_ordered),
             interpolate=self._parse_interpolate(),
+            siblings=siblings,
         )
 
     def _parse_sort(self, exp_class: t.Type[E], token: TokenType) -> t.Optional[E]:
@@ -3444,10 +3455,10 @@ class Parser(metaclass=_Parser):
             return this
         return self.expression(exp.Escape, this=this, expression=self._parse_string())
 
-    def _parse_interval(self) -> t.Optional[exp.Interval]:
+    def _parse_interval(self, match_interval: bool = True) -> t.Optional[exp.Interval]:
         index = self._index
 
-        if not self._match(TokenType.INTERVAL):
+        if not self._match(TokenType.INTERVAL) and match_interval:
             return None
 
         if self._match(TokenType.STRING, advance=False):
@@ -3540,6 +3551,12 @@ class Parser(metaclass=_Parser):
     def _parse_type(self, parse_interval: bool = True) -> t.Optional[exp.Expression]:
         interval = parse_interval and self._parse_interval()
         if interval:
+            # Convert INTERVAL 'val_1' unit_1 ... 'val_n' unit_n into a sum of intervals
+            while self._match_set((TokenType.STRING, TokenType.NUMBER), advance=False):
+                interval = self.expression(  # type: ignore
+                    exp.Add, this=interval, expression=self._parse_interval(match_interval=False)
+                )
+
             return interval
 
         index = self._index
@@ -3638,7 +3655,7 @@ class Parser(metaclass=_Parser):
 
         if nested and self._match(TokenType.LT):
             if is_struct:
-                expressions = self._parse_csv(self._parse_struct_types)
+                expressions = self._parse_csv(lambda: self._parse_struct_types(type_required=True))
             else:
                 expressions = self._parse_csv(
                     lambda: self._parse_types(
@@ -3713,10 +3730,19 @@ class Parser(metaclass=_Parser):
 
         return this
 
-    def _parse_struct_types(self) -> t.Optional[exp.Expression]:
+    def _parse_struct_types(self, type_required: bool = False) -> t.Optional[exp.Expression]:
+        index = self._index
         this = self._parse_type(parse_interval=False) or self._parse_id_var()
         self._match(TokenType.COLON)
-        return self._parse_column_def(this)
+        column_def = self._parse_column_def(this)
+
+        if type_required and (
+            (isinstance(this, exp.Column) and this.this is column_def) or this is column_def
+        ):
+            self._retreat(index)
+            return self._parse_types()
+
+        return column_def
 
     def _parse_at_time_zone(self, this: t.Optional[exp.Expression]) -> t.Optional[exp.Expression]:
         if not self._match_text_seq("AT", "TIME", "ZONE"):

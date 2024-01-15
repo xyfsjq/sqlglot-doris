@@ -1102,7 +1102,7 @@ class Clone(Expression):
 
 
 class Describe(Expression):
-    arg_types = {"this": True, "kind": False, "expressions": False}
+    arg_types = {"this": True, "extended": False, "kind": False, "expressions": False}
 
 
 class Kill(Expression):
@@ -1963,7 +1963,12 @@ class Offset(Expression):
 
 
 class Order(Expression):
-    arg_types = {"this": False, "expressions": True, "interpolate": False}
+    arg_types = {
+        "this": False,
+        "expressions": True,
+        "interpolate": False,
+        "siblings": False,
+    }
 
 
 # https://clickhouse.com/docs/en/sql-reference/statements/select/order-by#order-by-expr-with-fill-modifier
@@ -2708,6 +2713,14 @@ class Unnest(UDTF):
         "alias": False,
         "offset": False,
     }
+
+    @property
+    def selects(self) -> t.List[Expression]:
+        columns = super().selects
+        offset = self.args.get("offset")
+        if offset:
+            columns = columns + [to_identifier("offset") if offset is True else offset]
+        return columns
 
 
 class Update(Expression):
@@ -3622,6 +3635,7 @@ class DataType(Expression):
         BOOLEAN = auto()
         CHAR = auto()
         DATE = auto()
+        DATE32 = auto()
         DATEMULTIRANGE = auto()
         DATERANGE = auto()
         DATETIME = auto()
@@ -3649,6 +3663,8 @@ class DataType(Expression):
         INTERVAL = auto()
         IPADDRESS = auto()
         IPPREFIX = auto()
+        IPV4 = auto()
+        IPV6 = auto()
         JSON = auto()
         JSONB = auto()
         LONGBLOB = auto()
@@ -3747,6 +3763,7 @@ class DataType(Expression):
         Type.TIMESTAMP_MS,
         Type.TIMESTAMP_NS,
         Type.DATE,
+        Type.DATE32,
         Type.DATETIME,
         Type.DATETIME64,
     }
@@ -5950,7 +5967,7 @@ def delete(
 def insert(
     expression: ExpOrStr,
     into: ExpOrStr,
-    columns: t.Optional[t.Sequence[ExpOrStr]] = None,
+    columns: t.Optional[t.Sequence[str | Identifier]] = None,
     overwrite: t.Optional[bool] = None,
     returning: t.Optional[ExpOrStr] = None,
     dialect: DialectType = None,
@@ -5981,15 +5998,7 @@ def insert(
     this: Table | Schema = maybe_parse(into, into=Table, dialect=dialect, copy=copy, **opts)
 
     if columns:
-        this = _apply_list_builder(
-            *columns,
-            instance=Schema(this=this),
-            arg="expressions",
-            into=Identifier,
-            copy=False,
-            dialect=dialect,
-            **opts,
-        )
+        this = Schema(this=this, expressions=[to_identifier(c, copy=copy) for c in columns])
 
     insert = Insert(this=this, expression=expr, overwrite=overwrite)
 

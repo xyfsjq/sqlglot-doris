@@ -255,6 +255,9 @@ class Generator:
     # What delimiter to use for separating JSON key/value pairs
     JSON_KEY_VALUE_PAIR_SEP = ":"
 
+    # INSERT OVERWRITE TABLE x override
+    INSERT_OVERWRITE = " OVERWRITE TABLE"
+
     TYPE_MAPPING = {
         exp.DataType.Type.NCHAR: "CHAR",
         exp.DataType.Type.NVARCHAR: "VARCHAR",
@@ -891,7 +894,8 @@ class Generator:
         return f"{shallow}{keyword} {this}"
 
     def describe_sql(self, expression: exp.Describe) -> str:
-        return f"DESCRIBE {self.sql(expression, 'this')}"
+        extended = " EXTENDED" if expression.args.get("extended") else ""
+        return f"DESCRIBE{extended} {self.sql(expression, 'this')}"
 
     def prepend_ctes(self, expression: exp.Expression, sql: str) -> str:
         with_ = self.sql(expression, "with")
@@ -1345,7 +1349,7 @@ class Generator:
         if isinstance(expression.this, exp.Directory):
             this = " OVERWRITE" if overwrite else " INTO"
         else:
-            this = " OVERWRITE TABLE" if overwrite else " INTO"
+            this = self.INSERT_OVERWRITE if overwrite else " INTO"
 
         alternative = expression.args.get("alternative")
         alternative = f" OR {alternative}" if alternative else ""
@@ -1848,7 +1852,8 @@ class Generator:
     def order_sql(self, expression: exp.Order, flat: bool = False) -> str:
         this = self.sql(expression, "this")
         this = f"{this} " if this else this
-        order = self.op_expressions(f"{this}ORDER BY", expression, flat=this or flat)  # type: ignore
+        siblings = "SIBLINGS " if expression.args.get("siblings") else ""
+        order = self.op_expressions(f"{this}ORDER {siblings}BY", expression, flat=this or flat)  # type: ignore
         interpolated_values = [
             f"{self.sql(named_expression, 'alias')} AS {self.sql(named_expression, 'this')}"
             for named_expression in expression.args.get("interpolate") or []
