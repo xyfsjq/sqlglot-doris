@@ -95,6 +95,8 @@ class Oracle(Dialect):
             "TRUNC": exp.DateTrunc_oracle.from_arg_list,
             "SUBSTR": exp.Substring.from_arg_list,
             "TO_DATE": exp.TsOrDsToDate.from_arg_list,
+            "LENGTH": exp.CharLength.from_arg_list,
+            "LENGTHB": exp.Length.from_arg_list,
         }
 
         FUNCTION_PARSERS: t.Dict[str, t.Callable] = {
