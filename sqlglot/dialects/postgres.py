@@ -313,6 +313,7 @@ class Postgres(Dialect):
     class Parser(parser.Parser):
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
+            "ARRAY_TO_STRING": exp.ArrayToString.from_arg_list,
             "DATE_TRUNC": parse_timestamp_trunc,
             "GENERATE_SERIES": _generate_series,
             "MAKE_TIME": exp.TimeFromParts.from_arg_list,

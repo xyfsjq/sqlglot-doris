@@ -22,6 +22,14 @@ class TestDoris(Validator):
             "SELECT MAX_BY(a, b), MIN_BY(c, d)",
             read={"clickhouse": "SELECT argMax(a, b), argMin(c, d)"},
         )
+        self.validate_all(
+            "SELECT ARRAY_JOIN(ARRAY('a', 'b', 'c', NULL),'#')",
+            read={"postgres": "SELECT array_to_string(['a','b','c',null],'#')"},
+        )
+        self.validate_all(
+            "SELECT ARRAY_JOIN(ARRAY('a', 'b', 'c', NULL),'#','*')",
+            read={"postgres": "SELECT array_to_string(['a','b','c',null],'#','*')"},
+        )
 
     def test_identity(self):
         self.validate_identity("COALECSE(a, b, c, d)")

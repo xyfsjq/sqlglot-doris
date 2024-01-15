@@ -5445,6 +5445,11 @@ class Range(Func):
     arg_types = {"this": True, "expressions": False}
 
 
+# @Huanghaijun add expr
+class ArrayToString(Func):
+    arg_types = {"this": True, "sep": True, "null_replace": False}
+
+
 # Helpers
 @t.overload
 def maybe_parse(

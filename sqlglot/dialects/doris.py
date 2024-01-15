@@ -11,6 +11,19 @@ from sqlglot.dialects.dialect import (
 from sqlglot.dialects.mysql import MySQL
 
 
+def handle_array_to_string(self, expression: exp.ArrayToString) -> str:
+    this = self.sql(expression, "this")
+    sep = self.sql(expression, "sep")
+    null_replace = self.sql(expression, "null_replace")
+    result = f"ARRAY_JOIN({this},{sep}"
+    if null_replace:
+        result += f",{null_replace}"
+
+    result += ")"
+
+    return result
+
+
 class Doris(MySQL):
     DATE_FORMAT = "'yyyy-MM-dd'"
     DATEINT_FORMAT = "'yyyyMMdd'"
@@ -55,13 +68,14 @@ class Doris(MySQL):
 
         TRANSFORMS = {
             **MySQL.Generator.TRANSFORMS,
-            exp.ApproxDistinct: approx_count_distinct_sql,
             exp.ArgMax: rename_func("MAX_BY"),
             exp.ArgMin: rename_func("MIN_BY"),
+            exp.ApproxDistinct: approx_count_distinct_sql,
             exp.ApproxQuantile: rename_func("PERCENTILE_APPROX"),
             exp.ArrayAgg: rename_func("COLLECT_LIST"),
-            exp.ArrayUniqueAgg: rename_func("COLLECT_SET"),
             exp.ArrayFilter: lambda self, e: f"ARRAY_FILTER({self.sql(e, 'expression')},{self.sql(e, 'this')})",
+            exp.ArrayToString: handle_array_to_string,
+            exp.ArrayUniqueAgg: rename_func("COLLECT_SET"),
             exp.CurrentTimestamp: lambda *_: "NOW()",
             exp.DateTrunc: lambda self, e: self.func(
                 "DATE_TRUNC", e.this, "'" + e.text("unit") + "'"
