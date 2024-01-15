@@ -12,12 +12,15 @@ class TestDoris(Validator):
                 "oracle": "SELECT CAST('2020-02-02 00:00:00' AS DATE)",
             },
         )
-
         self.validate_all(
             "SELECT Approx_Quantile(x,1)",
             write={
                 "doris": "SELECT PERCENTILE_APPROX(x, 1)",
             },
+        )
+        self.validate_all(
+            "SELECT MAX_BY(a, b), MIN_BY(c, d)",
+            read={"clickhouse": "SELECT argMax(a, b), argMin(c, d)"},
         )
 
     def test_identity(self):
