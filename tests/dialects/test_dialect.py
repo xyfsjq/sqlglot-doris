@@ -1376,6 +1376,7 @@ class TestDialect(Validator):
                 "hive": "CONCAT_WS('-', 'a', 'b')",
                 "spark": "CONCAT_WS('-', 'a', 'b')",
                 "trino": "CONCAT_WS('-', CAST('a' AS VARCHAR), CAST('b' AS VARCHAR))",
+                "doris": "CONCAT_WS('-', 'a', 'b')",
             },
         )
 
@@ -1388,6 +1389,7 @@ class TestDialect(Validator):
                 "presto": "CONCAT_WS('-', CAST(x AS VARCHAR))",
                 "spark": "CONCAT_WS('-', x)",
                 "trino": "CONCAT_WS('-', CAST(x AS VARCHAR))",
+                "doris": "CONCAT_WS('-', x)",
             },
         )
         self.validate_all(
