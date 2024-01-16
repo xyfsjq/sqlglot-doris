@@ -32,11 +32,15 @@ class TestDoris(Validator):
         )
         self.validate_all(
             "SELECT CONCAT_WS('',ARRAY('12/05/2021', '12:50:00')) AS DateString",
-            read={"clickhouse": "SELECT arrayStringConcat(['12/05/2021', '12:50:00']) AS DateString"},
+            read={
+                "clickhouse": "SELECT arrayStringConcat(['12/05/2021', '12:50:00']) AS DateString"
+            },
         )
         self.validate_all(
             "SELECT CONCAT_WS('*', ARRAY('12/05/2021', '12:50:00')) AS DateString",
-            read={"clickhouse": "SELECT arrayStringConcat(['12/05/2021', '12:50:00'], '*') AS DateString"},
+            read={
+                "clickhouse": "SELECT arrayStringConcat(['12/05/2021', '12:50:00'], '*') AS DateString"
+            },
         )
 
     def test_identity(self):
@@ -53,6 +57,10 @@ class TestDoris(Validator):
         self.validate_identity("SIZE(x)", "ARRAY_SIZE(x)")
         self.validate_identity("SPLIT_BY_STRING(x,',')", "SPLIT_BY_STRING(x, ',')")
         self.validate_identity("VAR_SAMP(x)", "STDDEV_SAMP(x)")
+        self.validate_identity("3&5", "BITAND(3, 5)")
+        self.validate_identity("3|5", "BITOR(3, 5)")
+        self.validate_identity("3^5", "BITXOR(3, 5)")
+        self.validate_identity("~5", "BITNOT(5)")
 
     def test_time(self):
         self.validate_identity("TIMESTAMP('2022-01-01')")
@@ -63,4 +71,10 @@ class TestDoris(Validator):
             write={
                 "doris": "SELECT REGEXP(abc, '%foo%')",
             },
+        )
+
+    def test_array(self):
+        self.validate_all(
+            "SELECT SIZE(ARRAY_DISTINCT(x))",
+            read={"clickhouse": "SELECT ARRAYUNIQ(x)"},
         )

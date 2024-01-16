@@ -4,11 +4,17 @@ from sqlglot import exp
 from sqlglot.dialects.dialect import (
     approx_count_distinct_sql,
     arrow_json_extract_sql,
+    count_if_to_sum,
     parse_timestamp_trunc,
     rename_func,
     time_format,
 )
 from sqlglot.dialects.mysql import MySQL
+
+
+def no_paren_current_date_sql(self, expression: exp.CurrentDate) -> str:
+    zone = self.sql(expression, "this")
+    return f"CURRENT_DATE() AT TIME ZONE {zone}" if zone else "CURRENT_DATE()"
 
 
 def handle_array_concat(self, expression: exp.ArrayStringConcat) -> str:
@@ -64,13 +70,13 @@ class Doris(MySQL):
     class Generator(MySQL.Generator):
         CAST_MAPPING = {}
         INTERVAL_ALLOWS_PLURAL_FORM = False
+        LAST_DAY_SUPPORTS_DATE_PART = False
         TYPE_MAPPING = {
             **MySQL.Generator.TYPE_MAPPING,
             exp.DataType.Type.TEXT: "STRING",
             exp.DataType.Type.TIMESTAMP: "DATETIME",
             exp.DataType.Type.TIMESTAMPTZ: "DATETIME",
         }
-        LAST_DAY_SUPPORTS_DATE_PART = False
 
         TIMESTAMP_FUNC_TYPES = set()
 
@@ -82,10 +88,18 @@ class Doris(MySQL):
             exp.ApproxQuantile: rename_func("PERCENTILE_APPROX"),
             exp.ArrayAgg: rename_func("COLLECT_LIST"),
             exp.ArrayFilter: lambda self, e: f"ARRAY_FILTER({self.sql(e, 'expression')},{self.sql(e, 'this')})",
+            exp.ArrayUniq: lambda self, e: f"SIZE(ARRAY_DISTINCT({self.sql(e, 'this')}))",
+            exp.ArrayOverlaps: rename_func("ARRAYS_OVERLAP"),
+            exp.BitwiseNot: rename_func("BITNOT"),
+            exp.BitwiseAnd: rename_func("BITAND"),
+            exp.BitwiseOr: rename_func("BITOR"),
+            exp.BitwiseXor: rename_func("BITXOR"),
             exp.ArrayStringConcat: handle_array_concat,
             exp.ArrayToString: handle_array_to_string,
             exp.ArrayUniqueAgg: rename_func("COLLECT_SET"),
             exp.CurrentTimestamp: lambda *_: "NOW()",
+            exp.CurrentDate: no_paren_current_date_sql,
+            exp.CountIf: count_if_to_sum,
             exp.DateTrunc: lambda self, e: self.func(
                 "DATE_TRUNC", e.this, "'" + e.text("unit") + "'"
             ),

@@ -1960,6 +1960,7 @@ SELECT
                 "snowflake": "SELECT COUNT_IF(col % 2 = 0) FROM foo",
                 "sqlite": "SELECT SUM(CASE WHEN col % 2 = 0 THEN 1 ELSE 0 END) FROM foo",
                 "tsql": "SELECT COUNT_IF(col % 2 = 0) FROM foo",
+                "doris": "SELECT SUM(CASE WHEN col % 2 = 0 THEN 1 ELSE 0 END) FROM foo",
             },
         )
         self.validate_all(

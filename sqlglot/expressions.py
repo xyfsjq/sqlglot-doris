@@ -5454,6 +5454,10 @@ class ArrayStringConcat(Func):
     arg_types = {"this": True, "expressions": False}
 
 
+class ArrayUniq(Func):  # doris:size(array_distinct())
+    arg_types = {"this": True, "expression": False}
+
+
 # Helpers
 @t.overload
 def maybe_parse(
