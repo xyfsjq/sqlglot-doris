@@ -11,6 +11,14 @@ from sqlglot.dialects.dialect import (
 from sqlglot.dialects.mysql import MySQL
 
 
+def handle_array_concat(self, expression: exp.ArrayStringConcat) -> str:
+    this = self.sql(expression, "this")
+    expr = self.sql(expression, "expressions")
+    if expr == "":
+        return f"CONCAT_WS('',{this})"
+    return f"CONCAT_WS({expr}, {this})"
+
+
 def handle_array_to_string(self, expression: exp.ArrayToString) -> str:
     this = self.sql(expression, "this")
     sep = self.sql(expression, "sep")
@@ -74,6 +82,7 @@ class Doris(MySQL):
             exp.ApproxQuantile: rename_func("PERCENTILE_APPROX"),
             exp.ArrayAgg: rename_func("COLLECT_LIST"),
             exp.ArrayFilter: lambda self, e: f"ARRAY_FILTER({self.sql(e, 'expression')},{self.sql(e, 'this')})",
+            exp.ArrayStringConcat: handle_array_concat,
             exp.ArrayToString: handle_array_to_string,
             exp.ArrayUniqueAgg: rename_func("COLLECT_SET"),
             exp.CurrentTimestamp: lambda *_: "NOW()",

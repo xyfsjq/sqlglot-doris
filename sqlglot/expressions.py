@@ -5445,9 +5445,13 @@ class Range(Func):
     arg_types = {"this": True, "expressions": False}
 
 
-# @Huanghaijun add expr
+# @HuangHaijun add expr
 class ArrayToString(Func):
     arg_types = {"this": True, "sep": True, "null_replace": False}
+
+
+class ArrayStringConcat(Func):
+    arg_types = {"this": True, "expressions": False}
 
 
 # Helpers

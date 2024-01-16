@@ -30,6 +30,14 @@ class TestDoris(Validator):
             "SELECT ARRAY_JOIN(ARRAY('a', 'b', 'c', NULL),'#','*')",
             read={"postgres": "SELECT array_to_string(['a','b','c',null],'#','*')"},
         )
+        self.validate_all(
+            "SELECT CONCAT_WS('',ARRAY('12/05/2021', '12:50:00')) AS DateString",
+            read={"clickhouse": "SELECT arrayStringConcat(['12/05/2021', '12:50:00']) AS DateString"},
+        )
+        self.validate_all(
+            "SELECT CONCAT_WS('*', ARRAY('12/05/2021', '12:50:00')) AS DateString",
+            read={"clickhouse": "SELECT arrayStringConcat(['12/05/2021', '12:50:00'], '*') AS DateString"},
+        )
 
     def test_identity(self):
         self.validate_identity("COALECSE(a, b, c, d)")
