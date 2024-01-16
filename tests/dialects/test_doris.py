@@ -47,6 +47,13 @@ class TestDoris(Validator):
             read={"presto": "${a}"},
         )
 
+        self.validate_all(
+            "SELECT aa, sum(CASE WHEN index_name = 'ceshi' THEN score ELSE 0 END) AS avg_score FROM table GROUP BY aa",
+            read={
+                "presto": "select aa,sum(score) filter(where index_name='ceshi') as avg_score from table group by aa"
+            }
+        )
+
     def test_identity(self):
         self.validate_identity("COALECSE(a, b, c, d)")
         self.validate_identity("SELECT CAST(`a`.`b` AS INT) FROM foo")

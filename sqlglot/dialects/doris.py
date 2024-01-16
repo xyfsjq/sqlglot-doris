@@ -67,6 +67,23 @@ def handle_date_trunc(self, expression: exp.DateTrunc) -> str:
     return f"DATE({this})"
 
 
+def handle_filter(self, expr: exp.Filter) -> str:
+    expression = expr.copy()
+    self.sql(expr, "this")
+    expr = expression.expression.args["this"]
+    agg = expression.this.key
+    spec = expression.this.args["this"]
+    case = (
+        exp.Case()
+        .when(
+            expr,
+            spec,
+        )
+        .else_("0")
+    )
+    return f"{agg}({self.sql(case)})"
+
+
 class Doris(MySQL):
     DATE_FORMAT = "'yyyy-MM-dd'"
     DATEINT_FORMAT = "'yyyyMMdd'"
@@ -130,6 +147,7 @@ class Doris(MySQL):
             exp.CurrentDate: no_paren_current_date_sql,
             exp.CountIf: count_if_to_sum,
             exp.DateTrunc: handle_date_trunc,
+            exp.Filter: handle_filter,
             exp.JSONExtractScalar: arrow_json_extract_sql,
             exp.JSONExtract: arrow_json_extract_sql,
             exp.Map: rename_func("ARRAY_MAP"),
