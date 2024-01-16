@@ -32,11 +32,25 @@ class TestDoris(Validator):
         )
         self.validate_all(
             "SELECT CONCAT_WS('',ARRAY('12/05/2021', '12:50:00')) AS DateString",
-            read={"clickhouse": "SELECT arrayStringConcat(['12/05/2021', '12:50:00']) AS DateString"},
+            read={
+                "clickhouse": "SELECT arrayStringConcat(['12/05/2021', '12:50:00']) AS DateString"
+            },
         )
         self.validate_all(
             "SELECT CONCAT_WS('*', ARRAY('12/05/2021', '12:50:00')) AS DateString",
-            read={"clickhouse": "SELECT arrayStringConcat(['12/05/2021', '12:50:00'], '*') AS DateString"},
+            read={
+                "clickhouse": "SELECT arrayStringConcat(['12/05/2021', '12:50:00'], '*') AS DateString"
+            },
+        )
+        self.validate_all(
+            "SELECT CAST('2024-01-16' AS STRING)",
+            read={"clickhouse": "SELECT TOSTRING('2024-01-16')"},
+        )
+        self.validate_all(
+            "SELECT HOURS_DIFF(CAST('2018-01-02 23:00:00' AS DATETIME), CAST('2018-01-01 22:00:00' AS DATETIME))",
+            read={
+                "clickhouse": "SELECT dateDiff('hour', toDateTime('2018-01-01 22:00:00'), toDateTime('2018-01-02 23:00:00'));"
+            },
         )
 
     def test_identity(self):

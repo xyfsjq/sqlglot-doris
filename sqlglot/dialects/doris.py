@@ -32,6 +32,29 @@ def handle_array_to_string(self, expression: exp.ArrayToString) -> str:
     return result
 
 
+def handle_date_diff(self, expression: exp.DateDiff) -> str:
+    unit = self.sql(expression, "unit").lower()
+    expressions = self.sql(expression, "expression")
+    this = self.sql(expression, "this")
+    if unit == "microsecond":
+        return f"MICROSECONDS_DIFF({this}, {expressions})"
+    elif unit == "millisecond":
+        return f"MILLISECONDS_DIFF({this}, {expressions})"
+    elif unit == "second":
+        return f"SECONDS_DIFF({this}, {expressions})"
+    elif unit == "minute":
+        return f"MINUTES_DIFF({this}, {expressions})"
+    elif unit == "hour":
+        return f"HOURS_DIFF({this}, {expressions})"
+    elif unit == "day":
+        return f"DATEDIFF({this}, {expressions})"
+    elif unit == "month":
+        return f"MONTHS_DIFF({this}, {expressions})"
+    elif unit == "year":
+        return f"YEARS_DIFF({this}, {expressions})"
+    return f"DATEDIFF({this}, {expressions})"
+
+
 class Doris(MySQL):
     DATE_FORMAT = "'yyyy-MM-dd'"
     DATEINT_FORMAT = "'yyyyMMdd'"
@@ -85,7 +108,9 @@ class Doris(MySQL):
             exp.ArrayStringConcat: handle_array_concat,
             exp.ArrayToString: handle_array_to_string,
             exp.ArrayUniqueAgg: rename_func("COLLECT_SET"),
+            exp.CastToStrType: lambda self, e: f"CAST({self.sql(e, 'this')} AS {self.sql(e, 'to')})",
             exp.CurrentTimestamp: lambda *_: "NOW()",
+            exp.DateDiff: handle_date_diff,
             exp.DateTrunc: lambda self, e: self.func(
                 "DATE_TRUNC", e.this, "'" + e.text("unit") + "'"
             ),
