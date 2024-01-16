@@ -11,6 +11,24 @@ from sqlglot.dialects.dialect import (
 )
 from sqlglot.dialects.mysql import MySQL
 
+DATE_DELTA_INTERVAL = {
+    "year": "year",
+    "yyyy": "year",
+    "yy": "year",
+    "quarter": "quarter",
+    "qq": "quarter",
+    "q": "quarter",
+    "month": "month",
+    "mm": "month",
+    "m": "month",
+    "week": "week",
+    "ww": "week",
+    "wk": "week",
+    "day": "day",
+    "dd": "day",
+    "d": "day",
+}
+
 
 def no_paren_current_date_sql(self, expression: exp.CurrentDate) -> str:
     zone = self.sql(expression, "this")
@@ -36,6 +54,17 @@ def handle_array_to_string(self, expression: exp.ArrayToString) -> str:
     result += ")"
 
     return result
+
+
+def handle_date_trunc(self, expression: exp.DateTrunc) -> str:
+    unit = self.sql(expression, "unit").strip("\"'").lower()
+    this = self.sql(expression, "this")
+    if unit.isalpha():
+        mapped_unit = DATE_DELTA_INTERVAL.get(unit) or unit
+        return f"DATE_TRUNC({this}, '{mapped_unit}')"
+    if unit.isdigit():
+        return f"TRUNCATE({this}, {unit})"
+    return f"DATE({this})"
 
 
 class Doris(MySQL):
@@ -100,9 +129,7 @@ class Doris(MySQL):
             exp.CurrentTimestamp: lambda *_: "NOW()",
             exp.CurrentDate: no_paren_current_date_sql,
             exp.CountIf: count_if_to_sum,
-            exp.DateTrunc: lambda self, e: self.func(
-                "DATE_TRUNC", e.this, "'" + e.text("unit") + "'"
-            ),
+            exp.DateTrunc: handle_date_trunc,
             exp.JSONExtractScalar: arrow_json_extract_sql,
             exp.JSONExtract: arrow_json_extract_sql,
             exp.Map: rename_func("ARRAY_MAP"),
@@ -123,3 +150,16 @@ class Doris(MySQL):
             ),
             exp.UnixToTime: rename_func("FROM_UNIXTIME"),
         }
+
+        def parameter_sql(self, expression: exp.Parameter) -> str:
+            this = self.sql(expression, "this")
+            expression_sql = self.sql(expression, "expression")
+
+            parent = expression.parent
+            this = f"{this}:{expression_sql}" if expression_sql else this
+
+            if isinstance(parent, exp.EQ) and isinstance(parent.parent, exp.SetItem):
+                # We need to produce SET key = value instead of SET ${key} = value
+                return this
+
+            return f"${{{this}}}"

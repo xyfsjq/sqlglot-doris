@@ -42,6 +42,10 @@ class TestDoris(Validator):
                 "clickhouse": "SELECT arrayStringConcat(['12/05/2021', '12:50:00'], '*') AS DateString"
             },
         )
+        self.validate_all(
+            "${a}",
+            read={"presto": "${a}"},
+        )
 
     def test_identity(self):
         self.validate_identity("COALECSE(a, b, c, d)")
