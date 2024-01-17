@@ -147,7 +147,7 @@ class TestDoris(Validator):
             "SELECT aa, sum(CASE WHEN index_name = 'ceshi' THEN score ELSE 0 END) AS avg_score FROM table GROUP BY aa",
             read={
                 "presto": "select aa,sum(score) filter(where index_name='ceshi') as avg_score from table group by aa"
-            }
+            },
         )
 
     def test_identity(self):
@@ -168,6 +168,8 @@ class TestDoris(Validator):
         self.validate_identity("3|5", "BITOR(3, 5)")
         self.validate_identity("3^5", "BITXOR(3, 5)")
         self.validate_identity("~5", "BITNOT(5)")
+        self.validate_identity("random(2)", "FLOOR(RANDOM()*2.0)")
+        self.validate_identity("random(2,3)", "FLOOR(RANDOM()*1.0+2.0)")
 
     def test_time(self):
         self.validate_identity("TIMESTAMP('2022-01-01')")

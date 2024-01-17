@@ -5095,7 +5095,7 @@ class ApproxQuantile(Quantile):
 
 class Rand(Func):
     _sql_names = ["RAND", "RANDOM"]
-    arg_types = {"this": False}
+    arg_types = {"this": False, "expression": False}
 
 
 class Randn(Func):

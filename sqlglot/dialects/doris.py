@@ -142,6 +142,18 @@ def handle_to_date(self: Doris.Generator, expression: exp.TsOrDsToDate) -> str:
     return f"TO_DATE({this})"
 
 
+def handle_rand(self, expr: exp.Rand) -> str:
+    min = self.sql(expr, "this")
+    max = self.sql(expr, "expression")
+    if min == "" and max == "":
+        return f"RANDOM()"
+    elif max == "":
+        return f"FLOOR(RANDOM()*{min}.0)"
+    else:
+        temp = int(max) - int(min)
+        return f"FLOOR(RANDOM()*{temp}.0+{min}.0)"
+
+
 class Doris(MySQL):
     DATE_FORMAT = "'yyyy-MM-dd'"
     DATEINT_FORMAT = "'yyyyMMdd'"
@@ -215,6 +227,7 @@ class Doris(MySQL):
             exp.RegexpLike: rename_func("REGEXP"),
             exp.RegexpExtract: handle_regexp_extract,
             exp.RegexpSplit: rename_func("SPLIT_BY_STRING"),
+            exp.Rand: handle_rand,
             exp.StrToUnix: lambda self, e: f"UNIX_TIMESTAMP({self.sql(e, 'this')}, {self.format_time(e)})",
             exp.Split: rename_func("SPLIT_BY_STRING"),
             exp.TimeStrToDate: rename_func("TO_DATE"),

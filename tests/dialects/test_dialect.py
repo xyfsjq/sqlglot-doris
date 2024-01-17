@@ -2104,7 +2104,7 @@ SELECT
                 "bigquery": "RAND()",
                 "clickhouse": "randCanonical()",
                 "databricks": "RAND()",
-                "doris": "RAND()",
+                "doris": "RANDOM()",
                 "drill": "RAND()",
                 "duckdb": "RANDOM()",
                 "hive": "RAND()",

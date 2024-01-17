@@ -261,6 +261,7 @@ class TestBigQuery(Validator):
                 "snowflake": "SELECT LAST_DAY(CAST('2008-11-25' AS DATE), MONTH)",
                 "spark": "SELECT LAST_DAY(CAST('2008-11-25' AS DATE))",
                 "tsql": "SELECT EOMONTH(CAST('2008-11-25' AS DATE))",
+                "doris": "SELECT LAST_DAY(CAST('2008-11-25' AS DATE))",
             },
         )
         self.validate_all(
