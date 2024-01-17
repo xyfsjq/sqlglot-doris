@@ -150,6 +150,14 @@ class TestDoris(Validator):
             },
         )
 
+        self.validate_all(
+            "REPLACE('www.baidu.com:9090','9090','')",
+            read={
+                # "clickhouse": "REPLACEALL('www.baidu.com:9090','9090','')",
+                "presto": "REPLACE('www.baidu.com:9090','9090')",
+            },
+        )
+
     def test_identity(self):
         self.validate_identity("COALECSE(a, b, c, d)")
         self.validate_identity("SELECT CAST(`a`.`b` AS INT) FROM foo")

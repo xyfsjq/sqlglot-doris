@@ -272,6 +272,7 @@ class Presto(Dialect):
                 replacement=seq_get(args, 2) or exp.Literal.string(""),
             ),
             "ROW": exp.Struct.from_arg_list,
+            "REPLACE": exp.Replace.from_arg_list,
             "SEQUENCE": exp.GenerateSeries.from_arg_list,
             "SET_AGG": exp.ArrayUniqueAgg.from_arg_list,
             "SPLIT_TO_MAP": exp.StrToMap.from_arg_list,
