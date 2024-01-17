@@ -680,6 +680,7 @@ class TestDialect(Validator):
                 "hive": "TO_DATE(x, 'd')",
                 "presto": "CAST(DATE_PARSE(x, '%e') AS DATE)",
                 "spark": "TO_DATE(x, 'd')",
+                "doris": "DATE_FORMAT(x, '%e')",
             },
         )
         self.validate_all(

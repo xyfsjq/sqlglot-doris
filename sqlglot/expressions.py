@@ -4443,7 +4443,7 @@ class ArraySort(Func):
 
 
 class ArraySum(Func):
-    arg_types = {"this": True, "expression": False}
+    pass
 
 
 class ArrayUnionAgg(AggFunc):
@@ -5437,11 +5437,27 @@ FUNCTION_BY_NAME = {name: func for func in ALL_FUNCTIONS for name in func.sql_na
 
 
 # @liujiwen add expr
+class ArrayUniq(Func):  # doris:size(array_distinct())
+    arg_types = {"this": True, "expression": False}
+
+
 class Shuffle(Func):
     arg_types = {"this": False, "expression": False}
 
 
 class Range(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class GroupBitAnd(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class GroupBitOr(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class GroupBitXor(Func):
     arg_types = {"this": True, "expressions": False}
 
 

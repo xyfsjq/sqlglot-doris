@@ -107,6 +107,41 @@ def handle_filter(self, expr: exp.Filter) -> str:
     return f"{agg}({self.sql(case)})"
 
 
+def _string_agg_sql(self: Doris.Generator, expression: exp.GroupConcat) -> str:
+    expression = expression.copy()
+    separator = expression.args.get("separator") or exp.Literal.string(",")
+
+    order = ""
+    this = expression.this
+    if isinstance(this, exp.Order):
+        if this.this:
+            this = this.this.pop()
+        order = self.sql(expression.this)  # Order has a leading space
+    if isinstance(separator, exp.Chr):
+        separator = "\n"
+        return f"GROUP_CONCAT({self.format_args(this)}{order},'{separator}')"
+    return f"GROUP_CONCAT({self.format_args(this, separator)}{order})"
+
+
+def handle_regexp_extract(self, expr: exp.RegexpExtract) -> str:
+    this = self.sql(expr, "this")
+    expression = self.sql(expr, "expression")
+    position = self.sql(expr, "position")
+    if position == "":
+        return f"REGEXP_EXTRACT_ALL({this}, '({expression[1:-1]})')"
+    return f"REGEXP_EXTRACT({this}, '({expression[1:-1]})', {position})"
+
+
+def handle_to_date(self: Doris.Generator, expression: exp.TsOrDsToDate) -> str:
+    this = self.sql(expression, "this")
+    time_format = self.format_time(expression)
+    if time_format and time_format not in (Doris.TIME_FORMAT, Doris.DATE_FORMAT):
+        return f"DATE_FORMAT({this}, {time_format})"
+    if isinstance(expression.this, exp.TsOrDsToDate):
+        return this
+    return f"TO_DATE({this})"
+
+
 class Doris(MySQL):
     DATE_FORMAT = "'yyyy-MM-dd'"
     DATEINT_FORMAT = "'yyyyMMdd'"
@@ -157,6 +192,7 @@ class Doris(MySQL):
             exp.ApproxQuantile: rename_func("PERCENTILE_APPROX"),
             exp.ArrayAgg: rename_func("COLLECT_LIST"),
             exp.ArrayFilter: lambda self, e: f"ARRAY_FILTER({self.sql(e, 'expression')},{self.sql(e, 'this')})",
+            exp.ArrayUniq: lambda self, e: f"SIZE(ARRAY_DISTINCT({self.sql(e, 'this')}))",
             exp.ArrayOverlaps: rename_func("ARRAYS_OVERLAP"),
             exp.BitwiseNot: rename_func("BITNOT"),
             exp.BitwiseAnd: rename_func("BITAND"),
@@ -164,7 +200,6 @@ class Doris(MySQL):
             exp.BitwiseXor: rename_func("BITXOR"),
             exp.ArrayStringConcat: handle_array_concat,
             exp.ArrayToString: handle_array_to_string,
-            exp.ArrayUniq: lambda self, e: f"SIZE(ARRAY_DISTINCT({self.sql(e, 'this')}))",
             exp.ArrayUniqueAgg: rename_func("COLLECT_SET"),
             exp.CastToStrType: lambda self, e: f"CAST({self.sql(e, 'this')} AS {self.sql(e, 'to')})",
             exp.CurrentTimestamp: lambda *_: "NOW()",
@@ -173,17 +208,20 @@ class Doris(MySQL):
             exp.CountIf: count_if_to_sum,
             exp.DateTrunc: handle_date_trunc,
             exp.Filter: handle_filter,
+            exp.GroupConcat: _string_agg_sql,
             exp.JSONExtractScalar: arrow_json_extract_sql,
             exp.JSONExtract: arrow_json_extract_sql,
             exp.Map: rename_func("ARRAY_MAP"),
             exp.RegexpLike: rename_func("REGEXP"),
+            exp.RegexpExtract: handle_regexp_extract,
             exp.RegexpSplit: rename_func("SPLIT_BY_STRING"),
             exp.StrToUnix: lambda self, e: f"UNIX_TIMESTAMP({self.sql(e, 'this')}, {self.format_time(e)})",
             exp.Split: rename_func("SPLIT_BY_STRING"),
             exp.TimeStrToDate: rename_func("TO_DATE"),
             exp.ToChar: lambda self, e: f"DATE_FORMAT({self.sql(e, 'this')}, {self.format_time(e)})",
             exp.TsOrDsAdd: lambda self, e: f"DATE_ADD({self.sql(e, 'this')}, {self.sql(e, 'expression')})",  # Only for day level
-            exp.TsOrDsToDate: lambda self, e: self.func("TO_DATE", e.this),
+            exp.TsOrDsToDate: handle_to_date,
+            exp.TimeStrToUnix: rename_func("UNIX_TIMESTAMP"),
             exp.TimeToUnix: rename_func("UNIX_TIMESTAMP"),
             exp.TimestampTrunc: lambda self, e: self.func(
                 "DATE_TRUNC", e.this, "'" + e.text("unit") + "'"

@@ -432,6 +432,9 @@ class Snowflake(Dialect):
             "BITXOR": binary_from_function(exp.BitwiseXor),
             "BIT_XOR": binary_from_function(exp.BitwiseXor),
             "BOOLXOR": binary_from_function(exp.Xor),
+            "BITAND_AGG": exp.GroupBitAnd.from_arg_list,
+            "BITOR_AGG": exp.GroupBitOr.from_arg_list,
+            "BITXOR_AGG": exp.GroupBitXor.from_arg_list,
             "CONVERT_TIMEZONE": _parse_convert_timezone,
             "DATE_TRUNC": _date_trunc_to_time,
             "DATEADD": lambda args: exp.DateAdd(

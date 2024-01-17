@@ -46,12 +46,14 @@ class TestDoris(Validator):
             "${a}",
             read={"presto": "${a}"},
         )
+
         self.validate_all(
             "SELECT aa, sum(CASE WHEN index_name = 'ceshi' THEN score ELSE 0 END) AS avg_score FROM table GROUP BY aa",
             read={
                 "presto": "select aa,sum(score) filter(where index_name='ceshi') as avg_score from table group by aa"
-            }
+            },
         )
+
         self.validate_all(
             "SELECT CAST('2024-01-16' AS STRING)",
             read={"clickhouse": "SELECT TOSTRING('2024-01-16')"},
@@ -178,8 +180,48 @@ class TestDoris(Validator):
             },
         )
 
+        self.validate_all(
+            "SELECT REGEXP_EXTRACT('Abcd abCd aBcd', '(ab.)', 1)",
+            read={
+                "postgres": "SELECT regexp_match('Abcd abCd aBcd', 'ab.')",
+            },
+        )
+
+        self.validate_all(
+            "SELECT REGEXP_EXTRACT_ALL('abcd abcd abcd', '(ab.)')",
+            read={
+                "postgres": "SELECT regexp_matches('abcd abcd abcd', 'ab.')",
+            },
+        )
+
     def test_array(self):
         self.validate_all(
             "SELECT SIZE(ARRAY_DISTINCT(x))",
             read={"clickhouse": "SELECT ARRAYUNIQ(x)"},
+        )
+
+    def test_bit(self):
+        self.validate_all(
+            "GROUP_BIT_AND(x)",
+            read={
+                "postgres": "BIT_AND(x)",
+                "clickhouse": "GROUPBITAND(x)",
+                "snowflake": "BITAND_AGG(x)",
+            },
+        )
+        self.validate_all(
+            "GROUP_BIT_OR(x)",
+            read={
+                "postgres": "BIT_OR(x)",
+                "clickhouse": "GROUPBITOR(x)",
+                "snowflake": "BITOR_AGG(x)",
+            },
+        )
+        self.validate_all(
+            "GROUP_BIT_XOR(x)",
+            read={
+                "postgres": "BIT_XOR(x)",
+                "clickhouse": "GROUPBITXOR(x)",
+                "snowflake": "BITXOR_AGG(x)",
+            },
         )
