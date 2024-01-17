@@ -166,7 +166,6 @@ class Doris(MySQL):
             "ARRAY_SHUFFLE": exp.Shuffle.from_arg_list,
             "ARRAY_RANGE": exp.Range.from_arg_list,
             "ARRAY_SORT": exp.SortArray.from_arg_list,
-            "COUNTEQUAL": exp.Repeat.from_arg_list,
             "COLLECT_LIST": exp.ArrayAgg.from_arg_list,
             "COLLECT_SET": exp.ArrayUniqueAgg.from_arg_list,
             "DATE_TRUNC": parse_timestamp_trunc,

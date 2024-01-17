@@ -155,7 +155,6 @@ class TestDoris(Validator):
         self.validate_identity("SELECT CAST(`a`.`b` AS INT) FROM foo")
         self.validate_identity("SELECT APPROX_COUNT_DISTINCT(a) FROM x")
         self.validate_identity("ARRAY_SORT(x)", "SORT_ARRAY(x)")
-        self.validate_identity("COUNTEQUAL(x,2)", "REPEAT(x, 2)")
         self.validate_identity("DATE_ADD(x,1)", "DATE_ADD(x, INTERVAL 1 DAY)")
         self.validate_identity("DATE_SUB(x,1)", "DATE_SUB(x, INTERVAL 1 DAY)")
         self.validate_identity("DATEDIFF(x,1)", "DATEDIFF(x, 1)")
