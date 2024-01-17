@@ -43,6 +43,16 @@ class TestDoris(Validator):
             },
         )
         self.validate_all(
+            "${a}",
+            read={"presto": "${a}"},
+        )
+        self.validate_all(
+            "SELECT aa, sum(CASE WHEN index_name = 'ceshi' THEN score ELSE 0 END) AS avg_score FROM table GROUP BY aa",
+            read={
+                "presto": "select aa,sum(score) filter(where index_name='ceshi') as avg_score from table group by aa"
+            }
+        )
+        self.validate_all(
             "SELECT CAST('2024-01-16' AS STRING)",
             read={"clickhouse": "SELECT TOSTRING('2024-01-16')"},
         )
@@ -126,6 +136,17 @@ class TestDoris(Validator):
             "SELECT ARRAY_ZIP(ARRAY('a', 'b', 'c'), ARRAY(5, 2, 1))",
             read={"clickhouse": "SELECT arrayZip(['a', 'b', 'c'], [5, 2, 1])"},
         )
+        self.validate_all(
+            "${a}",
+            read={"presto": "${a}"},
+        )
+
+        self.validate_all(
+            "SELECT aa, sum(CASE WHEN index_name = 'ceshi' THEN score ELSE 0 END) AS avg_score FROM table GROUP BY aa",
+            read={
+                "presto": "select aa,sum(score) filter(where index_name='ceshi') as avg_score from table group by aa"
+            }
+        )
 
     def test_identity(self):
         self.validate_identity("COALECSE(a, b, c, d)")
@@ -141,6 +162,10 @@ class TestDoris(Validator):
         self.validate_identity("SIZE(x)", "ARRAY_SIZE(x)")
         self.validate_identity("SPLIT_BY_STRING(x,',')", "SPLIT_BY_STRING(x, ',')")
         self.validate_identity("VAR_SAMP(x)", "STDDEV_SAMP(x)")
+        self.validate_identity("3&5", "BITAND(3, 5)")
+        self.validate_identity("3|5", "BITOR(3, 5)")
+        self.validate_identity("3^5", "BITXOR(3, 5)")
+        self.validate_identity("~5", "BITNOT(5)")
 
     def test_time(self):
         self.validate_identity("TIMESTAMP('2022-01-01')")
@@ -151,4 +176,10 @@ class TestDoris(Validator):
             write={
                 "doris": "SELECT REGEXP(abc, '%foo%')",
             },
+        )
+
+    def test_array(self):
+        self.validate_all(
+            "SELECT SIZE(ARRAY_DISTINCT(x))",
+            read={"clickhouse": "SELECT ARRAYUNIQ(x)"},
         )

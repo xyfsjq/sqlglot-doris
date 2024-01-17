@@ -798,7 +798,7 @@ class TestDialect(Validator):
                 "snowflake": "DATE_TRUNC('DAY', x)",
                 "starrocks": "DATE_TRUNC('DAY', x)",
                 "spark": "TRUNC(x, 'DAY')",
-                "doris": "DATE_TRUNC(x, 'DAY')",
+                "doris": "DATE_TRUNC(x, 'day')",
             },
         )
         self.validate_all(
@@ -872,7 +872,7 @@ class TestDialect(Validator):
                 "snowflake": "DATE_TRUNC('YEAR', x)",
                 "starrocks": "DATE_TRUNC('YEAR', x)",
                 "spark": "TRUNC(x, 'YEAR')",
-                "doris": "DATE_TRUNC(x, 'YEAR')",
+                "doris": "DATE_TRUNC(x, 'year')",
             },
         )
         self.validate_all(
@@ -1376,6 +1376,7 @@ class TestDialect(Validator):
                 "hive": "CONCAT_WS('-', 'a', 'b')",
                 "spark": "CONCAT_WS('-', 'a', 'b')",
                 "trino": "CONCAT_WS('-', CAST('a' AS VARCHAR), CAST('b' AS VARCHAR))",
+                "doris": "CONCAT_WS('-', 'a', 'b')",
             },
         )
 
@@ -1388,6 +1389,7 @@ class TestDialect(Validator):
                 "presto": "CONCAT_WS('-', CAST(x AS VARCHAR))",
                 "spark": "CONCAT_WS('-', x)",
                 "trino": "CONCAT_WS('-', CAST(x AS VARCHAR))",
+                "doris": "CONCAT_WS('-', x)",
             },
         )
         self.validate_all(
@@ -1960,6 +1962,7 @@ SELECT
                 "snowflake": "SELECT COUNT_IF(col % 2 = 0) FROM foo",
                 "sqlite": "SELECT SUM(CASE WHEN col % 2 = 0 THEN 1 ELSE 0 END) FROM foo",
                 "tsql": "SELECT COUNT_IF(col % 2 = 0) FROM foo",
+                "doris": "SELECT SUM(CASE WHEN col % 2 = 0 THEN 1 ELSE 0 END) FROM foo",
             },
         )
         self.validate_all(
