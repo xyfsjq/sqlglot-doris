@@ -4443,7 +4443,7 @@ class ArraySort(Func):
 
 
 class ArraySum(Func):
-    pass
+    arg_types = {"this": True, "expression": False}
 
 
 class ArrayUnionAgg(AggFunc):
@@ -5519,10 +5519,6 @@ class ArrayProduct(Func):
 
 
 class ArrayReverseSort(Func):
-    arg_types = {"this": True, "expression": False}
-
-
-class ArrayUniq(Func):  # doris:size(array_distinct())
     arg_types = {"this": True, "expression": False}
 
 
