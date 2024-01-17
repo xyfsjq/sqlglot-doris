@@ -4443,7 +4443,7 @@ class ArraySort(Func):
 
 
 class ArraySum(Func):
-    pass
+    arg_types = {"this": True, "expression": False}
 
 
 class ArrayUnionAgg(AggFunc):
@@ -5452,6 +5452,66 @@ class ArrayToString(Func):
 
 class ArrayStringConcat(Func):
     arg_types = {"this": True, "expressions": False}
+
+
+class ArrayAvg(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayCumSum(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayDifference(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayDistinct(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayExists(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayFirst(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayFirstIndex(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayIntersect(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayLast(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayLastIndex(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayMap(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayProduct(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayReverseSort(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayUniq(Func):  # doris:size(array_distinct())
+    arg_types = {"this": True, "expression": False}
+
+
+class ArrayZip(Func):
+    arg_types = {"this": True, "expression": False}
 
 
 # Helpers

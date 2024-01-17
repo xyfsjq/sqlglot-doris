@@ -100,11 +100,30 @@ class ClickHouse(Dialect):
         # * select x from t1 union all select x from t2 limit 1;
         # * select x from t1 union all (select x from t2 limit 1);
         MODIFIERS_ATTACHED_TO_UNION = False
-
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
             "ANY": exp.AnyValue.from_arg_list,
+            "ARRAYAVG": exp.ArrayAvg.from_arg_list,
+            "ARRAYCOMPACT": exp.ArrayDistinct.from_arg_list,
+            "ARRAYCUMSUM": exp.ArrayCumSum.from_arg_list,
+            "ARRAYDIFFERENCE": exp.ArrayDifference.from_arg_list,
+            "ARRAYDISTINCT": exp.ArrayDistinct.from_arg_list,
+            "ARRAYEXISTS": exp.ArrayExists.from_arg_list,
+            "ARRAYFILTER": lambda args: exp.ArrayFilter(
+                this=seq_get(args, 1), expression=seq_get(args, 0)
+            ),
+            "ARRAYFIRST": exp.ArrayFirst.from_arg_list,
+            "ARRAYFIRSTINDEX": exp.ArrayFirstIndex.from_arg_list,
+            "ARRAYINTERSECT": exp.ArrayIntersect.from_arg_list,
+            "ARRAYLAST": exp.ArrayLast.from_arg_list,
+            "ARRAYLASTINDEX": exp.ArrayLastIndex.from_arg_list,
+            "ARRAYMAP": exp.ArrayMap.from_arg_list,
+            "ARRAYPRODUCT": exp.ArrayProduct.from_arg_list,
+            "ARRAYREVERSESORT": exp.ArrayReverseSort.from_arg_list,
             "ARRAYSTRINGCONCAT": exp.ArrayStringConcat.from_arg_list,
+            "ARRAYSUM": exp.ArraySum.from_arg_list,
+            "ARRAYUNIQ": exp.ArrayUniq.from_arg_list,
+            "ARRAYZIP": exp.ArrayZip.from_arg_list,
             "COUNTIF": _parse_count_if,
             "DATE_ADD": lambda args: exp.DateAdd(
                 this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)

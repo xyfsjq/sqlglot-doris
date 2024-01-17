@@ -107,6 +107,7 @@ class Doris(MySQL):
             exp.ArrayFilter: lambda self, e: f"ARRAY_FILTER({self.sql(e, 'expression')},{self.sql(e, 'this')})",
             exp.ArrayStringConcat: handle_array_concat,
             exp.ArrayToString: handle_array_to_string,
+            exp.ArrayUniq: lambda self, e: f"SIZE(ARRAY_DISTINCT({self.sql(e, 'this')}))",
             exp.ArrayUniqueAgg: rename_func("COLLECT_SET"),
             exp.CastToStrType: lambda self, e: f"CAST({self.sql(e, 'this')} AS {self.sql(e, 'to')})",
             exp.CurrentTimestamp: lambda *_: "NOW()",
