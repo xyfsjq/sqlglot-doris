@@ -23,6 +23,7 @@ class StarRocks(MySQL):
                 this=seq_get(args, 1), expression=seq_get(args, 2), unit=seq_get(args, 0)
             ),
             "REGEXP": exp.RegexpLike.from_arg_list,
+            "PERCENTILE_APPROX_RAW": exp.ApproxQuantile.from_arg_list,
         }
 
     class Generator(MySQL.Generator):

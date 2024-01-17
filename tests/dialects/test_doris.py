@@ -19,6 +19,12 @@ class TestDoris(Validator):
             },
         )
         self.validate_all(
+            "SELECT PERCENTILE_APPROX(x, 1)",
+            read={
+                "starrocks": "SELECT PERCENTILE_APPROX_RAW(x,1)",
+            },
+        )
+        self.validate_all(
             "SELECT MAX_BY(a, b), MIN_BY(c, d)",
             read={"clickhouse": "SELECT argMax(a, b), argMin(c, d)"},
         )
