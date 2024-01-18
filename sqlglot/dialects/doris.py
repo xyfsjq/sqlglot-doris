@@ -172,7 +172,7 @@ class Doris(MySQL):
     DATEINT_FORMAT = "'yyyyMMdd'"
     TIME_FORMAT = "'yyyy-MM-dd HH:mm:ss'"
     NULL_ORDERING = "nulls_are_frist"
-
+    DPIPE_IS_STRING_CONCAT = True
     TIME_MAPPING = {
         **MySQL.TIME_MAPPING,
         "%Y": "yyyy",
@@ -238,6 +238,7 @@ class Doris(MySQL):
             exp.CastToStrType: lambda self, e: f"CAST({self.sql(e, 'this')} AS {self.sql(e, 'to')})",
             exp.CurrentTimestamp: lambda *_: "NOW()",
             exp.DateDiff: handle_date_diff,
+            exp.DPipe: lambda self, e: f"CONCAT({self.sql(e, 'this')},{self.sql(e, 'expression')})",
             exp.CurrentDate: no_paren_current_date_sql,
             exp.CountIf: count_if_to_sum,
             exp.DateTrunc: handle_date_trunc,
