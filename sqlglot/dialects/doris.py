@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlglot import exp
+from sqlglot import exp, generator
 from sqlglot.dialects.dialect import (
     approx_count_distinct_sql,
     arrow_json_extract_sql,
@@ -163,6 +163,10 @@ def handle_rand(self, expr: exp.Rand) -> str:
         return f"FLOOR(RANDOM()*{temp}.0+{min}.0)"
 
 
+def _str_to_unix_sql(self: generator.Generator, expression: exp.StrToUnix) -> str:
+    return self.func("UNIX_TIMESTAMP", expression.this, time_format("doris")(self, expression))
+
+
 class Doris(MySQL):
     DATE_FORMAT = "'yyyy-MM-dd'"
     DATEINT_FORMAT = "'yyyyMMdd'"
@@ -249,7 +253,7 @@ class Doris(MySQL):
             exp.RegexpSplit: rename_func("SPLIT_BY_STRING"),
             exp.Rand: handle_rand,
             exp.Replace: handle_replace,
-            exp.StrToUnix: lambda self, e: f"UNIX_TIMESTAMP({self.sql(e, 'this')}, {self.format_time(e)})",
+            exp.StrToUnix: _str_to_unix_sql,
             exp.Split: rename_func("SPLIT_BY_STRING"),
             exp.SHA2: lambda self, e: f"SHA2({self.sql(e, 'this')},{self.sql(e, 'length')})",
             exp.SortArray: rename_func("ARRAY_SORT"),
