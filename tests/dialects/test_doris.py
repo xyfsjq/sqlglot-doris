@@ -185,11 +185,18 @@ class TestDoris(Validator):
         )
 
 
+        self.validate_all(
+            "SHA2(x,256)",
+            read={
+                "presto": "SHA256(x)",
+            },
+        )
+
     def test_identity(self):
         self.validate_identity("COALECSE(a, b, c, d)")
         self.validate_identity("SELECT CAST(`a`.`b` AS INT) FROM foo")
         self.validate_identity("SELECT APPROX_COUNT_DISTINCT(a) FROM x")
-        self.validate_identity("ARRAY_SORT(x)", "SORT_ARRAY(x)")
+        self.validate_identity("ARRAY_SORT(x)", "ARRAY_SORT(x)")
         self.validate_identity("DATE_ADD(x,1)", "DATE_ADD(x, INTERVAL 1 DAY)")
         self.validate_identity("DATE_SUB(x,1)", "DATE_SUB(x, INTERVAL 1 DAY)")
         self.validate_identity("DATEDIFF(x,1)", "DATEDIFF(x, 1)")
@@ -207,6 +214,13 @@ class TestDoris(Validator):
 
     def test_time(self):
         self.validate_identity("TIMESTAMP('2022-01-01')")
+
+        self.validate_all(
+            "WEEK(CAST('2010-01-01' AS DATE), 3)",
+            read={
+                "presto": "week(DATE '2010-01-01')",
+            },
+        )
 
     def test_regex(self):
         self.validate_all(
@@ -236,6 +250,18 @@ class TestDoris(Validator):
             read={"clickhouse": "SELECT ARRAYUNIQ(x)"},
         )
 
+        self.validate_all(
+            "ARRAY_SORT(x)",
+            read={
+                "clickhouse": "ARRAYSORT(x)",
+            },
+        )
+
+        self.validate_all(
+            "ARRAY_MAP(x -> x + 1, ARRAY(5, 6))",
+            read={"presto": "transform(ARRAY [5, 6], x -> x + 1)"},
+        )
+
     def test_bit(self):
         self.validate_all(
             "GROUP_BIT_AND(x)",
@@ -259,5 +285,13 @@ class TestDoris(Validator):
                 "postgres": "BIT_XOR(x)",
                 "clickhouse": "GROUPBITXOR(x)",
                 "snowflake": "BITXOR_AGG(x)",
+            },
+        )
+
+    def test_varchar(self):
+        self.validate_all(
+            "LOCATE('a', 'abc')",
+            read={
+                "presto": "index('abc','a')",
             },
         )
