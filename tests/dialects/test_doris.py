@@ -229,6 +229,13 @@ class TestDoris(Validator):
             },
         )
 
+        self.validate_all(
+            "DATE_FORMAT(FROM_UNIXTIME(1609167953694 / 1000), '%Y-%m-%d')",
+            read={
+                "presto": "format_datetime(from_unixtime(1609167953694/1000),'yyyy-MM-dd')",
+            },
+        )
+
     def test_regex(self):
         self.validate_all(
             "SELECT REGEXP_LIKE(abc, '%foo%')",
