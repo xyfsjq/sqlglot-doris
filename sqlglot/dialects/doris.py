@@ -262,6 +262,7 @@ class Doris(MySQL):
                 if self.sql(e, "instance")
                 else f"LOCATE({self.sql(e, 'substr')}, {self.sql(e, 'this')})"
             ),
+            exp.Slice: rename_func("ARRAY_SLICE"),
             exp.TimeStrToDate: rename_func("TO_DATE"),
             exp.ToChar: lambda self, e: f"DATE_FORMAT({self.sql(e, 'this')}, {self.format_time(e)})",
             exp.Today: lambda self, e: f"TO_DATE(NOW())",
