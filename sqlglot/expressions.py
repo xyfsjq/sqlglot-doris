@@ -5522,6 +5522,26 @@ class ArrayProduct(Func):
     arg_types = {"this": True, "expression": False}
 
 
+class ArrayPopback(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class ArrayPopfront(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class ArrayPushback(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class ArrayPushfront(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class ArraySlice(Func):
+    arg_types = {"this": True, "off": False, "len": False}
+
+
 class ArrayReverseSort(Func):
     arg_types = {"this": True, "expression": False}
 

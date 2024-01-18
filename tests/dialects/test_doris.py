@@ -263,17 +263,27 @@ class TestDoris(Validator):
             "SELECT SIZE(ARRAY_DISTINCT(x))",
             read={"clickhouse": "SELECT ARRAYUNIQ(x)"},
         )
-
         self.validate_all(
             "ARRAY_SORT(x)",
             read={
                 "clickhouse": "ARRAYSORT(x)",
             },
         )
-
         self.validate_all(
             "ARRAY_MAP(x -> x + 1, ARRAY(5, 6))",
             read={"presto": "transform(ARRAY [5, 6], x -> x + 1)"},
+        )
+        self.validate_all(
+            "SELECT ARRAY_POPBACK(ARRAY(1, 2, 3)), ARRAY_POPFRONT(ARRAY(1, 2, 3)), ARRAY_PUSHBACK(ARRAY(1, 2, 3)), ARRAY_PUSHFRONT(ARRAY(1, 2, 3))",
+            read={
+                "clickhouse": "select arrayPopBack([1, 2, 3]), arrayPopFront([1, 2, 3]),  arrayPushBack([1, 2, 3]), arrayPushFront([1, 2, 3])"
+            },
+        )
+        self.validate_all(
+            "ARRAY_SLICE(ARRAY(1, 2, NULL, 4, 5), 2, 3)",
+            read={
+                "clickhouse": "arraySlice([1, 2, NULL, 4, 5], 2, 3) ",
+            },
         )
 
     def test_bit(self):
