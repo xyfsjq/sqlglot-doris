@@ -254,3 +254,11 @@ class TestDoris(Validator):
                 "snowflake": "BITXOR_AGG(x)",
             },
         )
+
+    def test_varchar(self):
+        self.validate_all(
+            "LOCATE('a', 'abc')",
+            read={
+                "presto": "index('abc','a')",
+            },
+        )

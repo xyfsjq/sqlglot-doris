@@ -241,6 +241,11 @@ class Doris(MySQL):
             exp.Split: rename_func("SPLIT_BY_STRING"),
             exp.SHA2: lambda self, e: f"SHA2({self.sql(e, 'this')},{self.sql(e, 'length')})",
             exp.SortArray: rename_func("ARRAY_SORT"),
+            exp.StrPosition: lambda self, e: (
+                f"LOCATE({self.sql(e, 'substr')}, {self.sql(e, 'this')}, {self.sql(e, 'instance')})"
+                if self.sql(e, "instance")
+                else f"LOCATE({self.sql(e, 'substr')}, {self.sql(e, 'this')})"
+            ),
             exp.TimeStrToDate: rename_func("TO_DATE"),
             exp.ToChar: lambda self, e: f"DATE_FORMAT({self.sql(e, 'this')}, {self.format_time(e)})",
             exp.TsOrDsAdd: lambda self, e: f"DATE_ADD({self.sql(e, 'this')}, {self.sql(e, 'expression')})",  # Only for day level
