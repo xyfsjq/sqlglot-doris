@@ -229,6 +229,11 @@ class TestDoris(Validator):
             },
         )
 
+        self.validate_all(
+            "ARRAY_MAP(x -> x + 1, ARRAY(5, 6))",
+            read={"presto": "transform(ARRAY [5, 6], x -> x + 1)"},
+        )
+
     def test_bit(self):
         self.validate_all(
             "GROUP_BIT_AND(x)",

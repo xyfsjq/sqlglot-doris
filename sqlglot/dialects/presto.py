@@ -287,6 +287,10 @@ class Presto(Dialect):
             "TO_UTF8": lambda args: exp.Encode(
                 this=seq_get(args, 0), charset=exp.Literal.string("utf-8")
             ),
+            "TRANSFORM": lambda args: exp.ArrayMap(
+                this=seq_get(args, 1),
+                expression=seq_get(args, 0),
+            ),
         }
 
         FUNCTION_PARSERS = parser.Parser.FUNCTION_PARSERS.copy()
