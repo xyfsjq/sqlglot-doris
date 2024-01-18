@@ -243,6 +243,7 @@ class Doris(MySQL):
             exp.CountIf: count_if_to_sum,
             exp.DateTrunc: handle_date_trunc,
             exp.Filter: handle_filter,
+            exp.Shuffle: rename_func("ARRAY_SHUFFLE"),
             exp.GroupConcat: _string_agg_sql,
             exp.JSONExtractScalar: arrow_json_extract_sql,
             exp.JSONExtract: arrow_json_extract_sql,

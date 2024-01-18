@@ -286,6 +286,12 @@ class TestDoris(Validator):
                 "clickhouse": "arraySlice([1, 2, NULL, 4, 5], 2, 3) ",
             },
         )
+        self.validate_all(
+            "ARRAY_SHUFFLE(x)",
+            read={
+                "presto": "Shuffle(x)",
+            },
+        )
 
     def test_bit(self):
         self.validate_all(

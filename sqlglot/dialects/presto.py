@@ -282,6 +282,7 @@ class Presto(Dialect):
                 this=seq_get(args, 0), substr=seq_get(args, 1), instance=seq_get(args, 2)
             ),
             "SHA256": lambda args: exp.SHA2(this=seq_get(args, 0), length="256"),
+            "SHUFFLE": exp.Shuffle.from_arg_list,
             "TO_CHAR": _parse_to_char,
             "TO_HEX": exp.Hex.from_arg_list,
             "TO_UNIXTIME": exp.TimeToUnix.from_arg_list,
