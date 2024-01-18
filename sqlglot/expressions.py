@@ -5530,6 +5530,114 @@ class ArrayZip(Func):
     arg_types = {"this": True, "expression": False}
 
 
+class Hour(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class Minute(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class Quarter(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class Second(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class YearsAdd(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class QuartersAdd(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class MonthsAdd(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class WeeksAdd(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class DaysAdd(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class HoursAdd(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class MinutesAdd(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class SecondsAdd(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class YearsSub(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class MonthsSub(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class SecondsSub(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class QuartersSub(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class Today(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class ToYyyymm(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class ToYyyymmdd(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class ToYyyymmddhhmmss(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class ToStartOfQuarter(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class ToStartOfMonth(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class ToStartOfWeek(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class ToStartOfDay(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class ToStartOfHour(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class ToStartOfMinute(Func):
+    arg_types = {"this": False, "expression": False}
+
+
+class ToStartOfSecond(Func):
+    arg_types = {"this": False, "expression": False}
+
+
 # Helpers
 @t.overload
 def maybe_parse(

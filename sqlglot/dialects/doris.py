@@ -204,6 +204,7 @@ class Doris(MySQL):
 
         TIMESTAMP_FUNC_TYPES = set()
 
+
         TRANSFORMS = {
             **MySQL.Generator.TRANSFORMS,
             exp.ArgMax: rename_func("MAX_BY"),
@@ -232,6 +233,8 @@ class Doris(MySQL):
             exp.JSONExtractScalar: arrow_json_extract_sql,
             exp.JSONExtract: arrow_json_extract_sql,
             exp.Map: rename_func("ARRAY_MAP"),
+            exp.QuartersAdd: lambda self, e: f"MONTHS_ADD({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
+            exp.QuartersSub: lambda self, e: f"MONTHS_SUB({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
             exp.RegexpLike: rename_func("REGEXP"),
             exp.RegexpExtract: handle_regexp_extract,
             exp.RegexpSplit: rename_func("SPLIT_BY_STRING"),
@@ -241,6 +244,17 @@ class Doris(MySQL):
             exp.Split: rename_func("SPLIT_BY_STRING"),
             exp.TimeStrToDate: rename_func("TO_DATE"),
             exp.ToChar: lambda self, e: f"DATE_FORMAT({self.sql(e, 'this')}, {self.format_time(e)})",
+            exp.Today: lambda self, e: f"TO_DATE(NOW())",
+            exp.ToStartOfDay: lambda self, e: f"DATE_TRUNC({self.sql(e, 'this')}, 'Day')",
+            exp.ToStartOfHour: lambda self, e: f"DATE_TRUNC({self.sql(e, 'this')}, 'Hour')",
+            exp.ToStartOfMinute: lambda self, e: f"DATE_TRUNC({self.sql(e, 'this')}, 'Minute')",
+            exp.ToStartOfMonth: lambda self, e: f"DATE_TRUNC({self.sql(e, 'this')}, 'Month')",
+            exp.ToStartOfQuarter: lambda self, e: f"DATE_TRUNC({self.sql(e, 'this')}, 'Quarter')",
+            exp.ToStartOfSecond: lambda self, e: f"DATE_TRUNC({self.sql(e, 'this')}, 'Second')",
+            exp.ToStartOfWeek: lambda self, e: f"DATE_TRUNC({self.sql(e, 'this')}, 'Week')",
+            exp.ToYyyymm: lambda self, e: f"DATE_FORMAT({self.sql(e, 'this')}, '%Y%m')",
+            exp.ToYyyymmdd: lambda self, e: f"DATE_FORMAT({self.sql(e, 'this')}, '%Y%m%d')",
+            exp.ToYyyymmddhhmmss: lambda self, e: f"DATE_FORMAT({self.sql(e, 'this')}, '%Y%m%d%H%i%s')",
             exp.TsOrDsAdd: lambda self, e: f"DATE_ADD({self.sql(e, 'this')}, {self.sql(e, 'expression')})",  # Only for day level
             exp.TsOrDsToDate: handle_to_date,
             exp.TimeStrToUnix: rename_func("UNIX_TIMESTAMP"),
@@ -253,7 +267,6 @@ class Doris(MySQL):
             ),
             exp.UnixToTime: rename_func("FROM_UNIXTIME"),
         }
-
         def parameter_sql(self, expression: exp.Parameter) -> str:
             this = self.sql(expression, "this")
             expression_sql = self.sql(expression, "expression")

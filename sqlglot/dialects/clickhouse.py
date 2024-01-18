@@ -101,61 +101,6 @@ class ClickHouse(Dialect):
         # * select x from t1 union all (select x from t2 limit 1);
         MODIFIERS_ATTACHED_TO_UNION = False
 
-        FUNCTIONS = {
-            **parser.Parser.FUNCTIONS,
-            "ANY": exp.AnyValue.from_arg_list,
-            "ARRAYAVG": exp.ArrayAvg.from_arg_list,
-            "ARRAYCOMPACT": exp.ArrayDistinct.from_arg_list,
-            "ARRAYCUMSUM": exp.ArrayCumSum.from_arg_list,
-            "ARRAYDIFFERENCE": exp.ArrayDifference.from_arg_list,
-            "ARRAYDISTINCT": exp.ArrayDistinct.from_arg_list,
-            "ARRAYEXISTS": exp.ArrayExists.from_arg_list,
-            "ARRAYFILTER": lambda args: exp.ArrayFilter(
-                this=seq_get(args, 1), expression=seq_get(args, 0)
-            ),
-            "ARRAYFIRST": exp.ArrayFirst.from_arg_list,
-            "ARRAYFIRSTINDEX": exp.ArrayFirstIndex.from_arg_list,
-            "ARRAYINTERSECT": exp.ArrayIntersect.from_arg_list,
-            "ARRAYLAST": exp.ArrayLast.from_arg_list,
-            "ARRAYLASTINDEX": exp.ArrayLastIndex.from_arg_list,
-            "ARRAYMAP": exp.ArrayMap.from_arg_list,
-            "ARRAYPRODUCT": exp.ArrayProduct.from_arg_list,
-            "ARRAYREVERSESORT": exp.ArrayReverseSort.from_arg_list,
-            "ARRAYSTRINGCONCAT": exp.ArrayStringConcat.from_arg_list,
-            "ARRAYSUM": exp.ArraySum.from_arg_list,
-            "ARRAYUNIQ": exp.ArrayUniq.from_arg_list,
-            "ARRAYZIP": exp.ArrayZip.from_arg_list,
-            "COUNTIF": _parse_count_if,
-            "DATE_ADD": lambda args: exp.DateAdd(
-                this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
-            ),
-            "DATEADD": lambda args: exp.DateAdd(
-                this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
-            ),
-            "DATE_DIFF": lambda args: exp.DateDiff(
-                this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
-            ),
-            "DATEDIFF": lambda args: exp.DateDiff(
-                this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
-            ),
-            "GROUPBITAND": exp.GroupBitAnd.from_arg_list,
-            "GROUPBITOR": exp.GroupBitOr.from_arg_list,
-            "GROUPBITXOR": exp.GroupBitXor.from_arg_list,
-            "MAP": parse_var_map,
-            "MATCH": exp.RegexpLike.from_arg_list,
-            "RANDCANONICAL": exp.Rand.from_arg_list,
-            "REPLACEALL": exp.Replace.from_arg_list,
-            "TODATETIME": lambda args: exp.CastToStrType(
-                this=seq_get(args, 0),
-                to="DATETIME",
-            ),
-            "TOSTRING": lambda args: exp.CastToStrType(
-                this=seq_get(args, 0),
-                to="STRING",
-            ),
-            "UNIQ": exp.ApproxDistinct.from_arg_list,
-            "XOR": lambda args: exp.Xor(expressions=args),
-        }
 
         AGG_FUNCTIONS = {
             "count",
@@ -265,6 +210,91 @@ class ClickHouse(Dialect):
             "largestTriangleThreeBuckets",
         }
 
+        FUNCTIONS = {
+            **parser.Parser.FUNCTIONS,
+            "ADDYEARS": exp.YearsAdd.from_arg_list,
+            "ADDMONTHS": exp.MonthsAdd.from_arg_list,
+            "ADDWEEKS": exp.WeeksAdd.from_arg_list,
+            "ADDDAYS": exp.DaysAdd.from_arg_list,
+            "ADDHOURS": exp.HoursAdd.from_arg_list,
+            "ADDMINUTES": exp.MinutesAdd.from_arg_list,
+            "ADDSECONDS": exp.SecondsAdd.from_arg_list,
+            "ADDQUARTERS": exp.QuartersAdd.from_arg_list,
+            "ANY": exp.AnyValue.from_arg_list,
+            "ARRAYAVG": exp.ArrayAvg.from_arg_list,
+            "ARRAYCOMPACT": exp.ArrayDistinct.from_arg_list,
+            "ARRAYCUMSUM": exp.ArrayCumSum.from_arg_list,
+            "ARRAYDIFFERENCE": exp.ArrayDifference.from_arg_list,
+            "ARRAYDISTINCT": exp.ArrayDistinct.from_arg_list,
+            "ARRAYEXISTS": exp.ArrayExists.from_arg_list,
+            "ARRAYFILTER": lambda args: exp.ArrayFilter(
+                this=seq_get(args, 1), expression=seq_get(args, 0)
+            ),
+            "ARRAYFIRST": exp.ArrayFirst.from_arg_list,
+            "ARRAYFIRSTINDEX": exp.ArrayFirstIndex.from_arg_list,
+            "ARRAYINTERSECT": exp.ArrayIntersect.from_arg_list,
+            "ARRAYLAST": exp.ArrayLast.from_arg_list,
+            "ARRAYLASTINDEX": exp.ArrayLastIndex.from_arg_list,
+            "ARRAYMAP": exp.ArrayMap.from_arg_list,
+            "ARRAYPRODUCT": exp.ArrayProduct.from_arg_list,
+            "ARRAYREVERSESORT": exp.ArrayReverseSort.from_arg_list,
+            "ARRAYSTRINGCONCAT": exp.ArrayStringConcat.from_arg_list,
+            "ARRAYSUM": exp.ArraySum.from_arg_list,
+            "ARRAYUNIQ": exp.ArrayUniq.from_arg_list,
+            "ARRAYZIP": exp.ArrayZip.from_arg_list,
+            "COUNTIF": _parse_count_if,
+            "DATE_ADD": lambda args: exp.DateAdd(
+                this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
+            ),
+            "DATEADD": lambda args: exp.DateAdd(
+                this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
+            ),
+            "DATE_DIFF": lambda args: exp.DateDiff(
+                this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
+            ),
+            "DATEDIFF": lambda args: exp.DateDiff(
+                this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
+            ),
+            "GROUPBITAND": exp.GroupBitAnd.from_arg_list,
+            "GROUPBITOR": exp.GroupBitOr.from_arg_list,
+            "GROUPBITXOR": exp.GroupBitXor.from_arg_list,
+            "MAP": parse_var_map,
+            "MATCH": exp.RegexpLike.from_arg_list,
+            "RANDCANONICAL": exp.Rand.from_arg_list,
+            "SUBTRACTYEARS": exp.YearsSub.from_arg_list,
+            "SUBTRACTMONTHS": exp.MonthsSub.from_arg_list,
+            "SUBTRACTSECONDS": exp.MonthsSub.from_arg_list,
+            "SUBTRACTQUARTERS": exp.QuartersSub.from_arg_list,
+            "TODAY": exp.Today.from_arg_list,
+            "TODATE": exp.TimeStrToDate.from_arg_list,
+            "TODATETIME": lambda args: exp.CastToStrType(
+                this=seq_get(args, 0),
+                to="DATETIME",
+            ),
+            "TOHOUR": exp.Hour.from_arg_list,
+            "TOMONTH": exp.Month.from_arg_list,
+            "TOMINUTE": exp.Minute.from_arg_list,
+            "TOQUARTER": exp.Quarter.from_arg_list,
+            "TOSTRING": lambda args: exp.CastToStrType(
+                this=seq_get(args, 0),
+                to="STRING",
+            ),
+            "TOSTARTOFQUARTER": exp.ToStartOfQuarter.from_arg_list,
+            "TOSTARTOFMONTH": exp.ToStartOfQuarter.from_arg_list,
+            "TOSTARTOFWEEK": exp.ToStartOfQuarter.from_arg_list,
+            "TOSTARTOFDAY": exp.ToStartOfQuarter.from_arg_list,
+            "TOSTARTOFHOUR": exp.ToStartOfQuarter.from_arg_list,
+            "TOSTARTOFMINUTE": exp.ToStartOfQuarter.from_arg_list,
+            "TOSTARTOFSECOND": exp.ToStartOfQuarter.from_arg_list,
+            "TOSECOND": exp.Second.from_arg_list,
+            "TOUNIXTIMESTAMP": exp.TimeToUnix.from_arg_list,
+            "TOYEAR": exp.Year.from_arg_list,
+            "TOYYYYMM": exp.ToYyyymm.from_arg_list,
+            "TOYYYYMMDD": exp.ToYyyymmdd.from_arg_list,
+            "TOYYYYMMDDHHMMSS": exp.ToYyyymmddhhmmss.from_arg_list,
+            "UNIQ": exp.ApproxDistinct.from_arg_list,
+            "XOR": lambda args: exp.Xor(expressions=args),
+        }
         AGG_FUNCTIONS_SUFFIXES = [
             "If",
             "Array",
