@@ -164,6 +164,13 @@ class TestDoris(Validator):
             },
         )
 
+        self.validate_all(
+            "SHA2(x,256)",
+            read={
+                "presto": "SHA256(x)",
+            },
+        )
+
     def test_identity(self):
         self.validate_identity("COALECSE(a, b, c, d)")
         self.validate_identity("SELECT CAST(`a`.`b` AS INT) FROM foo")
