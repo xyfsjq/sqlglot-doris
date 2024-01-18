@@ -204,7 +204,6 @@ class Doris(MySQL):
 
         TIMESTAMP_FUNC_TYPES = set()
 
-
         TRANSFORMS = {
             **MySQL.Generator.TRANSFORMS,
             exp.ArgMax: rename_func("MAX_BY"),
@@ -274,6 +273,7 @@ class Doris(MySQL):
             ),
             exp.UnixToTime: rename_func("FROM_UNIXTIME"),
         }
+
         def parameter_sql(self, expression: exp.Parameter) -> str:
             this = self.sql(expression, "this")
             expression_sql = self.sql(expression, "expression")
