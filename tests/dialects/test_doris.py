@@ -285,6 +285,12 @@ class TestDoris(Validator):
                 "clickhouse": "arraySlice([1, 2, NULL, 4, 5], 2, 3) ",
             },
         )
+        self.validate_all(
+            "ARRAY_CONTAINS(ARRAY(1, 2, NULL), NULL)",
+            read={
+                "clickhouse": "has([1, 2, NULL], NULL) ",
+            },
+        )
 
     def test_bit(self):
         self.validate_all(

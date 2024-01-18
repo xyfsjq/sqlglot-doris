@@ -263,6 +263,7 @@ class ClickHouse(Dialect):
             "GROUPBITAND": exp.GroupBitAnd.from_arg_list,
             "GROUPBITOR": exp.GroupBitOr.from_arg_list,
             "GROUPBITXOR": exp.GroupBitXor.from_arg_list,
+            "HAS": exp.ArrayContains.from_arg_list,
             "MAP": parse_var_map,
             "MATCH": exp.RegexpLike.from_arg_list,
             "RANDCANONICAL": exp.Rand.from_arg_list,
