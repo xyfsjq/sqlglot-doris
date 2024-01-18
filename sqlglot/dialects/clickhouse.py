@@ -125,6 +125,7 @@ class ClickHouse(Dialect):
             "ARRAYSUM": exp.ArraySum.from_arg_list,
             "ARRAYUNIQ": exp.ArrayUniq.from_arg_list,
             "ARRAYZIP": exp.ArrayZip.from_arg_list,
+            "ARRAYSORT": exp.SortArray.from_arg_list,
             "COUNTIF": _parse_count_if,
             "DATE_ADD": lambda args: exp.DateAdd(
                 this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)

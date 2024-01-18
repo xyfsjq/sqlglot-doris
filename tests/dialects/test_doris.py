@@ -175,7 +175,7 @@ class TestDoris(Validator):
         self.validate_identity("COALECSE(a, b, c, d)")
         self.validate_identity("SELECT CAST(`a`.`b` AS INT) FROM foo")
         self.validate_identity("SELECT APPROX_COUNT_DISTINCT(a) FROM x")
-        self.validate_identity("ARRAY_SORT(x)", "SORT_ARRAY(x)")
+        self.validate_identity("ARRAY_SORT(x)", "ARRAY_SORT(x)")
         self.validate_identity("DATE_ADD(x,1)", "DATE_ADD(x, INTERVAL 1 DAY)")
         self.validate_identity("DATE_SUB(x,1)", "DATE_SUB(x, INTERVAL 1 DAY)")
         self.validate_identity("DATEDIFF(x,1)", "DATEDIFF(x, 1)")
@@ -220,6 +220,13 @@ class TestDoris(Validator):
         self.validate_all(
             "SELECT SIZE(ARRAY_DISTINCT(x))",
             read={"clickhouse": "SELECT ARRAYUNIQ(x)"},
+        )
+
+        self.validate_all(
+            "ARRAY_SORT(x)",
+            read={
+                "clickhouse": "ARRAYSORT(x)",
+            },
         )
 
     def test_bit(self):
