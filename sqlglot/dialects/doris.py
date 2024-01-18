@@ -169,6 +169,16 @@ class Doris(MySQL):
     TIME_FORMAT = "'yyyy-MM-dd HH:mm:ss'"
     NULL_ORDERING = "nulls_are_frist"
 
+    TIME_MAPPING = {
+        **MySQL.TIME_MAPPING,
+        "%Y": "yyyy",
+        "%m": "MM",
+        "%d": "dd",
+        "%s": "ss",
+        "%H": "HH24",
+        "%i": "mi",
+    }
+
     class Parser(MySQL.Parser):
         FUNCTIONS = {
             **MySQL.Parser.FUNCTIONS,
