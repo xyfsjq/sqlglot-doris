@@ -194,6 +194,13 @@ class TestDoris(Validator):
     def test_time(self):
         self.validate_identity("TIMESTAMP('2022-01-01')")
 
+        self.validate_all(
+            "WEEK(CAST('2010-01-01' AS DATE), 3)",
+            read={
+                "presto": "week(DATE '2010-01-01')",
+            },
+        )
+
     def test_regex(self):
         self.validate_all(
             "SELECT REGEXP_LIKE(abc, '%foo%')",

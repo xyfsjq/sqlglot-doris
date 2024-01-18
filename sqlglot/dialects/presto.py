@@ -291,6 +291,10 @@ class Presto(Dialect):
                 this=seq_get(args, 1),
                 expression=seq_get(args, 0),
             ),
+            "WEEK": lambda args: exp.Week(
+                this=seq_get(args, 0),
+                mode="3",
+            ),
         }
 
         FUNCTION_PARSERS = parser.Parser.FUNCTION_PARSERS.copy()
