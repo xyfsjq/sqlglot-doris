@@ -161,6 +161,7 @@ class TestDoris(Validator):
             read={
                 # "clickhouse": "REPLACEALL('www.baidu.com:9090','9090','')",
                 "presto": "REPLACE('www.baidu.com:9090','9090')",
+                "clickhouse": "replaceAll('www.baidu.com:9090','9090','')",
             },
         )
         self.validate_all(
@@ -208,6 +209,12 @@ class TestDoris(Validator):
             "NOT_NULL_OR_EMPTY('')",
             read={
                 "clickhouse": "NotEmpty('')",
+            },
+        )
+        self.validate_all(
+            "CHAR_LENGTH('x')",
+            read={
+                "clickhouse": "lengthUTF8('x')",
             },
         )
 
@@ -268,6 +275,13 @@ class TestDoris(Validator):
             "SELECT REGEXP_EXTRACT_ALL('abcd abcd abcd', '(ab.)')",
             read={
                 "postgres": "SELECT regexp_matches('abcd abcd abcd', 'ab.')",
+                "clickhouse": "SELECT extractAll('abcd abcd abcd', 'ab.')",
+            },
+        )
+        self.validate_all(
+            "REGEXP_REPLACE_ONE('Hello, World!', '.*', '*****')",
+            read={
+                "clickhouse": "replaceRegexpOne('Hello, World!', '.*', '*****')",
             },
         )
 
@@ -348,5 +362,94 @@ class TestDoris(Validator):
             "LOCATE('a', 'abc')",
             read={
                 "presto": "index('abc','a')",
+                "clickhouse": "position('abc','a')",
+            },
+        )
+        self.validate_all(
+            "LOWER('ABcdEf')",
+            read={
+                "clickhouse": "lowerUTF8('ABcdEf')",
+            },
+        )
+        self.validate_all(
+            "UPPER('ABcdEf')",
+            read={
+                "clickhouse": "upperUTF8('ABcdEf')",
+            },
+        )
+        self.validate_all(
+            "SUBSTRING('ABcdEf', 1, 2)",
+            read={
+                "clickhouse": "substringUTF8('ABcdEf',1,2)",
+            },
+        )
+        self.validate_all(
+            "ENDS_WITH('中国', '国')",
+            read={
+                "clickhouse": "endsWith('中国', '国')",
+            },
+        )
+        self.validate_all(
+            "STARTS_WITH('hello doris', 'hello')",
+            read={
+                "clickhouse": "startsWith('hello doris', 'hello')",
+            },
+        )
+        self.validate_all(
+            "LTRIM('     Hello, world!     ')",
+            read={
+                "clickhouse": "trimLeft('     Hello, world!     ')",
+            },
+        )
+        self.validate_all(
+            "RTRIM('     Hello, world!     ')",
+            read={
+                "clickhouse": "trimRIGHT('     Hello, world!     ')",
+            },
+        )
+        self.validate_all(
+            "SPLIT_BY_STRING('adidas', 'a')",
+            read={
+                "clickhouse": "splitByString('a', 'adidas')",
+            },
+        )
+
+    def test_code(self):
+        self.validate_all(
+            "TO_BASE64('x')",
+            read={
+                "clickhouse": "base64Encode('x')",
+            },
+        )
+        self.validate_all(
+            "FROM_BASE64('x')",
+            read={
+                "clickhouse": "base64Decode('x')",
+            },
+        )
+
+    def test_math(self):
+        self.validate_all(
+            "STDDEV_POP(x)",
+            read={
+                "clickhouse": "stddevPop(x)",
+            },
+        )
+        self.validate_all(
+            "STDDEV_SAMP(x)",
+            read={
+                "clickhouse": "stddevSamp(x)",
+            },
+        )
+        self.validate_all(
+            "POWER(2, 3)",
+            read={
+                "clickhouse": "exp2(3)",
+            },
+        )
+        self.validate_all(
+            "POWER(10, 3)",
+            read={
+                "clickhouse": "EXP10(3)",
             },
         )

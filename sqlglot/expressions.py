@@ -5554,12 +5554,32 @@ class ArrayZip(Func):
     arg_types = {"this": True, "expression": False}
 
 
+class CharLength(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
 class Empty(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class EndsWith(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
+class LTrim(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class RTrim(Func):
     arg_types = {"this": True, "expressions": False}
 
 
 class NotEmpty(Func):
     arg_types = {"this": True, "expressions": False}
+
+
+class RegexpReplaceOne(Func):
+    arg_types = {"this": True, "expression": True, "replacement": True}
 
 
 class Hour(Func):
