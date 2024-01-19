@@ -230,7 +230,6 @@ class TestDoris(Validator):
         self.validate_identity("NOW()", "NOW()")
         self.validate_identity("SIZE(x)", "ARRAY_SIZE(x)")
         self.validate_identity("SPLIT_BY_STRING(x,',')", "SPLIT_BY_STRING(x, ',')")
-        self.validate_identity("VAR_SAMP(x)", "STDDEV_SAMP(x)")
         self.validate_identity("3&5", "BITAND(3, 5)")
         self.validate_identity("3|5", "BITOR(3, 5)")
         self.validate_identity("3^5", "BITXOR(3, 5)")
@@ -439,6 +438,18 @@ class TestDoris(Validator):
             "STDDEV_SAMP(x)",
             read={
                 "clickhouse": "stddevSamp(x)",
+            },
+        )
+        self.validate_all(
+            "VAR_SAMP(x)",
+            read={
+                "clickhouse": "varSamp(x)",
+            },
+        )
+        self.validate_all(
+            "VARIANCE_POP(x)",
+            read={
+                "clickhouse": "varPop(x)",
             },
         )
         self.validate_all(

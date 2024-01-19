@@ -201,7 +201,6 @@ class Doris(MySQL):
             "REGEXP": exp.RegexpLike.from_arg_list,
             "SIZE": exp.ArraySize.from_arg_list,
             "SPLIT_BY_STRING": exp.RegexpSplit.from_arg_list,
-            "VAR_SAMP": exp.StddevSamp.from_arg_list,
             "TO_DATE": exp.TsOrDsToDate.from_arg_list,
         }
 
@@ -293,6 +292,7 @@ class Doris(MySQL):
                 "FROM_UNIXTIME", e.this, time_format("doris")(self, e)
             ),
             exp.UnixToTime: rename_func("FROM_UNIXTIME"),
+            exp.Variance: rename_func("VAR_SAMP"),
         }
 
         def parameter_sql(self, expression: exp.Parameter) -> str:

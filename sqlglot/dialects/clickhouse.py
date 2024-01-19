@@ -209,6 +209,37 @@ class ClickHouse(Dialect):
             "largestTriangleThreeBuckets",
         }
 
+        AGG_FUNCTIONS_SUFFIXES = [
+            "If",
+            "Array",
+            "ArrayIf",
+            "Map",
+            "SimpleState",
+            "State",
+            "Merge",
+            "MergeState",
+            "ForEach",
+            "Distinct",
+            "OrDefault",
+            "OrNull",
+            "Resample",
+            "ArgMin",
+            "ArgMax",
+        ]
+
+        AGG_FUNC_MAPPING = (
+            lambda functions, suffixes: {
+                f"{f}{sfx}": (f, sfx) for sfx in (suffixes + [""]) for f in functions
+            }
+        )(AGG_FUNCTIONS, AGG_FUNCTIONS_SUFFIXES)
+
+        FUNCTIONS_WITH_ALIASED_ARGS = {*parser.Parser.FUNCTIONS_WITH_ALIASED_ARGS, "TUPLE"}
+
+        FUNCTION_PARSERS = {
+            **parser.Parser.FUNCTION_PARSERS,
+            "ARRAYJOIN": lambda self: self.expression(exp.Explode, this=self._parse_expression()),
+            "QUANTILE": lambda self: self._parse_quantile(),
+        }
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
             "ADDYEARS": exp.YearsAdd.from_arg_list,
@@ -248,6 +279,8 @@ class ClickHouse(Dialect):
             "ARRAYUNIQ": exp.ArrayUniq.from_arg_list,
             "ARRAYZIP": exp.ArrayZip.from_arg_list,
             "COUNTIF": _parse_count_if,
+            "BASE64ENCODE": exp.ToBase64.from_arg_list,
+            "BASE64DECODE": exp.FromBase64.from_arg_list,
             "DATE_ADD": lambda args: exp.DateAdd(
                 this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
             ),
@@ -261,41 +294,7 @@ class ClickHouse(Dialect):
                 this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
             ),
             "EMPTY": exp.Empty.from_arg_list,
-            "GROUPBITAND": exp.GroupBitAnd.from_arg_list,
-            "GROUPBITOR": exp.GroupBitOr.from_arg_list,
-            "GROUPBITXOR": exp.GroupBitXor.from_arg_list,
-            "HAS": exp.ArrayContains.from_arg_list,
-            "LENGTHUTF8": exp.CharLength.from_arg_list,
-            "LOWERUTF8": exp.Lower.from_arg_list,
-            "UPPERUTF8": exp.Upper.from_arg_list,
-            "MID": exp.Substring.from_arg_list,
-            "SUBSTRINGUTF8": exp.Substring.from_arg_list,
-            "BASE64ENCODE": exp.ToBase64.from_arg_list,
-            "BASE64DECODE": exp.FromBase64.from_arg_list,
             "ENDSWITH": exp.EndsWith.from_arg_list,
-            "STARTSWITH": exp.StartsWith.from_arg_list,
-            "TRIMLEFT": exp.LTrim.from_arg_list,
-            "TRIMRIGHT": exp.RTrim.from_arg_list,
-            "SPLITBYCHAR": lambda args: exp.Split(
-                this=seq_get(args, 1),
-                expression=seq_get(args, 0),
-            ),
-            "SPLITBYSTRING": lambda args: exp.Split(
-                this=seq_get(args, 1),
-                expression=seq_get(args, 0),
-            ),
-            "MAP": parse_var_map,
-            "MATCH": exp.RegexpLike.from_arg_list,
-            "NOTEMPTY": exp.NotEmpty.from_arg_list,
-            "RANDCANONICAL": exp.Rand.from_arg_list,
-            "RANGE": exp.ArrayRange.from_arg_list,
-            "REPLACEALL": exp.Replace.from_arg_list,
-            "REPLACEREGEXPONE": exp.RegexpReplaceOne.from_arg_list,
-            "REPLACEREGEXPALL": exp.RegexpReplace.from_arg_list,
-            "POSITIONUTF8": exp.StrPosition.from_arg_list,
-            "EXTRACTALL": exp.RegexpExtract.from_arg_list,
-            "STDDEVPOP": exp.StddevPop.from_arg_list,
-            "STDDEVSAMP": exp.StddevSamp.from_arg_list,
             "EXP2": lambda args: exp.Pow(
                 this="2",
                 expression=seq_get(args, 0),
@@ -304,6 +303,35 @@ class ClickHouse(Dialect):
                 this="10",
                 expression=seq_get(args, 0),
             ),
+            "EXTRACTALL": exp.RegexpExtract.from_arg_list,
+            "GROUPBITAND": exp.GroupBitAnd.from_arg_list,
+            "GROUPBITOR": exp.GroupBitOr.from_arg_list,
+            "GROUPBITXOR": exp.GroupBitXor.from_arg_list,
+            "HAS": exp.ArrayContains.from_arg_list,
+            "LENGTHUTF8": exp.CharLength.from_arg_list,
+            "LOWERUTF8": exp.Lower.from_arg_list,
+            "MAP": parse_var_map,
+            "MATCH": exp.RegexpLike.from_arg_list,
+            "MID": exp.Substring.from_arg_list,
+            "NOTEMPTY": exp.NotEmpty.from_arg_list,
+            "RANDCANONICAL": exp.Rand.from_arg_list,
+            "RANGE": exp.ArrayRange.from_arg_list,
+            "REPLACEALL": exp.Replace.from_arg_list,
+            "REPLACEREGEXPONE": exp.RegexpReplaceOne.from_arg_list,
+            "REPLACEREGEXPALL": exp.RegexpReplace.from_arg_list,
+            "POSITIONUTF8": exp.StrPosition.from_arg_list,
+            "SPLITBYCHAR": lambda args: exp.Split(
+                this=seq_get(args, 1),
+                expression=seq_get(args, 0),
+            ),
+            "SPLITBYSTRING": lambda args: exp.Split(
+                this=seq_get(args, 1),
+                expression=seq_get(args, 0),
+            ),
+            "STARTSWITH": exp.StartsWith.from_arg_list,
+            "STDDEVPOP": exp.StddevPop.from_arg_list,
+            "STDDEVSAMP": exp.StddevSamp.from_arg_list,
+            "SUBSTRINGUTF8": exp.Substring.from_arg_list,
             "SUBTRACTYEARS": exp.YearsSub.from_arg_list,
             "SUBTRACTMONTHS": exp.MonthsSub.from_arg_list,
             "SUBTRACTSECONDS": exp.MonthsSub.from_arg_list,
@@ -335,39 +363,13 @@ class ClickHouse(Dialect):
             "TOYYYYMM": exp.ToYyyymm.from_arg_list,
             "TOYYYYMMDD": exp.ToYyyymmdd.from_arg_list,
             "TOYYYYMMDDHHMMSS": exp.ToYyyymmddhhmmss.from_arg_list,
+            "TRIMLEFT": exp.LTrim.from_arg_list,
+            "TRIMRIGHT": exp.RTrim.from_arg_list,
             "UNIQ": exp.ApproxDistinct.from_arg_list,
+            "UPPERUTF8": exp.Upper.from_arg_list,
+            "VARPOP": exp.VariancePop.from_arg_list,
+            "VARSAMP": exp.Variance.from_arg_list,
             "XOR": lambda args: exp.Xor(expressions=args),
-        }
-        AGG_FUNCTIONS_SUFFIXES = [
-            "If",
-            "Array",
-            "ArrayIf",
-            "Map",
-            "SimpleState",
-            "State",
-            "Merge",
-            "MergeState",
-            "ForEach",
-            "Distinct",
-            "OrDefault",
-            "OrNull",
-            "Resample",
-            "ArgMin",
-            "ArgMax",
-        ]
-
-        AGG_FUNC_MAPPING = (
-            lambda functions, suffixes: {
-                f"{f}{sfx}": (f, sfx) for sfx in (suffixes + [""]) for f in functions
-            }
-        )(AGG_FUNCTIONS, AGG_FUNCTIONS_SUFFIXES)
-
-        FUNCTIONS_WITH_ALIASED_ARGS = {*parser.Parser.FUNCTIONS_WITH_ALIASED_ARGS, "TUPLE"}
-
-        FUNCTION_PARSERS = {
-            **parser.Parser.FUNCTION_PARSERS,
-            "ARRAYJOIN": lambda self: self.expression(exp.Explode, this=self._parse_expression()),
-            "QUANTILE": lambda self: self._parse_quantile(),
         }
 
         FUNCTION_PARSERS.pop("MATCH")
