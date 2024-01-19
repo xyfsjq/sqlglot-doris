@@ -230,6 +230,7 @@ class TestDoris(Validator):
         self.validate_identity("~5", "BITNOT(5)")
         self.validate_identity("random(2)", "FLOOR(RANDOM()*2.0)")
         self.validate_identity("random(2,3)", "FLOOR(RANDOM()*1.0+2.0)")
+        self.validate_identity("a||b", "CONCAT(a,b)")
 
     def test_time(self):
         self.validate_identity("TIMESTAMP('2022-01-01')")
@@ -307,6 +308,12 @@ class TestDoris(Validator):
             "ARRAY_RANGE(5)",
             read={
                 "clickhouse": "range(5) ",
+            },
+        )
+        self.validate_all(
+            "ARRAY_SHUFFLE(x)",
+            read={
+                "presto": "Shuffle(x)",
             },
         )
 

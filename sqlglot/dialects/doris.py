@@ -172,7 +172,7 @@ class Doris(MySQL):
     DATEINT_FORMAT = "'yyyyMMdd'"
     TIME_FORMAT = "'yyyy-MM-dd HH:mm:ss'"
     NULL_ORDERING = "nulls_are_frist"
-
+    DPIPE_IS_STRING_CONCAT = True
     TIME_MAPPING = {
         **MySQL.TIME_MAPPING,
         "%Y": "yyyy",
@@ -238,11 +238,13 @@ class Doris(MySQL):
             exp.CastToStrType: lambda self, e: f"CAST({self.sql(e, 'this')} AS {self.sql(e, 'to')})",
             exp.CurrentTimestamp: lambda *_: "NOW()",
             exp.DateDiff: handle_date_diff,
+            exp.DPipe: lambda self, e: f"CONCAT({self.sql(e, 'this')},{self.sql(e, 'expression')})",
             exp.CurrentDate: no_paren_current_date_sql,
             exp.CountIf: count_if_to_sum,
             exp.DateTrunc: handle_date_trunc,
             exp.Empty: rename_func("NULL_OR_EMPTY"),
             exp.Filter: handle_filter,
+            exp.Shuffle: rename_func("ARRAY_SHUFFLE"),
             exp.GroupConcat: _string_agg_sql,
             exp.JSONExtractScalar: arrow_json_extract_sql,
             exp.JSONExtract: arrow_json_extract_sql,
@@ -264,6 +266,7 @@ class Doris(MySQL):
                 if self.sql(e, "instance")
                 else f"LOCATE({self.sql(e, 'substr')}, {self.sql(e, 'this')})"
             ),
+            exp.Slice: rename_func("ARRAY_SLICE"),
             exp.TimeStrToDate: rename_func("TO_DATE"),
             exp.ToChar: lambda self, e: f"DATE_FORMAT({self.sql(e, 'this')}, {self.format_time(e)})",
             exp.Today: lambda self, e: f"TO_DATE(NOW())",
