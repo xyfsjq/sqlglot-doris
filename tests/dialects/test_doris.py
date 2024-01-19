@@ -198,6 +198,18 @@ class TestDoris(Validator):
                 "presto": "SHA256(x)",
             },
         )
+        self.validate_all(
+            "NULL_OR_EMPTY('')",
+            read={
+                "clickhouse": "empty('')",
+            },
+        )
+        self.validate_all(
+            "NOT_NULL_OR_EMPTY('')",
+            read={
+                "clickhouse": "NotEmpty('')",
+            },
+        )
 
     def test_identity(self):
         self.validate_identity("COALECSE(a, b, c, d)")
@@ -289,6 +301,12 @@ class TestDoris(Validator):
             "ARRAY_CONTAINS(ARRAY(1, 2, NULL), NULL)",
             read={
                 "clickhouse": "has([1, 2, NULL], NULL) ",
+            },
+        )
+        self.validate_all(
+            "ARRAY_RANGE(5)",
+            read={
+                "clickhouse": "range(5) ",
             },
         )
 

@@ -5542,6 +5542,10 @@ class ArraySlice(Func):
     arg_types = {"this": True, "off": False, "len": False}
 
 
+class ArrayRange(Func):
+    arg_types = {"this": True, "end": False, "step": False}
+
+
 class ArrayReverseSort(Func):
     arg_types = {"this": True, "expression": False}
 
@@ -5550,67 +5554,11 @@ class ArrayZip(Func):
     arg_types = {"this": True, "expression": False}
 
 
-class BitmapAnd(Func):
-    arg_types = {"this": True, "expressions": True}
-
-
-class BitmapAndCount(Func):
-    arg_types = {"this": True, "expressions": True}
-
-
-class BitmapOr(Func):
-    arg_types = {"this": True, "expressions": True}
-
-
-class BitmapOrCount(Func):
-    arg_types = {"this": True, "expressions": True}
-
-
-class BitmapXor(Func):
-    arg_types = {"this": True, "expressions": True}
-
-
-class BitmapXOrCount(Func):
-    arg_types = {"this": True, "expressions": True}
-
-
-class BitmapAndNot(Func):
-    arg_types = {"this": True, "expressions": True}
-
-
-class BitmapAndNotCount(Func):
-    arg_types = {"this": True, "expressions": True}
-
-
-class BitmapCount(Func):
+class Empty(Func):
     arg_types = {"this": True, "expressions": False}
 
 
-class BitmapContains(Func):
-    arg_types = {"this": True, "expressions": True}
-
-
-class BitmapHasAny(Func):
-    arg_types = {"this": True, "expressions": True}
-
-
-class BitmapToArray(Func):
-    arg_types = {"this": True, "expressions": False}
-
-
-class GroupBitmap(Func):
-    arg_types = {"this": True, "expressions": False}
-
-
-class GroupBitmapAnd(Func):
-    arg_types = {"this": True, "expressions": False}
-
-
-class GroupBitmapOr(Func):
-    arg_types = {"this": True, "expressions": False}
-
-
-class GroupBitmapXor(Func):
+class NotEmpty(Func):
     arg_types = {"this": True, "expressions": False}
 
 

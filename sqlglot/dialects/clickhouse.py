@@ -260,13 +260,16 @@ class ClickHouse(Dialect):
             "DATEDIFF": lambda args: exp.DateDiff(
                 this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
             ),
+            "EMPTY": exp.Empty.from_arg_list,
             "GROUPBITAND": exp.GroupBitAnd.from_arg_list,
             "GROUPBITOR": exp.GroupBitOr.from_arg_list,
             "GROUPBITXOR": exp.GroupBitXor.from_arg_list,
             "HAS": exp.ArrayContains.from_arg_list,
             "MAP": parse_var_map,
             "MATCH": exp.RegexpLike.from_arg_list,
+            "NOTEMPTY": exp.NotEmpty.from_arg_list,
             "RANDCANONICAL": exp.Rand.from_arg_list,
+            "RANGE": exp.ArrayRange.from_arg_list,
             "REPLACEALL": exp.Replace.from_arg_list,
             "SUBTRACTYEARS": exp.YearsSub.from_arg_list,
             "SUBTRACTMONTHS": exp.MonthsSub.from_arg_list,
