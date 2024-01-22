@@ -5622,6 +5622,14 @@ class EndsWith(Func):
     arg_types = {"this": True, "expressions": True}
 
 
+class Ipv4StringToNum(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class Ipv6StringToNumOrDefault(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
 class LTrim(Func):
     arg_types = {"this": True, "expressions": False}
 
