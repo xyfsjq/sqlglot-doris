@@ -1105,7 +1105,7 @@ class TestDialect(Validator):
                 "postgres": "x -> 'y'",
                 "presto": "JSON_EXTRACT(x, 'y')",
                 "starrocks": "x -> 'y'",
-                "doris": "x -> 'y'",
+                "doris": "JSONB_EXTRACT(x,'$.y')",
             },
         )
         self.validate_all(

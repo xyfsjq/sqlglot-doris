@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import re
+
 from sqlglot import exp, generator
 from sqlglot.dialects.dialect import (
     approx_count_distinct_sql,
-    arrow_json_extract_sql,
     count_if_to_sum,
     parse_timestamp_trunc,
     rename_func,
@@ -167,6 +168,58 @@ def _str_to_unix_sql(self: generator.Generator, expression: exp.StrToUnix) -> st
     return self.func("UNIX_TIMESTAMP", expression.this, time_format("doris")(self, expression))
 
 
+# Matches a numeric or string value in a string
+def extract_value_from_string(expression):
+    match = re.search(r"(\b\d+\b|\b\w+(?:\.\w+)*\b)", expression)
+    if match:
+        return match.group(0)
+    else:
+        return None
+
+
+def arrow_json_extract_sql(self, expression: exp.JSONExtract) -> str:
+    expr = self.sql(expression, "expression").strip("\"'")
+    expr = extract_value_from_string(expr)
+    if expr.isdigit():
+        return f"JSONB_EXTRACT({self.sql(expression, 'this')},'$[{expr}]')"
+    return f"JSONB_EXTRACT({self.sql(expression, 'this')},'$.{expr}')"
+
+
+def arrow_jsonb_extract_sql(self, expression: exp.JSONBExtract) -> str:
+    expr = self.sql(expression, "expression").strip("\"'")
+    values = [key.strip() for key in expr[1:-1].split(",")]
+    json_path = []
+    for value in values:
+        if value.isdigit():
+            json_path.append(f"[{value}]")
+        else:
+            json_path.append(value)
+    path = ".".join(json_path)
+    return f"JSONB_EXTRACT({self.sql(expression, 'this')},'$.{path}')"
+
+
+def arrow_json_extract_scalar_sql(self, expression: exp.JSONExtractScalar) -> str:
+    # 将其中的数值或者字符串，提取出来
+    expr = self.sql(expression, "expression").strip("\"'")
+    expr = extract_value_from_string(expr)
+    if expr.isdigit():
+        return f"JSON_EXTRACT({self.sql(expression, 'this')},'$.[{expr}]')"
+    return f"JSON_EXTRACT({self.sql(expression, 'this')},'$.{expr}')"
+
+
+def arrow_jsonb_extract_scalar_sql(self, expression: exp.JSONBExtractScalar) -> str:
+    expr = self.sql(expression, "expression").strip("\"'")
+    values = [key.strip() for key in expr[1:-1].split(",")]
+    json_path = []
+    for value in values:
+        if value.isdigit():
+            json_path.append(f"[{value}]")
+        else:
+            json_path.append(value)
+    path = ".".join(json_path)
+    return f"JSON_EXTRACT({self.sql(expression, 'this')},'$.{path}')"
+
+
 class Doris(MySQL):
     DATE_FORMAT = "'yyyy-MM-dd'"
     DATEINT_FORMAT = "'yyyyMMdd'"
@@ -246,8 +299,10 @@ class Doris(MySQL):
             exp.Filter: handle_filter,
             exp.Shuffle: rename_func("ARRAY_SHUFFLE"),
             exp.GroupConcat: _string_agg_sql,
-            exp.JSONExtractScalar: arrow_json_extract_sql,
+            exp.JSONExtractScalar: arrow_json_extract_scalar_sql,
             exp.JSONExtract: arrow_json_extract_sql,
+            exp.JSONBExtract: arrow_jsonb_extract_sql,
+            exp.JSONBExtractScalar: arrow_jsonb_extract_scalar_sql,
             exp.LTrim: rename_func("LTRIM"),
             exp.Map: rename_func("ARRAY_MAP"),
             exp.NotEmpty: rename_func("NOT_NULL_OR_EMPTY"),
