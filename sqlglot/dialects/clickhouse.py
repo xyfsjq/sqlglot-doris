@@ -335,6 +335,7 @@ class ClickHouse(Dialect):
             "MAP": parse_var_map,
             "MATCH": exp.RegexpLike.from_arg_list,
             "MID": exp.Substring.from_arg_list,
+            "MULTIMATCHANY": exp.MultiMatchAny.from_arg_list,
             "NOTEMPTY": exp.NotEmpty.from_arg_list,
             "RANDCANONICAL": exp.Rand.from_arg_list,
             "RANGE": exp.ArrayRange.from_arg_list,

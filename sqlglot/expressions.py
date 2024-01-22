@@ -5634,6 +5634,10 @@ class LTrim(Func):
     arg_types = {"this": True, "expressions": False}
 
 
+class MultiMatchAny(Func):
+    arg_types = {"this": True, "expression": True}
+
+
 class RTrim(Func):
     arg_types = {"this": True, "expressions": False}
 

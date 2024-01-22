@@ -504,6 +504,12 @@ class TestDoris(Validator):
                 "clickhouse": "splitByString('a', 'adidas')",
             },
         )
+        self.validate_all(
+            "MULTI_MATCH_ANY('Hello, World!', ARRAY('hello', '!', 'world'))",
+            read={
+                "clickhouse": "multiMatchAny('Hello, World!', ['hello', '!', 'world'])",
+            },
+        )
 
     def test_code(self):
         self.validate_all(
