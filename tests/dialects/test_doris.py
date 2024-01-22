@@ -330,6 +330,80 @@ class TestDoris(Validator):
             },
         )
 
+    def test_bitmap(self):
+        self.validate_all(
+            "BITMAP_FROM_ARRAY(ARRAY(1, 2, 3, 4, 5))",
+            read={
+                "clickhouse": "bitmapBuild([1, 2, 3, 4, 5]) ",
+            },
+        )
+        self.validate_all(
+            "BITMAP_TO_ARRAY(BITMAP_FROM_ARRAY(ARRAY(1, 2, 3, 4, 5)))",
+            read={
+                "clickhouse": "bitmapToArray(bitmapBuild([1, 2, 3, 4, 5])) ",
+            },
+        )
+        self.validate_all(
+            "BITMAP_AND(a, b)",
+            read={
+                "clickhouse": "bitmapAnd(a,b)",
+            },
+        )
+        self.validate_all(
+            "BITMAP_AND_COUNT(a, b)",
+            read={
+                "clickhouse": "bitmapAndCardinality(a,b)",
+            },
+        )
+        self.validate_all(
+            "BITMAP_AND_NOT(a, b)",
+            read={
+                "clickhouse": "bitmapAndnot(a,b)",
+            },
+        )
+        self.validate_all(
+            "BITMAP_AND_NOT_COUNT(a, b)",
+            read={
+                "clickhouse": "bitmapAndnotCardinality(a,b)",
+            },
+        )
+        self.validate_all(
+            "BITMAP_COUNT(BITMAP_FROM_ARRAY(ARRAY(1, 2, 3, 4, 5)))",
+            read={
+                "clickhouse": "bitmapCardinality(bitmapBuild([1, 2, 3, 4, 5]))",
+            },
+        )
+        self.validate_all(
+            "BITMAP_CONTAINS(BITMAP_FROM_ARRAY(ARRAY(1, 5, 7, 9)), 9)",
+            read={
+                "clickhouse": "bitmapContains(bitmapBuild([1,5,7,9]), 9)",
+            },
+        )
+        self.validate_all(
+            "BITMAP_OR_COUNT(a, b)",
+            read={
+                "clickhouse": "bitmapOrCardinality(a, b)",
+            },
+        )
+        self.validate_all(
+            "BITMAP_XOR_COUNT(a, b)",
+            read={
+                "clickhouse": "bitmapXorCardinality(a, b)",
+            },
+        )
+        self.validate_all(
+            "BITMAP_HAS_ANY(a, b)",
+            read={
+                "clickhouse": "bitmapHasAny(a, b)",
+            },
+        )
+        self.validate_all(
+            "BITMAP_HAS_ALL(a, b)",
+            read={
+                "clickhouse": "bitmapHasAll(a, b)",
+            },
+        )
+
     def test_bit(self):
         self.validate_all(
             "GROUP_BIT_AND(x)",

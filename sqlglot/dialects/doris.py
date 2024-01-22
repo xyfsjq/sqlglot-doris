@@ -234,6 +234,7 @@ class Doris(MySQL):
             exp.ArrayStringConcat: handle_array_concat,
             exp.ArrayToString: handle_array_to_string,
             exp.ArrayUniqueAgg: rename_func("COLLECT_SET"),
+            exp.BitmapXOrCount: rename_func("BITMAP_XOR_COUNT"),
             exp.CastToStrType: lambda self, e: f"CAST({self.sql(e, 'this')} AS {self.sql(e, 'to')})",
             exp.CurrentTimestamp: lambda *_: "NOW()",
             exp.DateDiff: handle_date_diff,

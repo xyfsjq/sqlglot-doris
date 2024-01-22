@@ -5554,6 +5554,62 @@ class ArrayZip(Func):
     arg_types = {"this": True, "expression": False}
 
 
+class BitmapAnd(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
+class BitmapAndCount(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
+class BitmapAndNot(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
+class BitmapAndNotCount(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
+class BitmapCount(Func):
+    arg_types = {"this": True, "expressions": False}
+
+
+class BitmapContains(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
+class BitmapFromArray(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class BitmapHasAll(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
+class BitmapHasAny(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
+class BitmapOr(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
+class BitmapOrCount(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
+class BitmapToArray(Func):
+    arg_types = {"this": True, "expression": False}
+
+
+class BitmapXor(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
+class BitmapXOrCount(Func):
+    arg_types = {"this": True, "expressions": True}
+
+
 class CharLength(Func):
     arg_types = {"this": True, "expressions": False}
 
