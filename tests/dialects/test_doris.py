@@ -333,6 +333,12 @@ class TestDoris(Validator):
                 "presto": "Shuffle(x)",
             },
         )
+        self.validate_all(
+            "ELEMENT_AT(ARRAY(1, 2, 3), 1)",
+            read={
+                "clickhouse": "arrayElement([1, 2, 3],1)",
+            },
+        )
 
     def test_bitmap(self):
         self.validate_all(

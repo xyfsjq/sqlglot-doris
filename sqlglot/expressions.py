@@ -5518,6 +5518,10 @@ class ArrayMap(Func):
     arg_types = {"this": True, "expression": False}
 
 
+class ArrayPosition(Func):
+    arg_types = {"this": True, "pos": True}
+
+
 class ArrayProduct(Func):
     arg_types = {"this": True, "expression": False}
 

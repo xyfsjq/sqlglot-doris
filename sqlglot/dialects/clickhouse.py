@@ -256,6 +256,7 @@ class ClickHouse(Dialect):
             "ARRAYCUMSUM": exp.ArrayCumSum.from_arg_list,
             "ARRAYDIFFERENCE": exp.ArrayDifference.from_arg_list,
             "ARRAYDISTINCT": exp.ArrayDistinct.from_arg_list,
+            "ARRAYELEMENT": exp.ArrayPosition.from_arg_list,
             "ARRAYEXISTS": exp.ArrayExists.from_arg_list,
             "ARRAYFILTER": lambda args: exp.ArrayFilter(
                 this=seq_get(args, 1), expression=seq_get(args, 0)
