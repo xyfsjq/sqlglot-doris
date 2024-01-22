@@ -294,6 +294,7 @@ class Doris(MySQL):
             exp.DPipe: lambda self, e: f"CONCAT({self.sql(e, 'this')},{self.sql(e, 'expression')})",
             exp.CurrentDate: no_paren_current_date_sql,
             exp.CountIf: count_if_to_sum,
+            # exp.DateSub: lambda self, e: f"DATE_SUB({self.sql(e, 'this')},{self.sql(e, 'expression')})",
             exp.DateTrunc: handle_date_trunc,
             exp.Empty: rename_func("NULL_OR_EMPTY"),
             exp.Filter: handle_filter,

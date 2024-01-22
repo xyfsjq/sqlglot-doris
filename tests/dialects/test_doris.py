@@ -240,18 +240,22 @@ class TestDoris(Validator):
 
     def test_time(self):
         self.validate_identity("TIMESTAMP('2022-01-01')")
-
         self.validate_all(
             "WEEK(CAST('2010-01-01' AS DATE), 3)",
             read={
                 "presto": "week(DATE '2010-01-01')",
             },
         )
-
         self.validate_all(
             "DATE_FORMAT(FROM_UNIXTIME(1609167953694 / 1000), '%Y-%m-%d')",
             read={
                 "presto": "format_datetime(from_unixtime(1609167953694/1000),'yyyy-MM-dd')",
+            },
+        )
+        self.validate_all(
+            "DATE_SUB(TO_DATE('2018-01-01'), INTERVAL 3 YEAR)",
+            read={
+                "clickhouse": "date_sub(YEAR, 3, toDate('2018-01-01'))",
             },
         )
 

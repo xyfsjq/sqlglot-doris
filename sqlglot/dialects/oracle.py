@@ -91,6 +91,8 @@ class Oracle(Dialect):
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
+            "LENGTH": exp.CharLength.from_arg_list,
+            "LENGTHB": exp.Length.from_arg_list,
             "SQUARE": lambda args: exp.Pow(this=seq_get(args, 0), expression=exp.Literal.number(2)),
             "TO_CHAR": to_char,
             "TO_TIMESTAMP": format_time_lambda(exp.StrToTime, "oracle"),

@@ -307,6 +307,12 @@ class ClickHouse(Dialect):
             "DATEDIFF": lambda args: exp.DateDiff(
                 this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
             ),
+            "DATE_SUB": lambda args: exp.DateSub(
+                this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
+            ),
+            "DATESUB": lambda args: exp.DateSub(
+                this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
+            ),
             "EMPTY": exp.Empty.from_arg_list,
             "ENDSWITH": exp.EndsWith.from_arg_list,
             "EXP2": lambda args: exp.Pow(
