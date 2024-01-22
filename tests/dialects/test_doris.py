@@ -501,6 +501,14 @@ class TestDoris(Validator):
             },
         )
 
+    def test_json(self):
+        self.validate_all(
+            "JSONB_EXTRACT('{\"id\": \"33\"}','$.id')",
+            read={
+                "clickhouse": "JSONExtractString('{\"id\": \"33\"}' , 'id')",
+            },
+        )
+
     def test_math(self):
         self.validate_all(
             "STDDEV_POP(x)",

@@ -4905,7 +4905,7 @@ class JSONBContains(Binary):
 
 
 class JSONExtract(Binary, Func):
-    _sql_names = ["JSON_EXTRACT"]
+    _sql_names = ["JSON_EXTRACT", "JSONEXTRACTSTRING"]
 
 
 class JSONExtractScalar(JSONExtract):
