@@ -599,6 +599,20 @@ class TestDoris(Validator):
                 "clickhouse": "EXP10(3)",
             },
         )
+        self.validate_all(
+            "SELECT TRUNCATE(123.458, 1)",
+            read={
+                "hive": "select trunc(123.458,1)",
+                "oracle": "select trunc(123.458,1)"
+            }
+        )
+        self.validate_all(
+            "SELECT TRUNCATE(123.458, -1)",
+            read={
+                "hive": "select trunc(123.458,-1)",
+                "oracle": "select trunc(123.458,-1)"
+            }
+        )
 
     def test_Quoting(self):
         self.validate_all(

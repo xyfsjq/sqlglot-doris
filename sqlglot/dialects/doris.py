@@ -86,7 +86,7 @@ def handle_date_trunc(self, expression: exp.DateTrunc) -> str:
     if unit.isalpha():
         mapped_unit = DATE_DELTA_INTERVAL.get(unit) or unit
         return f"DATE_TRUNC({this}, '{mapped_unit}')"
-    if unit.isdigit():
+    if unit.isdigit() or unit.lstrip('-').isdigit():
         return f"TRUNCATE({this}, {unit})"
     return f"DATE({this})"
 
