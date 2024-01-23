@@ -148,6 +148,11 @@ class Parser(metaclass=_Parser):
         TokenType.ENUM16,
     }
 
+    AGGREGATE_TYPE_TOKENS = {
+        TokenType.AGGREGATEFUNCTION,
+        TokenType.SIMPLEAGGREGATEFUNCTION,
+    }
+
     TYPE_TOKENS = {
         TokenType.BIT,
         TokenType.BOOLEAN,
@@ -241,6 +246,7 @@ class Parser(metaclass=_Parser):
         TokenType.NULL,
         *ENUM_TYPE_TOKENS,
         *NESTED_TYPE_TOKENS,
+        *AGGREGATE_TYPE_TOKENS,
     }
 
     SIGNED_TO_UNSIGNED_TYPE_TOKEN = {
@@ -704,6 +710,9 @@ class Parser(metaclass=_Parser):
         "HEAP": lambda self: self.expression(exp.HeapProperty),
         "IMMUTABLE": lambda self: self.expression(
             exp.StabilityProperty, this=exp.Literal.string("IMMUTABLE")
+        ),
+        "INHERITS": lambda self: self.expression(
+            exp.InheritsProperty, expressions=self._parse_wrapped_csv(self._parse_table)
         ),
         "INPUT": lambda self: self.expression(exp.InputModelProperty, this=self._parse_schema()),
         "JOURNAL": lambda self, **kwargs: self._parse_journal(**kwargs),
@@ -1207,7 +1216,22 @@ class Parser(metaclass=_Parser):
         if index != self._index:
             self._advance(index - self._index)
 
+    def _warn_unsupported(self) -> None:
+        if len(self._tokens) <= 1:
+            return
+
+        # We use _find_sql because self.sql may comprise multiple chunks, and we're only
+        # interested in emitting a warning for the one being currently processed.
+        sql = self._find_sql(self._tokens[0], self._tokens[-1])
+
+        logger.warning(
+            f"Input '{sql}' contains unsupported syntax, proceeding to parse it into the"
+            " fallback 'Command' expression. Consider filing a GitHub issue to request support"
+            " for this syntax, e.g. if transpilation or AST metadata extraction is required."
+        )
+
     def _parse_command(self) -> exp.Command:
+        self._warn_unsupported()
         return self.expression(
             exp.Command, this=self._prev.text.upper(), expression=self._parse_string()
         )
@@ -1329,8 +1353,10 @@ class Parser(metaclass=_Parser):
         start = self._prev
         comments = self._prev_comments
 
-        replace = start.text.upper() == "REPLACE" or self._match_pair(
-            TokenType.OR, TokenType.REPLACE
+        replace = (
+            start.token_type == TokenType.REPLACE
+            or self._match_pair(TokenType.OR, TokenType.REPLACE)
+            or self._match_pair(TokenType.OR, TokenType.ALTER)
         )
         unique = self._match(TokenType.UNIQUE)
 
@@ -1370,26 +1396,27 @@ class Parser(metaclass=_Parser):
             # exp.Properties.Location.POST_SCHEMA ("schema" here is the UDF's type signature)
             extend_props(self._parse_properties())
 
-            self._match(TokenType.ALIAS)
+            expression = self._match(TokenType.ALIAS) and self._parse_heredoc()
 
-            if self._match(TokenType.COMMAND):
-                expression = self._parse_as_command(self._prev)
-            else:
-                begin = self._match(TokenType.BEGIN)
-                return_ = self._match_text_seq("RETURN")
-
-                if self._match(TokenType.STRING, advance=False):
-                    # Takes care of BigQuery's JavaScript UDF definitions that end in an OPTIONS property
-                    # # https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#create_function_statement
-                    expression = self._parse_string()
-                    extend_props(self._parse_properties())
+            if not expression:
+                if self._match(TokenType.COMMAND):
+                    expression = self._parse_as_command(self._prev)
                 else:
-                    expression = self._parse_statement()
+                    begin = self._match(TokenType.BEGIN)
+                    return_ = self._match_text_seq("RETURN")
 
-                end = self._match_text_seq("END")
+                    if self._match(TokenType.STRING, advance=False):
+                        # Takes care of BigQuery's JavaScript UDF definitions that end in an OPTIONS property
+                        # # https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#create_function_statement
+                        expression = self._parse_string()
+                        extend_props(self._parse_properties())
+                    else:
+                        expression = self._parse_statement()
 
-                if return_:
-                    expression = self.expression(exp.Return, this=expression)
+                    end = self._match_text_seq("END")
+
+                    if return_:
+                        expression = self.expression(exp.Return, this=expression)
         elif create_token.token_type == TokenType.INDEX:
             this = self._parse_index(index=self._parse_id_var())
         elif create_token.token_type in self.DB_CREATABLES:
@@ -1438,6 +1465,9 @@ class Parser(metaclass=_Parser):
                 clone = self.expression(
                     exp.Clone, this=self._parse_table(schema=True), shallow=shallow, copy=copy
                 )
+
+        if self._curr:
+            return self._parse_as_command(start)
 
         return self.expression(
             exp.Create,
@@ -2298,7 +2328,7 @@ class Parser(metaclass=_Parser):
                     if table
                     else self._parse_select(nested=True, parse_set_operation=False)
                 )
-                this = self._parse_set_operations(self._parse_query_modifiers(this))
+                this = self._parse_query_modifiers(self._parse_set_operations(this))
 
             self._match_r_paren()
 
@@ -2680,6 +2710,8 @@ class Parser(metaclass=_Parser):
         else:
             columns = None
 
+        include = self._parse_wrapped_id_vars() if self._match_text_seq("INCLUDE") else None
+
         return self.expression(
             exp.Index,
             this=index,
@@ -2689,6 +2721,7 @@ class Parser(metaclass=_Parser):
             unique=unique,
             primary=primary,
             amp=amp,
+            include=include,
             partition_by=self._parse_partition_by(),
             where=self._parse_where(),
         )
@@ -3379,8 +3412,8 @@ class Parser(metaclass=_Parser):
     def _parse_comparison(self) -> t.Optional[exp.Expression]:
         return self._parse_tokens(self._parse_range, self.COMPARISON)
 
-    def _parse_range(self) -> t.Optional[exp.Expression]:
-        this = self._parse_bitwise()
+    def _parse_range(self, this: t.Optional[exp.Expression] = None) -> t.Optional[exp.Expression]:
+        this = this or self._parse_bitwise()
         negate = self._match(TokenType.NOT)
 
         if self._match_set(self.RANGE_PARSERS):
@@ -3475,7 +3508,10 @@ class Parser(metaclass=_Parser):
             self._retreat(index)
             return None
 
-        unit = self._parse_function() or self._parse_var(any_token=True, upper=True)
+        unit = self._parse_function() or (
+            not self._match(TokenType.ALIAS, advance=False)
+            and self._parse_var(any_token=True, upper=True)
+        )
 
         # Most dialects support, e.g., the form INTERVAL '5' day, thus we try to parse
         # each INTERVAL expression into this canonical form so it's easy to transpile
@@ -3627,6 +3663,7 @@ class Parser(metaclass=_Parser):
 
         nested = type_token in self.NESTED_TYPE_TOKENS
         is_struct = type_token in self.STRUCT_TYPE_TOKENS
+        is_aggregate = type_token in self.AGGREGATE_TYPE_TOKENS
         expressions = None
         maybe_func = False
 
@@ -3641,6 +3678,18 @@ class Parser(metaclass=_Parser):
                 )
             elif type_token in self.ENUM_TYPE_TOKENS:
                 expressions = self._parse_csv(self._parse_equality)
+            elif is_aggregate:
+                func_or_ident = self._parse_function(anonymous=True) or self._parse_id_var(
+                    any_token=False, tokens=(TokenType.VAR,)
+                )
+                if not func_or_ident or not self._match(TokenType.COMMA):
+                    return None
+                expressions = self._parse_csv(
+                    lambda: self._parse_types(
+                        check_func=check_func, schema=schema, allow_identifiers=allow_identifiers
+                    )
+                )
+                expressions.insert(0, func_or_ident)
             else:
                 expressions = self._parse_csv(self._parse_type_size)
 
@@ -4313,8 +4362,10 @@ class Parser(metaclass=_Parser):
     def _parse_primary_key_part(self) -> t.Optional[exp.Expression]:
         return self._parse_field()
 
-    def _parse_period_for_system_time(self) -> exp.PeriodForSystemTimeConstraint:
-        self._match(TokenType.TIMESTAMP_SNAPSHOT)
+    def _parse_period_for_system_time(self) -> t.Optional[exp.PeriodForSystemTimeConstraint]:
+        if not self._match(TokenType.TIMESTAMP_SNAPSHOT):
+            self._retreat(self._index - 1)
+            return None
 
         id_vars = self._parse_wrapped_id_vars()
         return self.expression(
@@ -4967,7 +5018,12 @@ class Parser(metaclass=_Parser):
         )
 
         if alias:
-            return self.expression(exp.Alias, comments=comments, this=this, alias=alias)
+            this = self.expression(exp.Alias, comments=comments, this=this, alias=alias)
+
+            # Moves the comment next to the alias in `expr /* comment */ AS alias`
+            if not this.comments and this.this.comments:
+                this.comments = this.this.comments
+                this.this.comments = None
 
         return this
 
@@ -5233,7 +5289,7 @@ class Parser(metaclass=_Parser):
 
             if self._match_text_seq("CHECK"):
                 expression = self._parse_wrapped(self._parse_conjunction)
-                enforced = self._match_text_seq("ENFORCED")
+                enforced = self._match_text_seq("ENFORCED") or False
 
                 return self.expression(
                     exp.AddConstraint, this=this, expression=expression, enforced=enforced
@@ -5287,7 +5343,18 @@ class Parser(metaclass=_Parser):
         self._retreat(index)
         return self._parse_csv(self._parse_drop_column)
 
-    def _parse_alter_table_rename(self) -> exp.RenameTable:
+    def _parse_alter_table_rename(self) -> t.Optional[exp.RenameTable | exp.RenameColumn]:
+        if self._match(TokenType.COLUMN):
+            exists = self._parse_exists()
+            old_column = self._parse_column()
+            to = self._match_text_seq("TO")
+            new_column = self._parse_column()
+
+            if old_column is None or to is None or new_column is None:
+                return None
+
+            return self.expression(exp.RenameColumn, this=old_column, to=new_column, exists=exists)
+
         self._match_text_seq("TO")
         return self.expression(exp.RenameTable, this=self._parse_table(schema=True))
 
@@ -5308,7 +5375,7 @@ class Parser(metaclass=_Parser):
         if parser:
             actions = ensure_list(parser(self))
 
-            if not self._curr:
+            if not self._curr and actions:
                 return self.expression(
                     exp.AlterTable,
                     this=this,
@@ -5456,6 +5523,7 @@ class Parser(metaclass=_Parser):
             self._advance()
         text = self._find_sql(start, self._prev)
         size = len(start.text)
+        self._warn_unsupported()
         return exp.Command(this=text[:size], expression=text[size:])
 
     def _parse_dict_property(self, this: str) -> exp.DictProperty:
@@ -5513,6 +5581,42 @@ class Parser(metaclass=_Parser):
             iterator=iterator,
             condition=condition,
         )
+
+    def _parse_heredoc(self) -> t.Optional[exp.Heredoc]:
+        if self._match(TokenType.HEREDOC_STRING):
+            return self.expression(exp.Heredoc, this=self._prev.text)
+
+        if not self._match_text_seq("$"):
+            return None
+
+        tags = ["$"]
+        tag_text = None
+
+        if self._is_connected():
+            self._advance()
+            tags.append(self._prev.text.upper())
+        else:
+            self.raise_error("No closing $ found")
+
+        if tags[-1] != "$":
+            if self._is_connected() and self._match_text_seq("$"):
+                tag_text = tags[-1]
+                tags.append("$")
+            else:
+                self.raise_error("No closing $ found")
+
+        heredoc_start = self._curr
+
+        while self._curr:
+            if self._match_text_seq(*tags, advance=False):
+                this = self._find_sql(heredoc_start, self._prev)
+                self._advance(len(tags))
+                return self.expression(exp.Heredoc, this=this, tag=tag_text)
+
+            self._advance()
+
+        self.raise_error(f"No closing {''.join(tags)} found")
+        return None
 
     def _find_parser(
         self, parsers: t.Dict[str, t.Callable], trie: t.Dict
@@ -5587,7 +5691,7 @@ class Parser(metaclass=_Parser):
             if advance:
                 self._advance()
             return True
-        return False
+        return None
 
     def _match_text_seq(self, *texts, advance=True):
         index = self._index
@@ -5596,7 +5700,7 @@ class Parser(metaclass=_Parser):
                 self._advance()
             else:
                 self._retreat(index)
-                return False
+                return None
 
         if not advance:
             self._retreat(index)

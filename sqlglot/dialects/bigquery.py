@@ -208,12 +208,8 @@ def _unix_to_time_sql(self: BigQuery.Generator, expression: exp.UnixToTime) -> s
         return f"TIMESTAMP_MILLIS({timestamp})"
     if scale == exp.UnixToTime.MICROS:
         return f"TIMESTAMP_MICROS({timestamp})"
-    if scale == exp.UnixToTime.NANOS:
-        # We need to cast to INT64 because that's what BQ expects
-        return f"TIMESTAMP_MICROS(CAST({timestamp} / 1000 AS INT64))"
 
-    self.unsupported(f"Unsupported scale for timestamp: {scale}.")
-    return ""
+    return f"TIMESTAMP_SECONDS(CAST({timestamp} / POW(10, {scale}) AS INT64))"
 
 
 def _parse_time(args: t.List) -> exp.Func:
@@ -379,9 +375,7 @@ class BigQuery(Dialect):
             "TIMESTAMP_MILLIS": lambda args: exp.UnixToTime(
                 this=seq_get(args, 0), scale=exp.UnixToTime.MILLIS
             ),
-            "TIMESTAMP_SECONDS": lambda args: exp.UnixToTime(
-                this=seq_get(args, 0), scale=exp.UnixToTime.SECONDS
-            ),
+            "TIMESTAMP_SECONDS": lambda args: exp.UnixToTime(this=seq_get(args, 0)),
             "TO_JSON_STRING": exp.JSONFormat.from_arg_list,
         }
 
@@ -566,6 +560,9 @@ class BigQuery(Dialect):
             exp.DatetimeAdd: date_add_interval_sql("DATETIME", "ADD"),
             exp.DatetimeSub: date_add_interval_sql("DATETIME", "SUB"),
             exp.DateTrunc: lambda self, e: self.func("DATE_TRUNC", e.this, e.text("unit")),
+            exp.FromTimeZone: lambda self, e: self.func(
+                "DATETIME", self.func("TIMESTAMP", e.this, e.args.get("zone")), "'UTC'"
+            ),
             exp.GenerateSeries: rename_func("GENERATE_ARRAY"),
             exp.GetPath: path_to_jsonpath(),
             exp.GroupConcat: rename_func("STRING_AGG"),

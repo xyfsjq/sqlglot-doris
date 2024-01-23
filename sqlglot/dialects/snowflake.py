@@ -39,21 +39,7 @@ def _parse_to_timestamp(args: t.List) -> t.Union[exp.StrToTime, exp.UnixToTime, 
         if second_arg.is_string:
             # case: <string_expr> [ , <format> ]
             return format_time_lambda(exp.StrToTime, "snowflake")(args)
-
-        # case: <numeric_expr> [ , <scale> ]
-        if second_arg.name not in ["0", "3", "9"]:
-            raise ValueError(
-                f"Scale for snowflake numeric timestamp is {second_arg}, but should be 0, 3, or 9"
-            )
-
-        if second_arg.name == "0":
-            timescale = exp.UnixToTime.SECONDS
-        elif second_arg.name == "3":
-            timescale = exp.UnixToTime.MILLIS
-        elif second_arg.name == "9":
-            timescale = exp.UnixToTime.NANOS
-
-        return exp.UnixToTime(this=first_arg, scale=timescale)
+        return exp.UnixToTime(this=first_arg, scale=second_arg)
 
     from sqlglot.optimizer.simplify import simplify_literals
 
@@ -93,22 +79,6 @@ def _parse_datediff(args: t.List) -> exp.DateDiff:
     return exp.DateDiff(
         this=seq_get(args, 2), expression=seq_get(args, 1), unit=_map_date_part(seq_get(args, 0))
     )
-
-
-def _unix_to_time_sql(self: Snowflake.Generator, expression: exp.UnixToTime) -> str:
-    scale = expression.args.get("scale")
-    timestamp = self.sql(expression, "this")
-    if scale in (None, exp.UnixToTime.SECONDS):
-        return f"TO_TIMESTAMP({timestamp})"
-    if scale == exp.UnixToTime.MILLIS:
-        return f"TO_TIMESTAMP({timestamp}, 3)"
-    if scale == exp.UnixToTime.MICROS:
-        return f"TO_TIMESTAMP({timestamp} / 1000, 3)"
-    if scale == exp.UnixToTime.NANOS:
-        return f"TO_TIMESTAMP({timestamp}, 9)"
-
-    self.unsupported(f"Unsupported scale for timestamp: {scale}.")
-    return ""
 
 
 # https://docs.snowflake.com/en/sql-reference/functions/date_part.html
@@ -327,10 +297,7 @@ def _parse_colon_get_path(
         if not self._match(TokenType.COLON):
             break
 
-    if self._match_set(self.RANGE_PARSERS):
-        this = self.RANGE_PARSERS[self._prev.token_type](self, this) or this
-
-    return this
+    return self._parse_range(this)
 
 
 def _parse_timestamp_from_parts(args: t.List) -> exp.Func:
@@ -504,6 +471,10 @@ class Snowflake(Dialect):
         }
 
         SHOW_PARSERS = {
+            "SCHEMAS": _show_parser("SCHEMAS"),
+            "TERSE SCHEMAS": _show_parser("SCHEMAS"),
+            "OBJECTS": _show_parser("OBJECTS"),
+            "TERSE OBJECTS": _show_parser("OBJECTS"),
             "PRIMARY KEYS": _show_parser("PRIMARY KEYS"),
             "TERSE PRIMARY KEYS": _show_parser("PRIMARY KEYS"),
             "COLUMNS": _show_parser("COLUMNS"),
@@ -613,21 +584,35 @@ class Snowflake(Dialect):
             scope = None
             scope_kind = None
 
+            # will identity SHOW TERSE SCHEMAS but not SHOW TERSE PRIMARY KEYS
+            # which is syntactically valid but has no effect on the output
+            terse = self._tokens[self._index - 2].text.upper() == "TERSE"
+
             like = self._parse_string() if self._match(TokenType.LIKE) else None
 
             if self._match(TokenType.IN):
                 if self._match_text_seq("ACCOUNT"):
                     scope_kind = "ACCOUNT"
                 elif self._match_set(self.DB_CREATABLES):
-                    scope_kind = self._prev.text
+                    scope_kind = self._prev.text.upper()
                     if self._curr:
-                        scope = self._parse_table()
+                        scope = self._parse_table_parts()
                 elif self._curr:
-                    scope_kind = "TABLE"
-                    scope = self._parse_table()
+                    scope_kind = "SCHEMA" if this == "OBJECTS" else "TABLE"
+                    scope = self._parse_table_parts()
 
             return self.expression(
-                exp.Show, this=this, like=like, scope=scope, scope_kind=scope_kind
+                exp.Show,
+                **{
+                    "terse": terse,
+                    "this": this,
+                    "like": like,
+                    "scope": scope,
+                    "scope_kind": scope_kind,
+                    "starts_with": self._match_text_seq("STARTS", "WITH") and self._parse_string(),
+                    "limit": self._parse_limit(),
+                    "from": self._parse_string() if self._match(TokenType.FROM) else None,
+                },
             )
 
         def _parse_alter_table_swap(self) -> exp.SwapTable:
@@ -723,6 +708,9 @@ class Snowflake(Dialect):
             exp.DayOfYear: rename_func("DAYOFYEAR"),
             exp.Explode: rename_func("FLATTEN"),
             exp.Extract: rename_func("DATE_PART"),
+            exp.FromTimeZone: lambda self, e: self.func(
+                "CONVERT_TIMEZONE", e.args.get("zone"), "'UTC'", e.this
+            ),
             exp.GenerateSeries: lambda self, e: self.func(
                 "ARRAY_GENERATE_RANGE", e.args["start"], e.args["end"] + 1, e.args.get("step")
             ),
@@ -778,7 +766,7 @@ class Snowflake(Dialect):
             exp.Trim: lambda self, e: self.func("TRIM", e.this, e.expression),
             exp.TsOrDsAdd: date_delta_sql("DATEADD", cast=True),
             exp.TsOrDsDiff: date_delta_sql("DATEDIFF"),
-            exp.UnixToTime: _unix_to_time_sql,
+            exp.UnixToTime: rename_func("TO_TIMESTAMP"),
             exp.VarMap: lambda self, e: var_map_sql(self, e, "OBJECT_CONSTRUCT"),
             exp.WeekOfYear: rename_func("WEEKOFYEAR"),
             exp.Xor: rename_func("BOOLXOR"),
@@ -853,6 +841,7 @@ class Snowflake(Dialect):
             return f"{explode}{alias}"
 
         def show_sql(self, expression: exp.Show) -> str:
+            terse = "TERSE " if expression.args.get("terse") else ""
             like = self.sql(expression, "like")
             like = f" LIKE {like}" if like else ""
 
@@ -863,7 +852,19 @@ class Snowflake(Dialect):
             if scope_kind:
                 scope_kind = f" IN {scope_kind}"
 
-            return f"SHOW {expression.name}{like}{scope_kind}{scope}"
+            starts_with = self.sql(expression, "starts_with")
+            if starts_with:
+                starts_with = f" STARTS WITH {starts_with}"
+
+            limit = self.sql(expression, "limit")
+
+            from_ = self.sql(expression, "from")
+            if from_:
+                from_ = f" FROM {from_}"
+
+            return (
+                f"SHOW {terse}{expression.name}{like}{scope_kind}{scope}{starts_with}{limit}{from_}"
+            )
 
         def regexpextract_sql(self, expression: exp.RegexpExtract) -> str:
             # Other dialects don't support all of the following parameters, so we need to

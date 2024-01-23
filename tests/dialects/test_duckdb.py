@@ -196,10 +196,12 @@ class TestDuckDB(Validator):
         self.validate_identity("SELECT ROW(x, x + 1, y) FROM (SELECT 1 AS x, 'a' AS y)")
         self.validate_identity("SELECT (x, x + 1, y) FROM (SELECT 1 AS x, 'a' AS y)")
         self.validate_identity("SELECT a.x FROM (SELECT {'x': 1, 'y': 2, 'z': 3} AS a)")
-        self.validate_identity("ATTACH DATABASE ':memory:' AS new_database")
         self.validate_identity("FROM  x SELECT x UNION SELECT 1", "SELECT x FROM x UNION SELECT 1")
         self.validate_identity("FROM (FROM tbl)", "SELECT * FROM (SELECT * FROM tbl)")
         self.validate_identity("FROM tbl", "SELECT * FROM tbl")
+        self.validate_identity(
+            "ATTACH DATABASE ':memory:' AS new_database", check_command_warning=True
+        )
         self.validate_identity(
             "SELECT {'yes': 'duck', 'maybe': 'goose', 'huh': NULL, 'no': 'heron'}"
         )
@@ -672,7 +674,7 @@ class TestDuckDB(Validator):
             write={
                 "bigquery": "TIMESTAMP_MILLIS(x)",
                 "duckdb": "EPOCH_MS(x)",
-                "presto": "FROM_UNIXTIME(CAST(x AS DOUBLE) / 1000)",
+                "presto": "FROM_UNIXTIME(CAST(x AS DOUBLE) / POW(10, 3))",
                 "spark": "TIMESTAMP_MILLIS(x)",
             },
         )

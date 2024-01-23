@@ -1,4 +1,5 @@
 from sqlglot import exp, parse, parse_one
+from sqlglot.parser import logger as parser_logger
 from tests.dialects.test_dialect import Validator
 
 
@@ -7,7 +8,7 @@ class TestTSQL(Validator):
 
     def test_tsql(self):
         self.validate_identity("ROUND(x, 1, 0)")
-        self.validate_identity("EXEC MyProc @id=7, @name='Lochristi'")
+        self.validate_identity("EXEC MyProc @id=7, @name='Lochristi'", check_command_warning=True)
         # https://learn.microsoft.com/en-us/previous-versions/sql/sql-server-2008-r2/ms187879(v=sql.105)?redirectedfrom=MSDN
         # tsql allows .. which means use the default schema
         self.validate_identity("SELECT * FROM a..b")
@@ -71,6 +72,33 @@ class TestTSQL(Validator):
             "WITH t(c) AS (SELECT 1) SELECT * INTO foo FROM (SELECT c AS c FROM t) AS temp",
             read={
                 "duckdb": "CREATE TABLE foo AS WITH t(c) AS (SELECT 1) SELECT c FROM t",
+            },
+        )
+        self.validate_all(
+            "WITH t(c) AS (SELECT 1) SELECT * INTO foo FROM (SELECT c AS c FROM t) AS temp",
+            write={
+                "duckdb": "CREATE TABLE foo AS WITH t(c) AS (SELECT 1) SELECT * FROM (SELECT c AS c FROM t) AS temp",
+                "postgres": "WITH t(c) AS (SELECT 1) SELECT * INTO foo FROM (SELECT c AS c FROM t) AS temp",
+                "oracle": "WITH t(c) AS (SELECT 1) SELECT * INTO foo FROM (SELECT c AS c FROM t) temp",
+            },
+        )
+        self.validate_all(
+            "WITH t(c) AS (SELECT 1) SELECT * INTO TEMP UNLOGGED foo FROM (SELECT c AS c FROM t) AS temp",
+            write={
+                "duckdb": "CREATE TEMPORARY TABLE foo AS WITH t(c) AS (SELECT 1) SELECT * FROM (SELECT c AS c FROM t) AS temp",
+                "postgres": "WITH t(c) AS (SELECT 1) SELECT * INTO TEMPORARY foo FROM (SELECT c AS c FROM t) AS temp",
+            },
+        )
+        self.validate_all(
+            "WITH t(c) AS (SELECT 1) SELECT * INTO UNLOGGED foo FROM (SELECT c AS c FROM t) AS temp",
+            write={
+                "duckdb": "CREATE TABLE foo AS WITH t(c) AS (SELECT 1) SELECT * FROM (SELECT c AS c FROM t) AS temp",
+            },
+        )
+        self.validate_all(
+            "WITH t(c) AS (SELECT 1) SELECT * INTO UNLOGGED foo FROM (SELECT c AS c FROM t) AS temp",
+            write={
+                "duckdb": "CREATE TABLE foo AS WITH t(c) AS (SELECT 1) SELECT * FROM (SELECT c AS c FROM t) AS temp",
             },
         )
         self.validate_all(
@@ -198,7 +226,7 @@ class TestTSQL(Validator):
             "MERGE INTO mytable WITH (HOLDLOCK) AS T USING mytable_merge AS S "
             "ON (T.user_id = S.user_id) WHEN NOT MATCHED THEN INSERT (c1, c2) VALUES (S.c1, S.c2)"
         )
-        self.validate_identity("UPDATE STATISTICS x")
+        self.validate_identity("UPDATE STATISTICS x", check_command_warning=True)
         self.validate_identity("UPDATE x SET y = 1 OUTPUT x.a, x.b INTO @y FROM y")
         self.validate_identity("UPDATE x SET y = 1 OUTPUT x.a, x.b FROM y")
         self.validate_identity("INSERT INTO x (y) OUTPUT x.a, x.b INTO l SELECT * FROM z")
@@ -211,13 +239,15 @@ class TestTSQL(Validator):
         self.validate_identity("END")
         self.validate_identity("@x")
         self.validate_identity("#x")
-        self.validate_identity("DECLARE @TestVariable AS VARCHAR(100)='Save Our Planet'")
-        self.validate_identity("PRINT @TestVariable")
+        self.validate_identity("PRINT @TestVariable", check_command_warning=True)
         self.validate_identity("SELECT Employee_ID, Department_ID FROM @MyTableVar")
         self.validate_identity("INSERT INTO @TestTable VALUES (1, 'Value1', 12, 20)")
         self.validate_identity("SELECT * FROM #foo")
         self.validate_identity("SELECT * FROM ##foo")
         self.validate_identity("SELECT a = 1", "SELECT 1 AS a")
+        self.validate_identity(
+            "DECLARE @TestVariable AS VARCHAR(100)='Save Our Planet'", check_command_warning=True
+        )
         self.validate_identity(
             "SELECT a = 1 UNION ALL SELECT a = b", "SELECT 1 AS a UNION ALL SELECT b AS a"
         )
@@ -762,7 +792,8 @@ class TestTSQL(Validator):
 
     def test_udf(self):
         self.validate_identity(
-            "DECLARE @DWH_DateCreated DATETIME = CONVERT(DATETIME, getdate(), 104)"
+            "DECLARE @DWH_DateCreated DATETIME = CONVERT(DATETIME, getdate(), 104)",
+            check_command_warning=True,
         )
         self.validate_identity(
             "CREATE PROCEDURE foo @a INTEGER, @b INTEGER AS SELECT @a = SUM(bla) FROM baz AS bar"
@@ -855,8 +886,9 @@ WHERE
             "END",
         ]
 
-        for expr, expected_sql in zip(parse(sql, read="tsql"), expected_sqls):
-            self.assertEqual(expr.sql(dialect="tsql"), expected_sql)
+        with self.assertLogs(parser_logger) as cm:
+            for expr, expected_sql in zip(parse(sql, read="tsql"), expected_sqls):
+                self.assertEqual(expr.sql(dialect="tsql"), expected_sql)
 
         sql = """
             CREATE PROC [dbo].[transform_proc] AS
@@ -875,8 +907,9 @@ WHERE
             "CREATE TABLE [target_schema].[target_table] (a INTEGER) WITH (DISTRIBUTION=REPLICATE, HEAP)",
         ]
 
-        for expr, expected_sql in zip(parse(sql, read="tsql"), expected_sqls):
-            self.assertEqual(expr.sql(dialect="tsql"), expected_sql)
+        with self.assertLogs(parser_logger) as cm:
+            for expr, expected_sql in zip(parse(sql, read="tsql"), expected_sqls):
+                self.assertEqual(expr.sql(dialect="tsql"), expected_sql)
 
     def test_charindex(self):
         self.validate_all(

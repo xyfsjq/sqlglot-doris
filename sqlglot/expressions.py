@@ -36,8 +36,7 @@ from sqlglot.helper import (
 from sqlglot.tokens import Token
 
 if t.TYPE_CHECKING:
-    from typing_extensions import Literal as Lit
-
+    from sqlglot._typing import Lit
     from sqlglot.dialects.dialect import DialectType
 
 
@@ -1117,6 +1116,10 @@ class Set(Expression):
     arg_types = {"expressions": False, "unset": False, "tag": False}
 
 
+class Heredoc(Expression):
+    arg_types = {"this": True, "tag": False}
+
+
 class SetItem(Expression):
     arg_types = {
         "this": False,
@@ -1130,9 +1133,12 @@ class SetItem(Expression):
 class Show(Expression):
     arg_types = {
         "this": True,
+        "terse": False,
         "target": False,
         "offset": False,
+        "starts_with": False,
         "limit": False,
+        "from": False,
         "like": False,
         "where": False,
         "db": False,
@@ -1273,6 +1279,10 @@ class AlterColumn(Expression):
     }
 
 
+class RenameColumn(Expression):
+    arg_types = {"this": True, "to": True, "exists": False}
+
+
 class RenameTable(Expression):
     pass
 
@@ -1398,7 +1408,7 @@ class GeneratedAsIdentityColumnConstraint(ColumnConstraintKind):
 
 
 class GeneratedAsRowColumnConstraint(ColumnConstraintKind):
-    arg_types = {"start": True, "hidden": False}
+    arg_types = {"start": False, "hidden": False}
 
 
 # https://dev.mysql.com/doc/refman/8.0/en/create-table.html
@@ -1663,6 +1673,7 @@ class Index(Expression):
         "unique": False,
         "primary": False,
         "amp": False,  # teradata
+        "include": False,
         "partition_by": False,  # teradata
         "where": False,  # postgres partial indexes
     }
@@ -2012,7 +2023,13 @@ class AutoRefreshProperty(Property):
 
 
 class BlockCompressionProperty(Property):
-    arg_types = {"autotemp": False, "always": False, "default": True, "manual": True, "never": True}
+    arg_types = {
+        "autotemp": False,
+        "always": False,
+        "default": False,
+        "manual": False,
+        "never": False,
+    }
 
 
 class CharacterSetProperty(Property):
@@ -2085,6 +2102,10 @@ class FreespaceProperty(Property):
     arg_types = {"this": True, "percent": False}
 
 
+class InheritsProperty(Property):
+    arg_types = {"expressions": True}
+
+
 class InputModelProperty(Property):
     arg_types = {"this": True}
 
@@ -2095,11 +2116,11 @@ class OutputModelProperty(Property):
 
 class IsolatedLoadingProperty(Property):
     arg_types = {
-        "no": True,
-        "concurrent": True,
-        "for_all": True,
-        "for_insert": True,
-        "for_none": True,
+        "no": False,
+        "concurrent": False,
+        "for_all": False,
+        "for_insert": False,
+        "for_none": False,
     }
 
 
@@ -2258,6 +2279,10 @@ class SerdeProperties(Property):
 
 class SetProperty(Property):
     arg_types = {"multi": True}
+
+
+class SetConfigProperty(Property):
+    arg_types = {"this": True}
 
 
 class SettingsProperty(Property):
@@ -3627,6 +3652,8 @@ class DataType(Expression):
 
     class Type(AutoName):
         ARRAY = auto()
+        AGGREGATEFUNCTION = auto()
+        SIMPLEAGGREGATEFUNCTION = auto()
         BIGDECIMAL = auto()
         BIGINT = auto()
         BIGSERIAL = auto()
@@ -4155,6 +4182,10 @@ class AtIndex(Expression):
 
 
 class AtTimeZone(Expression):
+    arg_types = {"this": True, "zone": True}
+
+
+class FromTimeZone(Expression):
     arg_types = {"this": True, "zone": True}
 
 
@@ -5361,10 +5392,16 @@ class UnixToStr(Func):
 class UnixToTime(Func):
     arg_types = {"this": True, "scale": False, "zone": False, "hours": False, "minutes": False}
 
-    SECONDS = Literal.string("seconds")
-    MILLIS = Literal.string("millis")
-    MICROS = Literal.string("micros")
-    NANOS = Literal.string("nanos")
+    SECONDS = Literal.number(0)
+    DECIS = Literal.number(1)
+    CENTIS = Literal.number(2)
+    MILLIS = Literal.number(3)
+    DECIMILLIS = Literal.number(4)
+    CENTIMILLIS = Literal.number(5)
+    MICROS = Literal.number(6)
+    DECIMICROS = Literal.number(7)
+    CENTIMICROS = Literal.number(8)
+    NANOS = Literal.number(9)
 
 
 class UnixToTimeStr(Func):
@@ -6874,6 +6911,34 @@ def rename_table(old_name: str | Table, new_name: str | Table) -> AlterTable:
         this=old_table,
         actions=[
             RenameTable(this=new_table),
+        ],
+    )
+
+
+def rename_column(
+    table_name: str | Table,
+    old_column_name: str | Column,
+    new_column_name: str | Column,
+    exists: t.Optional[bool] = None,
+) -> AlterTable:
+    """Build ALTER TABLE... RENAME COLUMN... expression
+
+    Args:
+        table_name: Name of the table
+        old_column: The old name of the column
+        new_column: The new name of the column
+        exists: Whether or not to add the `IF EXISTS` clause
+
+    Returns:
+        Alter table expression
+    """
+    table = to_table(table_name)
+    old_column = to_column(old_column_name)
+    new_column = to_column(new_column_name)
+    return AlterTable(
+        this=table,
+        actions=[
+            RenameColumn(this=old_column, to=new_column, exists=exists),
         ],
     )
 

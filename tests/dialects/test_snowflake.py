@@ -39,8 +39,8 @@ WHERE
   )""",
         )
 
-        self.validate_identity("RM @parquet_stage")
-        self.validate_identity("REMOVE @parquet_stage")
+        self.validate_identity("RM @parquet_stage", check_command_warning=True)
+        self.validate_identity("REMOVE @parquet_stage", check_command_warning=True)
         self.validate_identity("SELECT TIMESTAMP_FROM_PARTS(d, t)")
         self.validate_identity("SELECT GET_PATH(v, 'attr[0].name') FROM vartab")
         self.validate_identity("SELECT TO_ARRAY(CAST(x AS ARRAY))")
@@ -82,6 +82,10 @@ WHERE
         )
         self.validate_identity(
             "SELECT a FROM test PIVOT(SUM(x) FOR y IN ('z', 'q')) AS x TABLESAMPLE (0.1)"
+        )
+        self.validate_identity(
+            "SELECT p FROM t WHERE p:val NOT IN ('2')",
+            "SELECT p FROM t WHERE NOT GET_PATH(p, 'val') IN ('2')",
         )
         self.validate_identity(
             """SELECT PARSE_JSON('{"x": "hello"}'):x LIKE 'hello'""",
@@ -579,6 +583,14 @@ WHERE
             },
         )
         self.validate_all(
+            "SELECT TO_TIMESTAMP(16599817290000, 4)",
+            write={
+                "bigquery": "SELECT TIMESTAMP_SECONDS(CAST(16599817290000 / POW(10, 4) AS INT64))",
+                "snowflake": "SELECT TO_TIMESTAMP(16599817290000, 4)",
+                "spark": "SELECT TIMESTAMP_SECONDS(16599817290000 / POW(10, 4))",
+            },
+        )
+        self.validate_all(
             "SELECT TO_TIMESTAMP('1659981729')",
             write={
                 "snowflake": "SELECT TO_TIMESTAMP('1659981729')",
@@ -588,11 +600,11 @@ WHERE
         self.validate_all(
             "SELECT TO_TIMESTAMP(1659981729000000000, 9)",
             write={
-                "bigquery": "SELECT TIMESTAMP_MICROS(CAST(1659981729000000000 / 1000 AS INT64))",
-                "duckdb": "SELECT TO_TIMESTAMP(1659981729000000000 / 1000000000)",
-                "presto": "SELECT FROM_UNIXTIME(CAST(1659981729000000000 AS DOUBLE) / 1000000000)",
+                "bigquery": "SELECT TIMESTAMP_SECONDS(CAST(1659981729000000000 / POW(10, 9) AS INT64))",
+                "duckdb": "SELECT TO_TIMESTAMP(1659981729000000000 / POW(10, 9))",
+                "presto": "SELECT FROM_UNIXTIME(CAST(1659981729000000000 AS DOUBLE) / POW(10, 9))",
                 "snowflake": "SELECT TO_TIMESTAMP(1659981729000000000, 9)",
-                "spark": "SELECT TIMESTAMP_SECONDS(1659981729000000000 / 1000000000)",
+                "spark": "SELECT TIMESTAMP_SECONDS(1659981729000000000 / POW(10, 9))",
             },
         )
         self.validate_all(
@@ -769,9 +781,10 @@ WHERE
         self.validate_identity("SELECT * FROM @namespace.mystage/path/to/file.json.gz")
         self.validate_identity("SELECT * FROM @namespace.%table_name/path/to/file.json.gz")
         self.validate_identity("SELECT * FROM '@external/location' (FILE_FORMAT => 'path.to.csv')")
-        self.validate_identity("PUT file:///dir/tmp.csv @%table")
+        self.validate_identity("PUT file:///dir/tmp.csv @%table", check_command_warning=True)
         self.validate_identity(
-            'COPY INTO NEW_TABLE ("foo", "bar") FROM (SELECT $1, $2, $3, $4 FROM @%old_table)'
+            'COPY INTO NEW_TABLE ("foo", "bar") FROM (SELECT $1, $2, $3, $4 FROM @%old_table)',
+            check_command_warning=True,
         )
         self.validate_identity(
             "SELECT * FROM @foo/bar (FILE_FORMAT => ds_sandbox.test.my_csv_format, PATTERN => 'test') AS bla"
@@ -1087,7 +1100,7 @@ WHERE
         )
 
     def test_stored_procedures(self):
-        self.validate_identity("CALL a.b.c(x, y)")
+        self.validate_identity("CALL a.b.c(x, y)", check_command_warning=True)
         self.validate_identity(
             "CREATE PROCEDURE a.b.c(x INT, y VARIANT) RETURNS OBJECT EXECUTE AS CALLER AS 'BEGIN SELECT 1; END;'"
         )
@@ -1441,10 +1454,10 @@ MATCH_RECOGNIZE (
 
     def test_show(self):
         # Parsed as Command
-        self.validate_identity("SHOW TABLES LIKE 'line%' IN tpch.public")
-
-        ast = parse_one("SHOW TABLES HISTORY IN tpch.public", read="snowflake")
-        self.assertIsInstance(ast, exp.Command)
+        self.validate_identity(
+            "SHOW TABLES LIKE 'line%' IN tpch.public", check_command_warning=True
+        )
+        self.validate_identity("SHOW TABLES HISTORY IN tpch.public", check_command_warning=True)
 
         # Parsed as Show
         self.validate_identity("SHOW PRIMARY KEYS")
@@ -1460,6 +1473,18 @@ MATCH_RECOGNIZE (
         self.validate_identity(
             'SHOW TERSE PRIMARY KEYS IN "TEST"."PUBLIC"."customers"',
             'SHOW PRIMARY KEYS IN TABLE "TEST"."PUBLIC"."customers"',
+        )
+        self.validate_identity(
+            "show terse schemas in database db1 starts with 'a' limit 10 from 'b'",
+            "SHOW TERSE SCHEMAS IN DATABASE db1 STARTS WITH 'a' LIMIT 10 FROM 'b'",
+        )
+        self.validate_identity(
+            "show terse objects in schema db1.schema1 starts with 'a' limit 10 from 'b'",
+            "SHOW TERSE OBJECTS IN SCHEMA db1.schema1 STARTS WITH 'a' LIMIT 10 FROM 'b'",
+        )
+        self.validate_identity(
+            "show terse objects in db1.schema1 starts with 'a' limit 10 from 'b'",
+            "SHOW TERSE OBJECTS IN SCHEMA db1.schema1 STARTS WITH 'a' LIMIT 10 FROM 'b'",
         )
 
         ast = parse_one('SHOW PRIMARY KEYS IN "TEST"."PUBLIC"."customers"', read="snowflake")
@@ -1480,6 +1505,16 @@ MATCH_RECOGNIZE (
         self.assertEqual(table.sql(dialect="snowflake"), "dt_test")
 
         self.assertEqual(literal.sql(dialect="snowflake"), "'_testing%'")
+
+        ast = parse_one("SHOW SCHEMAS IN DATABASE db1", read="snowflake")
+        self.assertEqual(ast.args.get("scope_kind"), "DATABASE")
+        table = ast.find(exp.Table)
+        self.assertEqual(table.sql(dialect="snowflake"), "db1")
+
+        ast = parse_one("SHOW OBJECTS IN db1.schema1", read="snowflake")
+        self.assertEqual(ast.args.get("scope_kind"), "SCHEMA")
+        table = ast.find(exp.Table)
+        self.assertEqual(table.sql(dialect="snowflake"), "db1.schema1")
 
     def test_swap(self):
         ast = parse_one("ALTER TABLE a SWAP WITH b", read="snowflake")

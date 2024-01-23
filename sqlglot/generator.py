@@ -77,6 +77,7 @@ class Generator:
         exp.ExecuteAsProperty: lambda self, e: self.naked_property(e),
         exp.ExternalProperty: lambda self, e: "EXTERNAL",
         exp.HeapProperty: lambda self, e: "HEAP",
+        exp.InheritsProperty: lambda self, e: f"INHERITS ({self.expressions(e, flat=True)})",
         exp.InlineLengthColumnConstraint: lambda self, e: f"INLINE LENGTH {self.sql(e, 'this')}",
         exp.InputModelProperty: lambda self, e: f"INPUT{self.sql(e, 'this')}",
         exp.IntervalSpan: lambda self, e: f"{self.sql(e, 'this')} TO {self.sql(e, 'expression')}",
@@ -96,6 +97,7 @@ class Generator:
         exp.ReturnsProperty: lambda self, e: self.naked_property(e),
         exp.SampleProperty: lambda self, e: f"SAMPLE BY {self.sql(e, 'this')}",
         exp.SetProperty: lambda self, e: f"{'MULTI' if e.args.get('multi') else ''}SET",
+        exp.SetConfigProperty: lambda self, e: self.sql(e, "this"),
         exp.SettingsProperty: lambda self, e: f"SETTINGS{self.seg('')}{(self.expressions(e))}",
         exp.SqlReadWriteProperty: lambda self, e: e.name,
         exp.SqlSecurityProperty: lambda self, e: f"SQL SECURITY {'DEFINER' if e.args.get('definer') else 'INVOKER'}",
@@ -258,6 +260,12 @@ class Generator:
     # INSERT OVERWRITE TABLE x override
     INSERT_OVERWRITE = " OVERWRITE TABLE"
 
+    # Whether or not the SELECT .. INTO syntax is used instead of CTAS
+    SUPPORTS_SELECT_INTO = False
+
+    # Whether or not UNLOGGED tables can be created
+    SUPPORTS_UNLOGGED_TABLES = False
+
     TYPE_MAPPING = {
         exp.DataType.Type.NCHAR: "CHAR",
         exp.DataType.Type.NVARCHAR: "VARCHAR",
@@ -317,6 +325,7 @@ class Generator:
         exp.FileFormatProperty: exp.Properties.Location.POST_WITH,
         exp.FreespaceProperty: exp.Properties.Location.POST_NAME,
         exp.HeapProperty: exp.Properties.Location.POST_WITH,
+        exp.InheritsProperty: exp.Properties.Location.POST_SCHEMA,
         exp.InputModelProperty: exp.Properties.Location.POST_SCHEMA,
         exp.IsolatedLoadingProperty: exp.Properties.Location.POST_NAME,
         exp.JournalProperty: exp.Properties.Location.POST_NAME,
@@ -347,6 +356,7 @@ class Generator:
         exp.Set: exp.Properties.Location.POST_SCHEMA,
         exp.SettingsProperty: exp.Properties.Location.POST_SCHEMA,
         exp.SetProperty: exp.Properties.Location.POST_CREATE,
+        exp.SetConfigProperty: exp.Properties.Location.POST_SCHEMA,
         exp.SortKeyProperty: exp.Properties.Location.POST_SCHEMA,
         exp.SqlReadWriteProperty: exp.Properties.Location.POST_SCHEMA,
         exp.SqlSecurityProperty: exp.Properties.Location.POST_CREATE,
@@ -769,7 +779,7 @@ class Generator:
     def generatedasrowcolumnconstraint_sql(
         self, expression: exp.GeneratedAsRowColumnConstraint
     ) -> str:
-        start = "START" if expression.args["start"] else "END"
+        start = "START" if expression.args.get("start") else "END"
         hidden = " HIDDEN" if expression.args.get("hidden") else ""
         return f"GENERATED ALWAYS AS ROW {start}{hidden}"
 
@@ -896,6 +906,10 @@ class Generator:
     def describe_sql(self, expression: exp.Describe) -> str:
         extended = " EXTENDED" if expression.args.get("extended") else ""
         return f"DESCRIBE{extended} {self.sql(expression, 'this')}"
+
+    def heredoc_sql(self, expression: exp.Heredoc) -> str:
+        tag = self.sql(expression, "tag")
+        return f"${tag}${self.sql(expression, 'this')}${tag}$"
 
     def prepend_ctes(self, expression: exp.Expression, sql: str) -> str:
         with_ = self.sql(expression, "with")
@@ -1101,7 +1115,10 @@ class Generator:
         partition_by = self.expressions(expression, key="partition_by", flat=True)
         partition_by = f" PARTITION BY {partition_by}" if partition_by else ""
         where = self.sql(expression, "where")
-        return f"{unique}{primary}{amp}{index}{name}{table}{using}{columns}{partition_by}{where}"
+        include = self.expressions(expression, key="include", flat=True)
+        if include:
+            include = f" INCLUDE ({include})"
+        return f"{unique}{primary}{amp}{index}{name}{table}{using}{columns}{include}{partition_by}{where}"
 
     def identifier_sql(self, expression: exp.Identifier) -> str:
         text = expression.name
@@ -2021,6 +2038,10 @@ class Generator:
         return [locks, self.sql(expression, "sample")]
 
     def select_sql(self, expression: exp.Select) -> str:
+        into = expression.args.get("into")
+        if not self.SUPPORTS_SELECT_INTO and into:
+            into.pop()
+
         hint = self.sql(expression, "hint")
         distinct = self.sql(expression, "distinct")
         distinct = f" {distinct}" if distinct else ""
@@ -2065,7 +2086,19 @@ class Generator:
             self.sql(expression, "into", comment=False),
             self.sql(expression, "from", comment=False),
         )
-        return self.prepend_ctes(expression, sql)
+
+        sql = self.prepend_ctes(expression, sql)
+
+        if not self.SUPPORTS_SELECT_INTO and into:
+            if into.args.get("temporary"):
+                table_kind = " TEMPORARY"
+            elif self.SUPPORTS_UNLOGGED_TABLES and into.args.get("unlogged"):
+                table_kind = " UNLOGGED"
+            else:
+                table_kind = ""
+            sql = f"CREATE{table_kind} TABLE {self.sql(into.this)} AS {sql}"
+
+        return sql
 
     def schema_sql(self, expression: exp.Schema) -> str:
         this = self.sql(expression, "this")
@@ -2526,6 +2559,11 @@ class Generator:
         zone = self.sql(expression, "zone")
         return f"{this} AT TIME ZONE {zone}"
 
+    def fromtimezone_sql(self, expression: exp.FromTimeZone) -> str:
+        this = self.sql(expression, "this")
+        zone = self.sql(expression, "zone")
+        return f"{this} AT TIME ZONE {zone} AT TIME ZONE 'UTC'"
+
     def add_sql(self, expression: exp.Add) -> str:
         return self.binary(expression, "+")
 
@@ -2656,6 +2694,12 @@ class Generator:
             )
         this = self.sql(expression, "this")
         return f"RENAME TO {this}"
+
+    def renamecolumn_sql(self, expression: exp.RenameColumn) -> str:
+        exists = " IF EXISTS" if expression.args.get("exists") else ""
+        old_column = self.sql(expression, "this")
+        new_column = self.sql(expression, "to")
+        return f"RENAME COLUMN{exists} {old_column} TO {new_column}"
 
     def altertable_sql(self, expression: exp.AlterTable) -> str:
         actions = expression.args["actions"]

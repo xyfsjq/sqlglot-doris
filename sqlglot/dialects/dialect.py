@@ -993,3 +993,29 @@ def no_last_day_sql(self: Generator, expression: exp.LastDay) -> str:
     minus_one_day = exp.func("date_sub", plus_one_month, 1, "day")
 
     return self.sql(exp.cast(minus_one_day, "date"))
+
+
+def merge_without_target_sql(self: Generator, expression: exp.Merge) -> str:
+    """Remove table refs from columns in when statements."""
+    alias = expression.this.args.get("alias")
+
+    normalize = (
+        lambda identifier: self.dialect.normalize_identifier(identifier).name
+        if identifier
+        else None
+    )
+
+    targets = {normalize(expression.this.this)}
+
+    if alias:
+        targets.add(normalize(alias.this))
+
+    for when in expression.expressions:
+        when.transform(
+            lambda node: exp.column(node.this)
+            if isinstance(node, exp.Column) and normalize(node.args.get("table")) in targets
+            else node,
+            copy=False,
+        )
+
+    return self.merge_sql(expression)

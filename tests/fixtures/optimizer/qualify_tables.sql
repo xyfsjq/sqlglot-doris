@@ -19,9 +19,13 @@ SELECT 1 FROM x.y.z AS z;
 SELECT 1 FROM y.z AS z, z.a;
 SELECT 1 FROM c.y.z AS z, z.a;
 
-# title: cte can't be qualified
+# title: single cte
 WITH a AS (SELECT 1 FROM z) SELECT 1 FROM a;
-WITH a AS (SELECT 1 FROM c.db.z AS z) SELECT 1 FROM a;
+WITH a AS (SELECT 1 FROM c.db.z AS z) SELECT 1 FROM a AS a;
+
+# title: two ctes that are self-joined
+WITH a AS (SELECT 1 FROM z) SELECT 1 FROM a CROSS JOIN a;
+WITH a AS (SELECT 1 FROM c.db.z AS z) SELECT 1 FROM a AS a CROSS JOIN a AS a;
 
 # title: query that yields a single column as projection
 SELECT (SELECT y.c FROM y AS y) FROM x;
@@ -130,3 +134,7 @@ SELECT x FROM c.db.t AS t, LATERAL UNNEST(t.xs) AS _q_0;
 # title: table with ordinality
 SELECT * FROM t CROSS JOIN JSON_ARRAY_ELEMENTS(t.response) WITH ORDINALITY AS kv_json;
 SELECT * FROM c.db.t AS t CROSS JOIN JSON_ARRAY_ELEMENTS(t.response) WITH ORDINALITY AS kv_json;
+
+# title: alter table
+ALTER TABLE t ADD PRIMARY KEY (id) NOT ENFORCED;
+ALTER TABLE c.db.t ADD PRIMARY KEY (id) NOT ENFORCED;

@@ -169,15 +169,8 @@ def _unix_to_time_sql(self: Presto.Generator, expression: exp.UnixToTime) -> str
     timestamp = self.sql(expression, "this")
     if scale in (None, exp.UnixToTime.SECONDS):
         return rename_func("FROM_UNIXTIME")(self, expression)
-    if scale == exp.UnixToTime.MILLIS:
-        return f"FROM_UNIXTIME(CAST({timestamp} AS DOUBLE) / 1000)"
-    if scale == exp.UnixToTime.MICROS:
-        return f"FROM_UNIXTIME(CAST({timestamp} AS DOUBLE) / 1000000)"
-    if scale == exp.UnixToTime.NANOS:
-        return f"FROM_UNIXTIME(CAST({timestamp} AS DOUBLE) / 1000000000)"
 
-    self.unsupported(f"Unsupported scale for timestamp: {scale}.")
-    return ""
+    return f"FROM_UNIXTIME(CAST({timestamp} AS DOUBLE) / POW(10, {scale}))"
 
 
 def _to_int(expression: exp.Expression) -> exp.Expression:
@@ -377,6 +370,7 @@ class Presto(Dialect):
             exp.Encode: lambda self, e: encode_decode_sql(self, e, "TO_UTF8"),
             exp.FileFormatProperty: lambda self, e: f"FORMAT='{e.name.upper()}'",
             exp.First: _first_last_sql,
+            exp.FromTimeZone: lambda self, e: f"WITH_TIMEZONE({self.sql(e, 'this')}, {self.sql(e, 'zone')}) AT TIME ZONE 'UTC'",
             exp.GetPath: path_to_jsonpath(),
             exp.Group: transforms.preprocess([transforms.unalias_group]),
             exp.GroupConcat: lambda self, e: self.func(

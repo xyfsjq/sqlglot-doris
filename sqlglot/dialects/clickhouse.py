@@ -88,6 +88,8 @@ class ClickHouse(Dialect):
             "UINT8": TokenType.UTINYINT,
             "IPV4": TokenType.IPV4,
             "IPV6": TokenType.IPV6,
+            "AGGREGATEFUNCTION": TokenType.AGGREGATEFUNCTION,
+            "SIMPLEAGGREGATEFUNCTION": TokenType.SIMPLEAGGREGATEFUNCTION,
         }
 
         SINGLE_TOKENS = {
@@ -679,13 +681,15 @@ class ClickHouse(Dialect):
             exp.DataType.Type.UTINYINT: "UInt8",
             exp.DataType.Type.IPV4: "IPv4",
             exp.DataType.Type.IPV6: "IPv6",
+            exp.DataType.Type.AGGREGATEFUNCTION: "AggregateFunction",
+            exp.DataType.Type.SIMPLEAGGREGATEFUNCTION: "SimpleAggregateFunction",
         }
 
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
-            exp.Select: transforms.preprocess([transforms.eliminate_qualify]),
             exp.AnyValue: rename_func("any"),
             exp.ApproxDistinct: rename_func("uniq"),
+            exp.ArraySum: rename_func("arraySum"),
             exp.ArgMax: arg_max_or_min_no_count("argMax"),
             exp.ArgMin: arg_max_or_min_no_count("argMin"),
             exp.Array: inline_array_sql,
@@ -704,6 +708,7 @@ class ClickHouse(Dialect):
             exp.Quantile: _quantile_sql,
             exp.RegexpLike: lambda self, e: f"match({self.format_args(e.this, e.expression)})",
             exp.Rand: rename_func("randCanonical"),
+            exp.Select: transforms.preprocess([transforms.eliminate_qualify]),
             exp.StartsWith: rename_func("startsWith"),
             exp.StrPosition: lambda self, e: f"position({self.format_args(e.this, e.args.get('substr'), e.args.get('position'))})",
             exp.VarMap: lambda self, e: _lower_func(var_map_sql(self, e)),
