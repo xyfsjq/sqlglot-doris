@@ -259,6 +259,14 @@ class TestDoris(Validator):
             },
         )
 
+        self.validate_all(
+            "DATE_TRUNC(NOW(), 'day')",
+            read={
+                "hive": "TRUNC(current_timestamp(), 'DD')",
+                "oracle": "TRUNC(current_timestamp(), 'DD')",
+            },
+        )
+
     def test_regex(self):
         self.validate_all(
             "SELECT REGEXP_LIKE(abc, '%foo%')",

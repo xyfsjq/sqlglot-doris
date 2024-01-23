@@ -317,6 +317,10 @@ class Hive(Dialect):
             ),
             "TO_DATE": format_time_lambda(exp.TsOrDsToDate, "hive"),
             "TO_JSON": exp.JSONFormat.from_arg_list,
+            "TRUNC": lambda args: exp.DateTrunc(
+                unit=seq_get(args, 1),
+                this=seq_get(args, 0),
+            ),
             "UNBASE64": exp.FromBase64.from_arg_list,
             "UNIX_TIMESTAMP": format_time_lambda(exp.StrToUnix, "hive", True),
             "YEAR": lambda args: exp.Year(this=exp.TsOrDsToDate.from_arg_list(args)),

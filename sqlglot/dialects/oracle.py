@@ -97,6 +97,10 @@ class Oracle(Dialect):
             "TO_CHAR": to_char,
             "TO_TIMESTAMP": format_time_lambda(exp.StrToTime, "oracle"),
             "TO_DATE": format_time_lambda(exp.StrToDate, "oracle"),
+            "TRUNC": lambda args: exp.DateTrunc(
+                unit=seq_get(args, 1),
+                this=seq_get(args, 0),
+            ),
         }
 
         FUNCTION_PARSERS: t.Dict[str, t.Callable] = {
