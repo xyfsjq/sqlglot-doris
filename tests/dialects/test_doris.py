@@ -71,80 +71,6 @@ class TestDoris(Validator):
             },
         )
         self.validate_all(
-            "SELECT ARRAY_AVG(ARRAY(1, 2, 4))",
-            read={"clickhouse": "SELECT arrayAvg([1, 2, 4]);"},
-        )
-        self.validate_all(
-            "SELECT ARRAY_DISTINCT(ARRAY(1, 1, 2, 3, 3, 3))",
-            read={"clickhouse": "SELECT arrayCompact([1, 1, 2, 3, 3, 3])"},
-        )
-        self.validate_all(
-            "SELECT ARRAY_CUM_SUM(ARRAY(1, 1, 1, 1))",
-            read={"clickhouse": "SELECT ARRAY_CUM_SUM(ARRAY(1, 1, 1, 1))"},
-        )
-        self.validate_all(
-            "SELECT ARRAY_DIFFERENCE(ARRAY(1, 2, 3, 4))",
-            read={"clickhouse": "SELECT arrayDifference([1, 2, 3, 4])"},
-        )
-        self.validate_all(
-            "SELECT ARRAY_DISTINCT(ARRAY(1, 2, 2, 3, 1))",
-            read={"clickhouse": "SELECT arrayDistinct([1, 2, 2, 3, 1])"},
-        )
-        self.validate_all(
-            "SELECT ARRAY_EXISTS(x -> x > 1, ARRAY(1, 2, 3))",
-            read={"clickhouse": "SELECT arrayexists(x->x>1,[1,2,3])"},
-        )
-        self.validate_all(
-            "SELECT ARRAY_FILTER(x -> x LIKE '%World%',ARRAY('Hello', 'abc World')) AS res",
-            read={
-                "clickhouse": "SELECT arrayFilter(x -> x LIKE '%World%', ['Hello', 'abc World']) AS res"
-            },
-        )
-        self.validate_all(
-            "SELECT ARRAY_FIRST(x -> x > 2, ARRAY(1, 2, 3, 0))",
-            read={"clickhouse": "select arrayfirst(x->x>2, [1,2,3,0])"},
-        )
-        self.validate_all(
-            "SELECT ARRAY_FIRST_INDEX(x -> x + 1 > 3, ARRAY(2, 3, 4))",
-            read={"clickhouse": "select arrayFirstIndex(x->x+1>3, [2, 3, 4])"},
-        )
-        self.validate_all(
-            "SELECT ARRAY_INTERSECT(ARRAY(1, 2), ARRAY(1, 3))",
-            read={"clickhouse": "SELECT arrayIntersect([1, 2], [1, 3])"},
-        )
-        self.validate_all(
-            "SELECT ARRAY_LAST(x -> x > 2, ARRAY(1, 2, 3, 0))",
-            read={"clickhouse": "select arrayLast(x->x>2, [1,2,3,0])"},
-        )
-        self.validate_all(
-            "SELECT ARRAY_LAST_INDEX(x -> x + 1 > 3, ARRAY(2, 3, 4))",
-            read={"clickhouse": "select arrayLastIndex(x->x+1>3, [2, 3, 4])"},
-        )
-        self.validate_all(
-            "SELECT ARRAY_MAP(x -> (x + 2), ARRAY(1, 2, 3)) AS res",
-            read={"clickhouse": "SELECT arrayMap(x -> (x + 2), [1, 2, 3]) as res"},
-        )
-        self.validate_all(
-            "SELECT ARRAY_PRODUCT(ARRAY(1, 2, 3, 4, 5, 6))",
-            read={"clickhouse": "SELECT arrayProduct([1,2,3,4,5,6])"},
-        )
-        self.validate_all(
-            "SELECT ARRAY_REVERSE_SORT(ARRAY('hello', 'world', '!'))",
-            read={"clickhouse": "SELECT arrayReverseSort(['hello', 'world', '!'])"},
-        )
-        self.validate_all(
-            "SELECT ARRAY_SUM(x -> x * x, ARRAY(2, 3))",
-            read={"clickhouse": "SELECT arraySum(x -> x*x, [2, 3])"},
-        )
-        self.validate_all(
-            "SELECT SIZE(ARRAY_DISTINCT(ARRAY(1, 1, 2, 3, 3, 3)))",
-            read={"clickhouse": "SELECT arrayUniq([1, 1, 2, 3, 3, 3])"},
-        )
-        self.validate_all(
-            "SELECT ARRAY_ZIP(ARRAY('a', 'b', 'c'), ARRAY(5, 2, 1))",
-            read={"clickhouse": "SELECT arrayZip(['a', 'b', 'c'], [5, 2, 1])"},
-        )
-        self.validate_all(
             "${a}",
             read={"presto": "${a}"},
         )
@@ -181,13 +107,13 @@ class TestDoris(Validator):
             },
         )
         self.validate_all(
-            "SELECT YEARS_SUB(x, 1), MONTHS_SUB(x, 1), MONTHS_SUB(x, 1), MONTHS_SUB(x,3)",
+            "SELECT YEARS_SUB(x, 1), MONTHS_SUB(x, 1), SECONDS_SUB(x, 1), MONTHS_SUB(x,3)",
             read={
                 "clickhouse": "SELECT  subtractYears(x, 1), subtractMonths(x, 1), subtractSeconds(x, 1), subtractQuarters(x, 1)"
             },
         )
         self.validate_all(
-            "SELECT DATE_FORMAT(x, '%Y%m'), DATE_FORMAT(x, '%Y%m%d'), DATE_FORMAT(x, '%Y%m%d%H%i%s'), DATE_TRUNC(x, 'Quarter'), DATE_TRUNC(x, 'Quarter'), DATE_TRUNC(x, 'Quarter'), DATE_TRUNC(x, 'Quarter'), DATE_TRUNC(x, 'Quarter'), DATE_TRUNC(x, 'Quarter'), DATE_TRUNC(x, 'Quarter')",
+            "SELECT DATE_FORMAT(x, '%Y%m'), DATE_FORMAT(x, '%Y%m%d'), DATE_FORMAT(x, '%Y%m%d%H%i%s'), DATE_TRUNC(x, 'Quarter'), DATE_TRUNC(x, 'Month'), DATE_TRUNC(x, 'Week'), DATE_TRUNC(x, 'Day'), DATE_TRUNC(x, 'Hour'), DATE_TRUNC(x, 'Minute'), DATE_TRUNC(x, 'Second')",
             read={
                 "clickhouse": "SELECT toYYYYMM(x, 'US/Eastern'), toYYYYMMDD(x, 'US/Eastern'), toYYYYMMDDHHMMSS(x, 'US/Eastern'), toStartOfQuarter(x),  toStartOfMonth(x), toStartOfWeek(x), toStartOfDay(x), toStartOfHour(x), toStartOfMinute(x), toStartOfSecond(x)"
             },
@@ -341,6 +267,86 @@ class TestDoris(Validator):
                 "presto": "Shuffle(x)",
             },
         )
+        self.validate_all(
+            "ELEMENT_AT(ARRAY(1, 2, 3), 1)",
+            read={
+                "clickhouse": "arrayElement([1, 2, 3],1)",
+            },
+        )
+        self.validate_all(
+            "SELECT ARRAY_AVG(ARRAY(1, 2, 4))",
+            read={"clickhouse": "SELECT arrayAvg([1, 2, 4]);"},
+        )
+        self.validate_all(
+            "SELECT ARRAY_DISTINCT(ARRAY(1, 1, 2, 3, 3, 3))",
+            read={"clickhouse": "SELECT arrayCompact([1, 1, 2, 3, 3, 3])"},
+        )
+        self.validate_all(
+            "SELECT ARRAY_CUM_SUM(ARRAY(1, 1, 1, 1))",
+            read={"clickhouse": "SELECT arrayCumSum(ARRAY(1, 1, 1, 1))"},
+        )
+        self.validate_all(
+            "SELECT ARRAY_DIFFERENCE(ARRAY(1, 2, 3, 4))",
+            read={"clickhouse": "SELECT arrayDifference([1, 2, 3, 4])"},
+        )
+        self.validate_all(
+            "SELECT ARRAY_DISTINCT(ARRAY(1, 2, 2, 3, 1))",
+            read={"clickhouse": "SELECT arrayDistinct([1, 2, 2, 3, 1])"},
+        )
+        self.validate_all(
+            "SELECT ARRAY_EXISTS(x -> x > 1, ARRAY(1, 2, 3))",
+            read={"clickhouse": "SELECT arrayexists(x->x>1,[1,2,3])"},
+        )
+        self.validate_all(
+            "SELECT ARRAY_FILTER(x -> x LIKE '%World%',ARRAY('Hello', 'abc World')) AS res",
+            read={
+                "clickhouse": "SELECT arrayFilter(x -> x LIKE '%World%', ['Hello', 'abc World']) AS res"
+            },
+        )
+        self.validate_all(
+            "SELECT ARRAY_FIRST(x -> x > 2, ARRAY(1, 2, 3, 0))",
+            read={"clickhouse": "select arrayfirst(x->x>2, [1,2,3,0])"},
+        )
+        self.validate_all(
+            "SELECT ARRAY_FIRST_INDEX(x -> x + 1 > 3, ARRAY(2, 3, 4))",
+            read={"clickhouse": "select arrayFirstIndex(x->x+1>3, [2, 3, 4])"},
+        )
+        self.validate_all(
+            "SELECT ARRAY_INTERSECT(ARRAY(1, 2), ARRAY(1, 3))",
+            read={"clickhouse": "SELECT arrayIntersect([1, 2], [1, 3])"},
+        )
+        self.validate_all(
+            "SELECT ARRAY_LAST(x -> x > 2, ARRAY(1, 2, 3, 0))",
+            read={"clickhouse": "select arrayLast(x->x>2, [1,2,3,0])"},
+        )
+        self.validate_all(
+            "SELECT ARRAY_LAST_INDEX(x -> x + 1 > 3, ARRAY(2, 3, 4))",
+            read={"clickhouse": "select arrayLastIndex(x->x+1>3, [2, 3, 4])"},
+        )
+        self.validate_all(
+            "SELECT ARRAY_MAP(x -> (x + 2), ARRAY(1, 2, 3)) AS res",
+            read={"clickhouse": "SELECT arrayMap(x -> (x + 2), [1, 2, 3]) as res"},
+        )
+        self.validate_all(
+            "SELECT ARRAY_PRODUCT(ARRAY(1, 2, 3, 4, 5, 6))",
+            read={"clickhouse": "SELECT arrayProduct([1,2,3,4,5,6])"},
+        )
+        self.validate_all(
+            "SELECT ARRAY_REVERSE_SORT(ARRAY('hello', 'world', '!'))",
+            read={"clickhouse": "SELECT arrayReverseSort(['hello', 'world', '!'])"},
+        )
+        self.validate_all(
+            "SELECT ARRAY_SUM(x -> x * x, ARRAY(2, 3))",
+            read={"clickhouse": "SELECT arraySum(x -> x*x, [2, 3])"},
+        )
+        self.validate_all(
+            "SELECT SIZE(ARRAY_DISTINCT(ARRAY(1, 1, 2, 3, 3, 3)))",
+            read={"clickhouse": "SELECT arrayUniq([1, 1, 2, 3, 3, 3])"},
+        )
+        self.validate_all(
+            "SELECT ARRAY_ZIP(ARRAY('a', 'b', 'c'), ARRAY(5, 2, 1))",
+            read={"clickhouse": "SELECT arrayZip(['a', 'b', 'c'], [5, 2, 1])"},
+        )
 
     def test_bitmap(self):
         self.validate_all(
@@ -444,7 +450,7 @@ class TestDoris(Validator):
 
     def test_ip(self):
         self.validate_all(
-            "IPV4_STRING_TO_NUM(addr)",
+            "IPV4_STRING_TO_NUM_OR_DEFAULT(addr)",
             read={
                 "clickhouse": "IPv4StringToNumOrDefault(addr)",
             },

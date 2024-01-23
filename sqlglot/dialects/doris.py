@@ -284,6 +284,7 @@ class Doris(MySQL):
             exp.BitwiseAnd: rename_func("BITAND"),
             exp.BitwiseOr: rename_func("BITOR"),
             exp.BitwiseXor: rename_func("BITXOR"),
+            exp.ArrayPosition: rename_func("ELEMENT_AT"),
             exp.ArrayStringConcat: handle_array_concat,
             exp.ArrayToString: handle_array_to_string,
             exp.ArrayUniqueAgg: rename_func("COLLECT_SET"),

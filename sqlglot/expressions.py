@@ -5518,6 +5518,10 @@ class ArrayMap(Func):
     arg_types = {"this": True, "expression": False}
 
 
+class ArrayPosition(Func):
+    arg_types = {"this": True, "pos": True}
+
+
 class ArrayProduct(Func):
     arg_types = {"this": True, "expression": False}
 
@@ -5622,7 +5626,7 @@ class EndsWith(Func):
     arg_types = {"this": True, "expressions": True}
 
 
-class Ipv4StringToNum(Func):
+class Ipv4StringToNumOrDefault(Func):
     arg_types = {"this": True, "expressions": False}
 
 
