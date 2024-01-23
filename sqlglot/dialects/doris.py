@@ -199,7 +199,7 @@ def arrow_jsonb_extract_sql(self, expression: exp.JSONBExtract) -> str:
 
 
 def arrow_json_extract_scalar_sql(self, expression: exp.JSONExtractScalar) -> str:
-    # 将其中的数值或者字符串，提取出来
+    # Extract the numerical values or strings among them
     expr = self.sql(expression, "expression").strip("\"'")
     expr = extract_value_from_string(expr)
     if expr.isdigit():

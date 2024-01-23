@@ -346,7 +346,13 @@ class TestDoris(Validator):
         )
         self.validate_all(
             "SELECT ARRAY_SUM(x -> x * x, ARRAY(2, 3))",
-            read={"clickhouse": "SELECT arraySum(x -> x*x, [2, 3])"},
+            read={
+                "clickhouse": "SELECT arraySum(x -> x*x, [2, 3])",
+            },
+            write={
+                "clickhouse": "SELECT arraySum(x -> x * x, [2, 3])",
+                "doris": "SELECT ARRAY_SUM(x -> x * x, ARRAY(2, 3))",
+            },
         )
         self.validate_all(
             "SELECT SIZE(ARRAY_DISTINCT(ARRAY(1, 1, 2, 3, 3, 3)))",
@@ -598,6 +604,6 @@ class TestDoris(Validator):
         self.validate_all(
             "SELECT `a` FROM t1",
             read={
-                "presto": "select \"a\" from t1",
-            }
+                "presto": 'select "a" from t1',
+            },
         )
