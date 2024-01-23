@@ -593,3 +593,11 @@ class TestDoris(Validator):
                 "clickhouse": "EXP10(3)",
             },
         )
+
+    def test_Quoting(self):
+        self.validate_all(
+            "SELECT `a` FROM t1",
+            read={
+                "presto": "select \"a\" from t1",
+            }
+        )
