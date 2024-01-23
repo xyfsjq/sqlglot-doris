@@ -601,17 +601,18 @@ class TestDoris(Validator):
         )
         self.validate_all(
             "SELECT TRUNCATE(123.458, 1)",
-            read={
-                "hive": "select trunc(123.458,1)",
-                "oracle": "select trunc(123.458,1)"
-            }
+            read={"hive": "select trunc(123.458,1)", "oracle": "select trunc(123.458,1)"},
         )
         self.validate_all(
             "SELECT TRUNCATE(123.458, -1)",
+            read={"hive": "select trunc(123.458,-1)", "oracle": "select trunc(123.458,-1)"},
+        )
+        self.validate_all(
+            "TRUNCATE(123)",
             read={
-                "hive": "select trunc(123.458,-1)",
-                "oracle": "select trunc(123.458,-1)"
-            }
+                "hive": "trunc(123)",
+                "oracle": "trunc(123)",
+            },
         )
 
     def test_Quoting(self):
