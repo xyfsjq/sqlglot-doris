@@ -193,6 +193,15 @@ class TestDoris(Validator):
             },
         )
 
+        self.validate_all(
+            "NOW()",
+            read={
+                "hive": "SYSDATE",
+                "oracle": "SYSDATE",
+                "redshift": "SYSDATE",
+            },
+        )
+
     def test_regex(self):
         self.validate_all(
             "SELECT REGEXP_LIKE(abc, '%foo%')",
