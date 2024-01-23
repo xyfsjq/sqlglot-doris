@@ -442,7 +442,7 @@ class TestDoris(Validator):
 
     def test_ip(self):
         self.validate_all(
-            "IPV4_STRING_TO_NUM(addr)",
+            "IPV4_STRING_TO_NUM_OR_DEFAULT(addr)",
             read={
                 "clickhouse": "IPv4StringToNumOrDefault(addr)",
             },

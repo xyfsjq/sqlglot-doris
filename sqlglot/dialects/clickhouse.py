@@ -329,7 +329,7 @@ class ClickHouse(Dialect):
             "GROUPBITOR": exp.GroupBitOr.from_arg_list,
             "GROUPBITXOR": exp.GroupBitXor.from_arg_list,
             "HAS": exp.ArrayContains.from_arg_list,
-            "IPV4STRINGTONUMORDEFAULT": exp.Ipv4StringToNum.from_arg_list,
+            "IPV4STRINGTONUMORDEFAULT": exp.Ipv4StringToNumOrDefault.from_arg_list,
             "IPV6STRINGTONUMORDEFAULT": exp.Ipv6StringToNumOrDefault.from_arg_list,
             "LENGTHUTF8": exp.CharLength.from_arg_list,
             "LOWERUTF8": exp.Lower.from_arg_list,

@@ -5626,7 +5626,7 @@ class EndsWith(Func):
     arg_types = {"this": True, "expressions": True}
 
 
-class Ipv4StringToNum(Func):
+class Ipv4StringToNumOrDefault(Func):
     arg_types = {"this": True, "expressions": False}
 
 
