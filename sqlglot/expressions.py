@@ -4628,7 +4628,7 @@ class DateDiff(Func, TimeUnit):
 
 
 class DateTrunc(Func):
-    arg_types = {"unit": True, "this": True, "zone": False}
+    arg_types = {"unit": False, "this": True, "zone": False}
 
     def __init__(self, **args):
         unit = args.get("unit")
@@ -5500,6 +5500,10 @@ class GroupBitXor(Func):
 
 class Replace(Func):
     arg_types = {"this": True, "old": False, "new": False}
+
+
+class Explain(Expression):
+    arg_types = {"this": True, "expressions": True}
 
 
 # @HuangHaijun add expr

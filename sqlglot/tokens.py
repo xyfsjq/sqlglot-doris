@@ -366,6 +366,7 @@ class TokenType(AutoName):
     UNIQUE = auto()
     VERSION_SNAPSHOT = auto()
     TIMESTAMP_SNAPSHOT = auto()
+    EXPLAIN = auto()
 
 
 _ALL_TOKEN_TYPES = list(TokenType)
@@ -843,7 +844,7 @@ class Tokenizer(metaclass=_Tokenizer):
         "CALL": TokenType.COMMAND,
         "COMMENT": TokenType.COMMENT,
         "COPY": TokenType.COMMAND,
-        "EXPLAIN": TokenType.COMMAND,
+        "EXPLAIN": TokenType.EXPLAIN,
         "GRANT": TokenType.COMMAND,
         "OPTIMIZE": TokenType.COMMAND,
         "PREPARE": TokenType.COMMAND,

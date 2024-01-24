@@ -1393,6 +1393,10 @@ class Generator:
         sql = f"INSERT{alternative}{ignore}{this}{by_name}{exists}{partition_sql}{where}{expression_sql}"
         return self.prepend_ctes(expression, sql)
 
+    def explain_sql(self, expression: exp.Explain) -> str:
+        expr = self.sql(expression, "expressions")
+        return f"EXPLAIN {expr}"
+
     def intersect_sql(self, expression: exp.Intersect) -> str:
         return self.prepend_ctes(
             expression,

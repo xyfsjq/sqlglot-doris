@@ -482,11 +482,14 @@ def traverse_scope(expression: exp.Expression) -> t.List[Scope]:
 
     Args:
         expression (exp.Expression): expression to traverse
+
     Returns:
         list[Scope]: scope instances
     """
-    if isinstance(expression, exp.Unionable) or (
-        isinstance(expression, exp.DDL) and isinstance(expression.expression, exp.Subqueryable)
+    if (
+        isinstance(expression, exp.Unionable)
+        or (isinstance(expression, exp.DDL) and isinstance(expression.expression, exp.Unionable))
+        or isinstance(expression, exp.Explain)
     ):
         return list(_traverse_scope(Scope(expression)))
 
@@ -510,6 +513,8 @@ def build_scope(expression: exp.Expression) -> t.Optional[Scope]:
 
 def _traverse_scope(scope):
     if isinstance(scope.expression, exp.Select):
+        yield from _traverse_select(scope)
+    elif isinstance(scope.expression, exp.Explain):
         yield from _traverse_select(scope)
     elif isinstance(scope.expression, exp.Union):
         yield from _traverse_union(scope)

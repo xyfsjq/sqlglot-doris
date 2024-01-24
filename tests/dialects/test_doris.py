@@ -137,6 +137,12 @@ class TestDoris(Validator):
                 "clickhouse": "NotEmpty('')",
             },
         )
+        self.validate_all(
+            "CHAR_LENGTH('x')",
+            read={
+                "clickhouse": "lengthUTF8('x')",
+            },
+        )
 
     def test_identity(self):
         self.validate_identity("COALECSE(a, b, c, d)")
@@ -651,9 +657,19 @@ class TestDoris(Validator):
             },
         )
         self.validate_all(
-            "TRUNCATE('x')",
+            "SELECT TRUNCATE(123.458, 1)",
+            read={"hive": "select trunc(123.458,1)", "oracle": "select trunc(123.458,1)"},
+        )
+        self.validate_all(
+            "SELECT TRUNCATE(123.458, -1)",
+            read={"hive": "select trunc(123.458,-1)", "oracle": "select trunc(123.458,-1)"},
+        )
+        self.validate_all(
+            "TRUNCATE(123)",
             read={
-                "postgres": "trunc('x')",
+                "postgres": "trunc(123)",
+                "hive": "trunc(123)",
+                "oracle": "trunc(123)",
             },
         )
 
@@ -662,5 +678,13 @@ class TestDoris(Validator):
             "SELECT `a` FROM t1",
             read={
                 "presto": 'select "a" from t1',
+            },
+        )
+
+    def test_explain(self):
+        self.validate_all(
+            "EXPLAIN SELECT * FROM (SELECT id, sum(CASE WHEN a = '2' THEN cost ELSE 0 END) AS avg FROM t GROUP BY id)",
+            read={
+                "presto": "explain select * from (select id,sum(cost) filter(where a='2') as avg from t group by id)",
             },
         )

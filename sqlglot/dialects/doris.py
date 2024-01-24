@@ -86,7 +86,9 @@ def handle_date_trunc(self, expression: exp.DateTrunc) -> str:
     if unit.isalpha():
         mapped_unit = DATE_DELTA_INTERVAL.get(unit) or unit
         return f"DATE_TRUNC({this}, '{mapped_unit}')"
-    if unit.isdigit():
+    if unit.isdigit() or unit.lstrip("-").isdigit() or this.isdigit():
+        if this.isdigit():
+            return f"TRUNCATE({this})"
         return f"TRUNCATE({this}, {unit})"
     return f"DATE({this})"
 
@@ -266,6 +268,18 @@ class Doris(MySQL):
             "TO_DATE": exp.TsOrDsToDate.from_arg_list,
         }
 
+        def _parse_explain(self) -> exp.Explain:
+            this = "explain"
+            comments = self._prev_comments
+            return self.expression(
+                exp.Explain,
+                comments=comments,
+                **{  # type: ignore
+                    "this": this,
+                    "expressions": self._parse_select(nested=True),
+                },
+            )
+
     class Generator(MySQL.Generator):
         CAST_MAPPING = {}
         INTERVAL_ALLOWS_PLURAL_FORM = False
@@ -375,3 +389,7 @@ class Doris(MySQL):
                 return this
 
             return f"${{{this}}}"
+
+        def explain_sql(self, expression: exp.Explain) -> str:
+            expr = self.sql(expression, "expressions")
+            return f"EXPLAIN {expr}"
