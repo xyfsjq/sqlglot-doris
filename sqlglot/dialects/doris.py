@@ -259,6 +259,18 @@ class Doris(MySQL):
             "TO_DATE": exp.TsOrDsToDate.from_arg_list,
         }
 
+        def _parse_explain(self) -> exp.Explain:
+            this = "explain"
+            comments = self._prev_comments
+            return self.expression(
+                exp.Explain,
+                comments=comments,
+                **{  # type: ignore
+                    "this": this,
+                    "expressions": self._parse_select(nested=True),
+                },
+            )
+
     class Generator(MySQL.Generator):
         CAST_MAPPING = {}
         INTERVAL_ALLOWS_PLURAL_FORM = False
@@ -367,3 +379,7 @@ class Doris(MySQL):
                 return this
 
             return f"${{{this}}}"
+
+        def explain_sql(self, expression: exp.Explain) -> str:
+            expr = self.sql(expression, "expressions")
+            return f"EXPLAIN {expr}"

@@ -5502,6 +5502,10 @@ class Replace(Func):
     arg_types = {"this": True, "old": False, "new": False}
 
 
+class Explain(Expression):
+    arg_types = {"this": True, "expressions": True}
+
+
 # @HuangHaijun add expr
 class ArrayToString(Func):
     arg_types = {"this": True, "sep": True, "null_replace": False}

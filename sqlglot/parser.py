@@ -615,6 +615,7 @@ class Parser(metaclass=_Parser):
             and exp.var(self._prev.text),
             this=self._parse_table(schema=False),
         ),
+        TokenType.EXPLAIN: lambda self: self._parse_explain(),
     }
 
     UNARY_PARSERS = {
@@ -2187,6 +2188,18 @@ class Parser(metaclass=_Parser):
                 "returning": returning or self._parse_returning(),
                 "order": self._parse_order(),
                 "limit": self._parse_limit(),
+            },
+        )
+
+    def _parse_explain(self) -> exp.Explain:
+        this = "explain"
+        comments = self._prev_comments
+        return self.expression(
+            exp.Explain,
+            comments=comments,
+            **{  # type: ignore
+                "this": this,
+                "expressions": self._parse_select(nested=True),
             },
         )
 

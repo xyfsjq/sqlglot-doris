@@ -622,3 +622,11 @@ class TestDoris(Validator):
                 "presto": 'select "a" from t1',
             },
         )
+
+    def test_explain(self):
+        self.validate_all(
+            "EXPLAIN SELECT * FROM (SELECT id, sum(CASE WHEN a = '2' THEN cost ELSE 0 END) AS avg FROM t GROUP BY id)",
+            read={
+                "presto": "explain select * from (select id,sum(cost) filter(where a='2') as avg from t group by id)",
+            },
+        )
