@@ -137,12 +137,6 @@ class TestDoris(Validator):
                 "clickhouse": "NotEmpty('')",
             },
         )
-        self.validate_all(
-            "CHAR_LENGTH('x')",
-            read={
-                "clickhouse": "lengthUTF8('x')",
-            },
-        )
 
     def test_identity(self):
         self.validate_identity("COALECSE(a, b, c, d)")
@@ -247,9 +241,29 @@ class TestDoris(Validator):
             read={"presto": "transform(ARRAY [5, 6], x -> x + 1)"},
         )
         self.validate_all(
-            "SELECT ARRAY_POPBACK(ARRAY(1, 2, 3)), ARRAY_POPFRONT(ARRAY(1, 2, 3)), ARRAY_PUSHBACK(ARRAY(1, 2, 3)), ARRAY_PUSHFRONT(ARRAY(1, 2, 3))",
+            "SELECT ARRAY_POPBACK(ARRAY(1, 2, 3))",
             read={
-                "clickhouse": "select arrayPopBack([1, 2, 3]), arrayPopFront([1, 2, 3]),  arrayPushBack([1, 2, 3]), arrayPushFront([1, 2, 3])"
+                "clickhouse": "select arrayPopBack([1, 2, 3])",
+            },
+        )
+        self.validate_all(
+            "SELECT ARRAY_POPFRONT(ARRAY(1, 2, 3))",
+            read={
+                "clickhouse": "select  arrayPopFront([1, 2, 3])",
+            },
+        )
+        self.validate_all(
+            "SELECT ARRAY_PUSHBACK(ARRAY(1, 2, 3), 4)",
+            read={
+                "clickhouse": "select arrayPushBack([1, 2, 3], 4)",
+                "postgres": "select ARRAY_APPEND([1, 2, 3], 4)",
+            },
+        )
+        self.validate_all(
+            "SELECT ARRAY_PUSHFRONT(ARRAY(1, 2, 3), 4)",
+            read={
+                "clickhouse": "select arrayPushFront([1, 2, 3], 4)",
+                "postgres": "select ARRAY_PREPEND(4, [1, 2, 3])",
             },
         )
         self.validate_all(
@@ -483,6 +497,7 @@ class TestDoris(Validator):
             read={
                 "presto": "index('abc','a')",
                 "clickhouse": "position('abc','a')",
+                "postgres": "strpos('abc','a')",
             },
         )
         self.validate_all(
@@ -539,6 +554,20 @@ class TestDoris(Validator):
                 "clickhouse": "multiMatchAny('Hello, World!', ['hello', '!', 'world'])",
             },
         )
+        self.validate_all(
+            "LENGTH('x')",
+            read={
+                "postgres": "octet_length('x')",
+                "oracle": "lengthb('x')",
+            },
+        )
+        self.validate_all(
+            "CHAR_LENGTH('x')",
+            read={
+                "clickhouse": "lengthUTF8('x')",
+                "oracle": "length('x')",
+            },
+        )
 
     def test_code(self):
         self.validate_all(
@@ -553,12 +582,24 @@ class TestDoris(Validator):
                 "clickhouse": "base64Decode('x')",
             },
         )
+        self.validate_all(
+            "HEX('x')",
+            read={
+                "postgres": "to_hex('x')",
+            },
+        )
 
     def test_json(self):
         self.validate_all(
             "JSONB_EXTRACT('{\"id\": \"33\"}','$.id')",
             read={
                 "clickhouse": "JSONExtractString('{\"id\": \"33\"}' , 'id')",
+            },
+        )
+        self.validate_all(
+            'JSON_EXTRACT(\'{"f2":{"f3":1},"f4":{"f5":99,"f6":"foo"}}\',\'$.f4\')',
+            read={
+                "postgres": 'json_extract_path(\'{"f2":{"f3":1},"f4":{"f5":99,"f6":"foo"}}\', \'f4\')',
             },
         )
 
@@ -597,6 +638,22 @@ class TestDoris(Validator):
             "POWER(10, 3)",
             read={
                 "clickhouse": "EXP10(3)",
+            },
+        )
+        self.validate_all(
+            "LOG10(x)",
+            read={
+                "duckdb": "LOG(x)",
+                "postgres": "LOG(x)",
+                "redshift": "LOG(x)",
+                "sqlite": "LOG(x)",
+                "teradata": "LOG(x)",
+            },
+        )
+        self.validate_all(
+            "TRUNCATE('x')",
+            read={
+                "postgres": "trunc('x')",
             },
         )
 

@@ -290,23 +290,33 @@ class Postgres(Dialect):
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
+            "ARRAY_APPEND": exp.ArrayPushback.from_arg_list,
+            "ARRAY_PREPEND": lambda args: exp.ArrayPushfront(
+                this=seq_get(args, 1),
+                expressions=seq_get(args, 0),
+            ),
             "ARRAY_TO_STRING": exp.ArrayToString.from_arg_list,
             "BIT_AND": exp.GroupBitAnd.from_arg_list,
             "BIT_OR": exp.GroupBitOr.from_arg_list,
             "BIT_XOR": exp.GroupBitXor.from_arg_list,
             "DATE_TRUNC": parse_timestamp_trunc,
             "GENERATE_SERIES": _generate_series,
+            "JSON_EXTRACT_PATH": exp.JSONExtractScalar.from_arg_list,
             "MAKE_TIME": exp.TimeFromParts.from_arg_list,
             "MAKE_TIMESTAMP": exp.TimestampFromParts.from_arg_list,
             "NOW": exp.CurrentTimestamp.from_arg_list,
+            "OCTET_LENGTH": exp.Length.from_arg_list,
             "REGEXP_MATCH": lambda args: exp.RegexpExtract(
                 this=seq_get(args, 0),
                 expression=seq_get(args, 1),
                 position="1",
             ),
             "REGEXP_MATCHES": exp.RegexpExtract.from_arg_list,
+            "STRPOS": exp.StrPosition.from_arg_list,
             "TO_CHAR": format_time_lambda(exp.TimeToStr, "postgres"),
+            "TO_HEX": exp.Hex.from_arg_list,
             "TO_TIMESTAMP": _to_timestamp,
+            "TRUNC": exp.Truncate.from_arg_list,
             "UNNEST": exp.Explode.from_arg_list,
         }
 

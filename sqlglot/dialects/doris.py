@@ -91,6 +91,15 @@ def handle_date_trunc(self, expression: exp.DateTrunc) -> str:
     return f"DATE({this})"
 
 
+def handle_log(self, expression: exp.Log) -> str:
+    this = self.sql(expression, "this")
+    expression = self.sql(expression, "expression")
+
+    if expression == "":
+        return self.func("LOG10", this)
+    return self.func("LOG", this, expression)
+
+
 def handle_filter(self, expr: exp.Filter) -> str:
     expression = expr.copy()
     self.sql(expr, "this")
@@ -305,6 +314,7 @@ class Doris(MySQL):
             exp.JSONExtract: arrow_json_extract_sql,
             exp.JSONBExtract: arrow_jsonb_extract_sql,
             exp.JSONBExtractScalar: arrow_jsonb_extract_scalar_sql,
+            exp.Log: handle_log,
             exp.LTrim: rename_func("LTRIM"),
             exp.Map: rename_func("ARRAY_MAP"),
             exp.NotEmpty: rename_func("NOT_NULL_OR_EMPTY"),

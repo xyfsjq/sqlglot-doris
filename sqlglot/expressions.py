@@ -5691,6 +5691,10 @@ class RegexpReplaceOne(Func):
     arg_types = {"this": True, "expression": True, "replacement": True}
 
 
+class Truncate(Func):
+    arg_types = {"this": True, "expression": False}
+
+
 class Hour(Func):
     arg_types = {"this": True, "expression": False}
 
