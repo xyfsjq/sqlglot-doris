@@ -57,6 +57,12 @@ def handle_array_to_string(self, expression: exp.ArrayToString) -> str:
     return result
 
 
+def handle_concat_ws(self, expression: exp.ConcatWs) -> str:
+    delim, *rest_args = expression.expressions
+    rest_args_sql = ", ".join(self.sql(arg) for arg in rest_args)
+    return f"CONCAT_WS({self.sql(delim)}, {rest_args_sql})"
+
+
 def handle_date_diff(self, expression: exp.DateDiff) -> str:
     unit = self.sql(expression, "unit").lower()
     expressions = self.sql(expression, "expression")
@@ -326,12 +332,12 @@ class Doris(MySQL):
             exp.BitwiseXor: rename_func("BITXOR"),
             exp.BitmapXOrCount: rename_func("BITMAP_XOR_COUNT"),
             exp.CastToStrType: lambda self, e: f"CAST({self.sql(e, 'this')} AS {self.sql(e, 'to')})",
+            exp.ConcatWs: handle_concat_ws,
             exp.CountIf: count_if_to_sum,
             exp.CurrentDate: no_paren_current_date_sql,
             exp.CurrentTimestamp: lambda *_: "NOW()",
             exp.DateDiff: handle_date_diff,
             exp.DPipe: lambda self, e: f"CONCAT({self.sql(e, 'this')},{self.sql(e, 'expression')})",
-            # exp.DateSub: lambda self, e: f"DATE_SUB({self.sql(e, 'this')},{self.sql(e, 'expression')})",
             exp.DateTrunc: handle_date_trunc,
             exp.Empty: rename_func("NULL_OR_EMPTY"),
             exp.Filter: handle_filter,

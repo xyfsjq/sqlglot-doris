@@ -574,6 +574,12 @@ class TestDoris(Validator):
                 "oracle": "length('x')",
             },
         )
+        self.validate_all(
+            "CONCAT_WS(',', 'abcde', 2, NULL, 22)",
+            read={
+                "postgres": "concat_ws(',', 'abcde', 2, NULL, 22);",
+            },
+        )
 
     def test_code(self):
         self.validate_all(
