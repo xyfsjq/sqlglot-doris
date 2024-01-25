@@ -724,7 +724,6 @@ class TestDoris(Validator):
 
         expected_result_1 = "SELECT * FROM T AS T"
         input_sql_1 = """select * from t"""
-        # expr = sqlglot.parse_one(read="presto", sql=sql)
         result_1 = qualify_tables(
             sqlglot.parse_one(read="presto", sql=input_sql_1), case_sensitive=True
         ).sql("doris")
@@ -732,3 +731,13 @@ class TestDoris(Validator):
             result_1 == expected_result_1
         ), f"Transpile result doesn't match expected result. Expected: {expected_result_1}, Actual: {result_1}"
         print("Test1 passed!")
+
+        expected_result_2 = "SELECT * FROM t AS t"
+        input_sql_2 = """select * from T"""
+        result_2 = qualify_tables(
+            sqlglot.parse_one(read="presto", sql=input_sql_2), case_sensitive=False
+        ).sql("doris")
+        assert (
+            result_2 == expected_result_2
+        ), f"Transpile result doesn't match expected result. Expected: {expected_result_2}, Actual: {result_2}"
+        print("Test2 passed!")
