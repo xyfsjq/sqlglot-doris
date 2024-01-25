@@ -5506,6 +5506,11 @@ class Explain(Expression):
     arg_types = {"this": True, "expressions": True}
 
 
+class JsonArrayLength(Func):
+    _sql_names = ["JSON_ARRAY_LENGTH"]
+    arg_types = {"this": True, "expressions": False}
+
+
 # @HuangHaijun add expr
 class ArrayToString(Func):
     arg_types = {"this": True, "sep": True, "null_replace": False}

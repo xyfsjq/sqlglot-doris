@@ -616,6 +616,27 @@ class TestDoris(Validator):
                 "postgres": 'json_extract_path(\'{"f2":{"f3":1},"f4":{"f5":99,"f6":"foo"}}\', \'f4\')',
             },
         )
+        self.validate_all(
+            "JSON_CONTAINS(x, '1')",
+            read={
+                "mysql": "JSON_ARRAY_CONTAINS(x, '1')",
+            },
+        )
+        self.validate_all(
+            "JSON_PARSE(x)",
+            read={
+                "presto": "JSON_PARSE(x)",
+                "snowflake": "PARSE_JSON(x)",
+                "bigquery": "PARSE_JSON(x)",
+            },
+        )
+        self.validate_all(
+            "JSON_LENGTH(x)",
+            read={
+                "presto": "JSON_ARRAY_LENGTH(x)",
+                "trino": "JSON_ARRAY_LENGTH(x)",
+            },
+        )
 
     def test_math(self):
         self.validate_all(
