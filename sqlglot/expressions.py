@@ -6655,6 +6655,7 @@ def alias_(
     quoted: t.Optional[bool] = None,
     dialect: DialectType = None,
     copy: bool = True,
+    case_sensitive: t.Optional[bool] = None,
     **opts,
 ):
     """Create an Alias expression.
@@ -6681,6 +6682,14 @@ def alias_(
         Alias: the aliased expression
     """
     exp = maybe_parse(expression, dialect=dialect, copy=copy, **opts)
+    # Control table case
+    # if case_sensitive is none,table keep. if case_sensitive is true, table to upper.
+    # if case_sensitive is false, table to lower.
+    if case_sensitive != None:
+        if case_sensitive:
+            exp.set("this", exp.name.upper())
+        else:
+            exp.set("this", exp.name.lower())
     alias = to_identifier(alias, quoted=quoted)
 
     if table:

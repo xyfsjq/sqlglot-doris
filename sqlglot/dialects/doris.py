@@ -255,6 +255,7 @@ class Doris(MySQL):
             "ARRAY_SORT": exp.SortArray.from_arg_list,
             "COLLECT_LIST": exp.ArrayAgg.from_arg_list,
             "COLLECT_SET": exp.ArrayUniqueAgg.from_arg_list,
+            "TRUNCATE": exp.Truncate.from_arg_list,
             "DATE_TRUNC": parse_timestamp_trunc,
             "DATE_ADD": exp.DateAdd.from_arg_list,
             "DATE_SUB": exp.DateSub.from_arg_list,

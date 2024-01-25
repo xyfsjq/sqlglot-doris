@@ -15,6 +15,7 @@ def qualify_tables(
     expression: E,
     db: t.Optional[str | exp.Identifier] = None,
     catalog: t.Optional[str | exp.Identifier] = None,
+    case_sensitive: t.Optional[bool] = None,
     schema: t.Optional[Schema] = None,
     dialect: DialectType = None,
 ) -> E:
@@ -85,9 +86,26 @@ def qualify_tables(
                     # Don't add the pivot's alias to the pivoted table, use the table's name instead
                     if pivots and pivots[0].alias == name:
                         name = source.name
-
+                    # Control table alias case
+                    # if case_sensitive is none,table keep. if case_sensitive is true, table to upper.
+                    # if case_sensitive is false, table to lower.
+                    alias_name = name or source.name or next_alias_name()
+                    if case_sensitive == None:
+                        pass
+                    else:
+                        if case_sensitive:
+                            alias_name = alias_name.upper()
+                        else:
+                            alias_name = alias_name.lower()
                     # Mutates the source by attaching an alias to it
-                    alias(source, name or source.name or next_alias_name(), copy=False, table=True)
+                    # Control table case
+                    alias(
+                        source,
+                        alias_name,
+                        copy=False,
+                        table=True,
+                        case_sensitive=case_sensitive,
+                    )
 
                 if pivots and not pivots[0].alias:
                     pivots[0].set(

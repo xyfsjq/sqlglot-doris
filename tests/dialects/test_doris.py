@@ -688,3 +688,18 @@ class TestDoris(Validator):
                 "presto": "explain select * from (select id,sum(cost) filter(where a='2') as avg from t group by id)",
             },
         )
+
+    def test_case_sensitive(self):
+        import sqlglot
+        from sqlglot.optimizer.qualify_tables import qualify_tables
+
+        expected_result_1 = "SELECT * FROM T AS T"
+        input_sql_1 = """select * from t"""
+        # expr = sqlglot.parse_one(read="presto", sql=sql)
+        result_1 = qualify_tables(
+            sqlglot.parse_one(read="presto", sql=input_sql_1), case_sensitive=True
+        ).sql("doris")
+        assert (
+            result_1 == expected_result_1
+        ), f"Transpile result doesn't match expected result. Expected: {expected_result_1}, Actual: {result_1}"
+        print("Test1 passed!")
