@@ -5695,6 +5695,11 @@ class RegexpReplaceOne(Func):
     arg_types = {"this": True, "expression": True, "replacement": True}
 
 
+class StAstext(Func):
+    _sql_names = ["TO_GEOGRAPHY", "TRY_TO_GEOGRAPHY", "ST_GEOGRAPHYFROMWKB"]
+    arg_types = {"this": True, "expression": False}
+
+
 class Truncate(Func):
     arg_types = {"this": True, "expression": False}
 

@@ -595,6 +595,14 @@ class TestDoris(Validator):
             },
         )
 
+    def test_geography(self):
+        self.validate_all(
+            "ST_ASTEXT(ST_POINT(-122.35, 37.55))",
+            read={
+                "snowflake": "ST_GEOGRAPHYFROMWKB('POINT(-122.35 37.55)')",
+            },
+        )
+
     def test_json(self):
         self.validate_all(
             "JSONB_EXTRACT('{\"id\": \"33\"}','$.id')",

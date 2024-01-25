@@ -423,12 +423,15 @@ class Snowflake(Dialect):
             "REGEXP_SUBSTR": exp.RegexpExtract.from_arg_list,
             "RLIKE": exp.RegexpLike.from_arg_list,
             "SQUARE": lambda args: exp.Pow(this=seq_get(args, 0), expression=exp.Literal.number(2)),
+            "ST_GEOGRAPHYFROMWKB": exp.StAstext.from_arg_list,
             "TIMEDIFF": _parse_datediff,
             "TIMESTAMPDIFF": _parse_datediff,
             "TIMESTAMPFROMPARTS": _parse_timestamp_from_parts,
             "TIMESTAMP_FROM_PARTS": _parse_timestamp_from_parts,
+            "TO_GEOGRAPHY": exp.StAstext.from_arg_list,
             "TO_TIMESTAMP": _parse_to_timestamp,
             "TO_VARCHAR": exp.ToChar.from_arg_list,
+            "TRY_TO_GEOGRAPHY": exp.StAstext.from_arg_list,
             "ZEROIFNULL": _zeroifnull_to_if,
         }
 

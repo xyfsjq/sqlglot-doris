@@ -93,6 +93,18 @@ def handle_date_trunc(self, expression: exp.DateTrunc) -> str:
     return f"DATE({this})"
 
 
+def handle_geography(
+    self, expression: exp.StAstext
+) -> str:  # Realize the identification of geography
+    this = self.sql(expression, "this").upper()
+    match = re.search(r"POINT\(([-\d.]+) ([-\d.]+)\)", this)
+    if match is None:
+        return f"ST_ASTEXT(ST_GEOMETRYFROMWKB({this}))"
+    x = float(match.group(1))
+    y = float(match.group(2))
+    return f"ST_ASTEXT(ST_POINT{x, y})"
+
+
 def handle_log(self, expression: exp.Log) -> str:
     this = self.sql(expression, "this")
     expression = self.sql(expression, "expression")
@@ -296,34 +308,33 @@ class Doris(MySQL):
 
         TRANSFORMS = {
             **MySQL.Generator.TRANSFORMS,
-            exp.ArgMax: rename_func("MAX_BY"),
-            exp.ArgMin: rename_func("MIN_BY"),
             exp.ApproxDistinct: approx_count_distinct_sql,
             exp.ApproxQuantile: rename_func("PERCENTILE_APPROX"),
+            exp.ArgMax: rename_func("MAX_BY"),
+            exp.ArgMin: rename_func("MIN_BY"),
             exp.ArrayAgg: rename_func("COLLECT_LIST"),
             exp.ArrayFilter: lambda self, e: f"ARRAY_FILTER({self.sql(e, 'expression')},{self.sql(e, 'this')})",
             exp.ArrayUniq: lambda self, e: f"SIZE(ARRAY_DISTINCT({self.sql(e, 'this')}))",
             exp.ArrayOverlaps: rename_func("ARRAYS_OVERLAP"),
-            exp.BitwiseNot: rename_func("BITNOT"),
-            exp.BitwiseAnd: rename_func("BITAND"),
-            exp.BitwiseOr: rename_func("BITOR"),
-            exp.BitwiseXor: rename_func("BITXOR"),
             exp.ArrayPosition: rename_func("ELEMENT_AT"),
             exp.ArrayStringConcat: handle_array_concat,
             exp.ArrayToString: handle_array_to_string,
             exp.ArrayUniqueAgg: rename_func("COLLECT_SET"),
+            exp.BitwiseNot: rename_func("BITNOT"),
+            exp.BitwiseAnd: rename_func("BITAND"),
+            exp.BitwiseOr: rename_func("BITOR"),
+            exp.BitwiseXor: rename_func("BITXOR"),
             exp.BitmapXOrCount: rename_func("BITMAP_XOR_COUNT"),
             exp.CastToStrType: lambda self, e: f"CAST({self.sql(e, 'this')} AS {self.sql(e, 'to')})",
+            exp.CountIf: count_if_to_sum,
+            exp.CurrentDate: no_paren_current_date_sql,
             exp.CurrentTimestamp: lambda *_: "NOW()",
             exp.DateDiff: handle_date_diff,
             exp.DPipe: lambda self, e: f"CONCAT({self.sql(e, 'this')},{self.sql(e, 'expression')})",
-            exp.CurrentDate: no_paren_current_date_sql,
-            exp.CountIf: count_if_to_sum,
             # exp.DateSub: lambda self, e: f"DATE_SUB({self.sql(e, 'this')},{self.sql(e, 'expression')})",
             exp.DateTrunc: handle_date_trunc,
             exp.Empty: rename_func("NULL_OR_EMPTY"),
             exp.Filter: handle_filter,
-            exp.Shuffle: rename_func("ARRAY_SHUFFLE"),
             exp.GroupConcat: _string_agg_sql,
             exp.JSONExtractScalar: arrow_json_extract_scalar_sql,
             exp.JSONExtract: arrow_json_extract_sql,
@@ -335,23 +346,30 @@ class Doris(MySQL):
             exp.NotEmpty: rename_func("NOT_NULL_OR_EMPTY"),
             exp.QuartersAdd: lambda self, e: f"MONTHS_ADD({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
             exp.QuartersSub: lambda self, e: f"MONTHS_SUB({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
+            exp.Rand: handle_rand,
             exp.RegexpLike: rename_func("REGEXP"),
             exp.RegexpExtract: handle_regexp_extract,
             exp.RegexpSplit: rename_func("SPLIT_BY_STRING"),
-            exp.Rand: handle_rand,
             exp.Replace: handle_replace,
             exp.RTrim: rename_func("RTRIM"),
-            exp.StrToUnix: _str_to_unix_sql,
-            exp.Split: rename_func("SPLIT_BY_STRING"),
             exp.SHA2: lambda self, e: f"SHA2({self.sql(e, 'this')},{self.sql(e, 'length')})",
+            exp.Shuffle: rename_func("ARRAY_SHUFFLE"),
+            exp.Slice: rename_func("ARRAY_SLICE"),
             exp.SortArray: rename_func("ARRAY_SORT"),
+            exp.Split: rename_func("SPLIT_BY_STRING"),
+            exp.StAstext: handle_geography,
             exp.StrPosition: lambda self, e: (
                 f"LOCATE({self.sql(e, 'substr')}, {self.sql(e, 'this')}, {self.sql(e, 'instance')})"
                 if self.sql(e, "instance")
                 else f"LOCATE({self.sql(e, 'substr')}, {self.sql(e, 'this')})"
             ),
-            exp.Slice: rename_func("ARRAY_SLICE"),
+            exp.StrToUnix: _str_to_unix_sql,
+            exp.TimestampTrunc: lambda self, e: self.func(
+                "DATE_TRUNC", e.this, "'" + e.text("unit") + "'"
+            ),
             exp.TimeStrToDate: rename_func("TO_DATE"),
+            exp.TimeStrToUnix: rename_func("UNIX_TIMESTAMP"),
+            exp.TimeToUnix: rename_func("UNIX_TIMESTAMP"),
             exp.ToChar: lambda self, e: f"DATE_FORMAT({self.sql(e, 'this')}, {self.format_time(e)})",
             exp.Today: lambda self, e: f"TO_DATE(NOW())",
             exp.ToStartOfDay: lambda self, e: f"DATE_TRUNC({self.sql(e, 'this')}, 'Day')",
@@ -366,11 +384,6 @@ class Doris(MySQL):
             exp.ToYyyymmddhhmmss: lambda self, e: f"DATE_FORMAT({self.sql(e, 'this')}, '%Y%m%d%H%i%s')",
             exp.TsOrDsAdd: lambda self, e: f"DATE_ADD({self.sql(e, 'this')}, {self.sql(e, 'expression')})",  # Only for day level
             exp.TsOrDsToDate: handle_to_date,
-            exp.TimeStrToUnix: rename_func("UNIX_TIMESTAMP"),
-            exp.TimeToUnix: rename_func("UNIX_TIMESTAMP"),
-            exp.TimestampTrunc: lambda self, e: self.func(
-                "DATE_TRUNC", e.this, "'" + e.text("unit") + "'"
-            ),
             exp.UnixToStr: lambda self, e: self.func(
                 "FROM_UNIXTIME", e.this, time_format("doris")(self, e)
             ),
