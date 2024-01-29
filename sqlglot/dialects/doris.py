@@ -262,7 +262,9 @@ class Doris(MySQL):
         "%d": "dd",
         "%s": "ss",
         "%H": "HH24",
+        "%H": "hh24",  # oracle to_date('2005-01-01 13:14:20','yyyy-MM-dd hh24:mm:ss')
         "%i": "mi",
+        "%i": "mm",  # oracle to_date('2005-01-01 13:14:20','yyyy-MM-dd hh24:mm:ss')
     }
 
     class Parser(MySQL.Parser):

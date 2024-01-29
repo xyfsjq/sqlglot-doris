@@ -580,6 +580,18 @@ class TestDoris(Validator):
                 "postgres": "concat_ws(',', 'abcde', 2, NULL, 22);",
             },
         )
+        self.validate_all(
+            "DATE_FORMAT(NOW(), '%d')",
+            read={
+                "oracle": "to_char(sysdate,'dd')",
+            },
+        )
+        self.validate_all(
+            "ROUND(1210.73, 2)",
+            read={
+                "oracle": "to_char(1210.73, '9999.99')",
+            },
+        )
 
     def test_code(self):
         self.validate_all(

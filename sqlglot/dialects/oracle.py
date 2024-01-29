@@ -37,8 +37,9 @@ def _parse_xml_table(self: Oracle.Parser) -> exp.XMLTable:
     return self.expression(exp.XMLTable, this=this, passing=passing, columns=columns, by_ref=by_ref)
 
 
-def to_char(args: t.List) -> exp.TimeToStr | exp.ToChar:
+def to_char(args: t.List) -> t.Union[exp.TimeToStr, exp.ToChar, exp.Round]:
     this = seq_get(args, 0)
+    expr = seq_get(args, 1)
 
     if this and not this.type:
         from sqlglot.optimizer.annotate_types import annotate_types
@@ -46,6 +47,16 @@ def to_char(args: t.List) -> exp.TimeToStr | exp.ToChar:
         annotate_types(this)
         if this.is_type(*exp.DataType.TEMPORAL_TYPES):
             return format_time_lambda(exp.TimeToStr, "oracle", default=True)(args)
+
+        if expr is not None:
+            expression = expr.this
+            try:
+                # 尝试将字符串转换为浮点数
+                float(expression)
+                strlen = len(expression.split(".")[1]) if "." in expression else 0
+                return exp.Round(this=this.this, decimals=exp.Literal.number(strlen))
+            except ValueError:
+                return exp.ToChar.from_arg_list(args)
 
     return exp.ToChar.from_arg_list(args)
 
