@@ -76,9 +76,11 @@ def _format_time_lambda(
             format=exp.Literal.string(
                 format_time(
                     args[0].name.lower(),
-                    {**TSQL.TIME_MAPPING, **FULL_FORMAT_TIME_MAPPING}
-                    if full_format_mapping
-                    else TSQL.TIME_MAPPING,
+                    (
+                        {**TSQL.TIME_MAPPING, **FULL_FORMAT_TIME_MAPPING}
+                        if full_format_mapping
+                        else TSQL.TIME_MAPPING
+                    ),
                 )
             ),
         )
@@ -264,6 +266,15 @@ def _parse_timefromparts(args: t.List) -> exp.TimeFromParts:
     )
 
 
+def _parse_len(args: t.List) -> exp.Length:
+    this = seq_get(args, 0)
+
+    if this and not this.is_string:
+        this = exp.cast(this, exp.DataType.Type.TEXT)
+
+    return exp.Length(this=this)
+
+
 class TSQL(Dialect):
     NORMALIZATION_STRATEGY = NormalizationStrategy.CASE_INSENSITIVE
     TIME_FORMAT = "'yyyy-mm-dd hh:mm:ss'"
@@ -431,7 +442,7 @@ class TSQL(Dialect):
             "IIF": exp.If.from_arg_list,
             "ISNULL": exp.Coalesce.from_arg_list,
             "JSON_VALUE": exp.JSONExtractScalar.from_arg_list,
-            "LEN": exp.Length.from_arg_list,
+            "LEN": _parse_len,
             "REPLICATE": exp.Repeat.from_arg_list,
             "SQUARE": lambda args: exp.Pow(this=seq_get(args, 0), expression=exp.Literal.number(2)),
             "SYSDATETIME": exp.CurrentTimestamp.from_arg_list,
@@ -469,6 +480,7 @@ class TSQL(Dialect):
 
         ALTER_TABLE_ADD_REQUIRED_FOR_EACH_COLUMN = False
         STRING_ALIASES = True
+        NO_PAREN_IF_COMMANDS = False
 
         def _parse_projections(self) -> t.List[exp.Expression]:
             """
@@ -478,9 +490,11 @@ class TSQL(Dialect):
             See: https://learn.microsoft.com/en-us/sql/t-sql/queries/select-clause-transact-sql?view=sql-server-ver16#syntax
             """
             return [
-                exp.alias_(projection.expression, projection.this.this, copy=False)
-                if isinstance(projection, exp.EQ) and isinstance(projection.this, exp.Column)
-                else projection
+                (
+                    exp.alias_(projection.expression, projection.this.this, copy=False)
+                    if isinstance(projection, exp.EQ) and isinstance(projection.this, exp.Column)
+                    else projection
+                )
                 for projection in super()._parse_projections()
             ]
 
@@ -702,7 +716,6 @@ class TSQL(Dialect):
             exp.GroupConcat: _string_agg_sql,
             exp.If: rename_func("IIF"),
             exp.LastDay: lambda self, e: self.func("EOMONTH", e.this),
-            exp.Length: rename_func("LEN"),
             exp.Max: max_or_greatest,
             exp.MD5: lambda self, e: self.func("HASHBYTES", exp.Literal.string("MD5"), e.this),
             exp.Min: min_or_least,
@@ -922,3 +935,11 @@ class TSQL(Dialect):
             this = self.sql(expression, "this")
             expressions = self.expressions(expression, flat=True, sep=" ")
             return f"CONSTRAINT {this} {expressions}"
+
+        def length_sql(self, expression: exp.Length) -> str:
+            this = expression.this
+            if isinstance(this, exp.Cast) and this.is_type(exp.DataType.Type.TEXT):
+                this_sql = self.sql(this, "this")
+            else:
+                this_sql = self.sql(this)
+            return self.func("LEN", this_sql)

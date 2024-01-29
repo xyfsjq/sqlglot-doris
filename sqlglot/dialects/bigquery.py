@@ -5,7 +5,6 @@ import re
 import typing as t
 
 from sqlglot import exp, generator, parser, tokens, transforms
-from sqlglot._typing import E
 from sqlglot.dialects.dialect import (
     Dialect,
     NormalizationStrategy,
@@ -30,7 +29,7 @@ from sqlglot.helper import seq_get, split_num_words
 from sqlglot.tokens import TokenType
 
 if t.TYPE_CHECKING:
-    from typing_extensions import Literal
+    from sqlglot._typing import E, Lit
 
 logger = logging.getLogger("sqlglot")
 
@@ -47,9 +46,11 @@ def _derived_table_values_to_unnest(self: BigQuery.Generator, expression: exp.Va
                 exp.alias_(value, column_name)
                 for value, column_name in zip(
                     t.expressions,
-                    alias.columns
-                    if alias and alias.columns
-                    else (f"_c{i}" for i in range(len(t.expressions))),
+                    (
+                        alias.columns
+                        if alias and alias.columns
+                        else (f"_c{i}" for i in range(len(t.expressions)))
+                    ),
                 )
             ]
         )
@@ -473,12 +474,10 @@ class BigQuery(Dialect):
             return table
 
         @t.overload
-        def _parse_json_object(self, agg: Literal[False]) -> exp.JSONObject:
-            ...
+        def _parse_json_object(self, agg: Lit[False]) -> exp.JSONObject: ...
 
         @t.overload
-        def _parse_json_object(self, agg: Literal[True]) -> exp.JSONObjectAgg:
-            ...
+        def _parse_json_object(self, agg: Lit[True]) -> exp.JSONObjectAgg: ...
 
         def _parse_json_object(self, agg=False):
             json_object = super()._parse_json_object()
@@ -546,9 +545,11 @@ class BigQuery(Dialect):
             exp.ArrayContains: _array_contains_sql,
             exp.ArraySize: rename_func("ARRAY_LENGTH"),
             exp.Cast: transforms.preprocess([transforms.remove_precision_parameterized_types]),
-            exp.CollateProperty: lambda self, e: f"DEFAULT COLLATE {self.sql(e, 'this')}"
-            if e.args.get("default")
-            else f"COLLATE {self.sql(e, 'this')}",
+            exp.CollateProperty: lambda self, e: (
+                f"DEFAULT COLLATE {self.sql(e, 'this')}"
+                if e.args.get("default")
+                else f"COLLATE {self.sql(e, 'this')}"
+            ),
             exp.CountIf: rename_func("COUNTIF"),
             exp.Create: _create_sql,
             exp.CTE: transforms.preprocess([_pushdown_cte_column_names]),
@@ -598,9 +599,9 @@ class BigQuery(Dialect):
             exp.SHA2: lambda self, e: self.func(
                 f"SHA256" if e.text("length") == "256" else "SHA512", e.this
             ),
-            exp.StabilityProperty: lambda self, e: f"DETERMINISTIC"
-            if e.name == "IMMUTABLE"
-            else "NOT DETERMINISTIC",
+            exp.StabilityProperty: lambda self, e: (
+                f"DETERMINISTIC" if e.name == "IMMUTABLE" else "NOT DETERMINISTIC"
+            ),
             exp.StrToDate: lambda self, e: f"PARSE_DATE({self.format_time(e)}, {self.sql(e, 'this')})",
             exp.StrToTime: lambda self, e: self.func(
                 "PARSE_TIMESTAMP", self.format_time(e), e.this, e.args.get("zone")

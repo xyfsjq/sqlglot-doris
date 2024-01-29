@@ -12,9 +12,7 @@ from sqlglot.tokens import Token, Tokenizer, TokenType
 from sqlglot.trie import TrieResult, in_trie, new_trie
 
 if t.TYPE_CHECKING:
-    from typing_extensions import Literal
-
-    from sqlglot._typing import E
+    from sqlglot._typing import E, Lit
     from sqlglot.dialects.dialect import Dialect, DialectType
 
 logger = logging.getLogger("sqlglot")
@@ -660,9 +658,11 @@ class Parser(metaclass=_Parser):
     PLACEHOLDER_PARSERS = {
         TokenType.PLACEHOLDER: lambda self: self.expression(exp.Placeholder),
         TokenType.PARAMETER: lambda self: self._parse_parameter(),
-        TokenType.COLON: lambda self: self.expression(exp.Placeholder, this=self._prev.text)
-        if self._match(TokenType.NUMBER) or self._match_set(self.ID_VAR_TOKENS)
-        else None,
+        TokenType.COLON: lambda self: (
+            self.expression(exp.Placeholder, this=self._prev.text)
+            if self._match(TokenType.NUMBER) or self._match_set(self.ID_VAR_TOKENS)
+            else None
+        ),
     }
 
     RANGE_PARSERS = {
@@ -832,6 +832,7 @@ class Parser(metaclass=_Parser):
     ALTER_PARSERS = {
         "ADD": lambda self: self._parse_alter_table_add(),
         "ALTER": lambda self: self._parse_alter_table_alter(),
+        "CLUSTER BY": lambda self: self._parse_cluster(wrapped=True),
         "DELETE": lambda self: self.expression(exp.Delete, where=self._parse_where()),
         "DROP": lambda self: self._parse_alter_table_drop(),
         "RENAME": lambda self: self._parse_alter_table_rename(),
@@ -982,6 +983,9 @@ class Parser(metaclass=_Parser):
     # Whether query modifiers such as LIMIT are attached to the UNION node (vs its right operand)
     MODIFIERS_ATTACHED_TO_UNION = True
     UNION_MODIFIERS = {"order", "limit", "offset"}
+
+    # parses no parenthesis if statements as commands
+    NO_PAREN_IF_COMMANDS = True
 
     __slots__ = (
         "error_level",
@@ -1223,12 +1227,10 @@ class Parser(metaclass=_Parser):
 
         # We use _find_sql because self.sql may comprise multiple chunks, and we're only
         # interested in emitting a warning for the one being currently processed.
-        sql = self._find_sql(self._tokens[0], self._tokens[-1])
+        sql = self._find_sql(self._tokens[0], self._tokens[-1])[: self.error_message_context]
 
         logger.warning(
-            f"Input '{sql}' contains unsupported syntax, proceeding to parse it into the"
-            " fallback 'Command' expression. Consider filing a GitHub issue to request support"
-            " for this syntax, e.g. if transpilation or AST metadata extraction is required."
+            f"'{sql}' contains unsupported syntax. Falling back to parsing as a 'Command'."
         )
 
     def _parse_command(self) -> exp.Command:
@@ -1546,11 +1548,13 @@ class Parser(metaclass=_Parser):
 
         return self.expression(
             exp.FileFormatProperty,
-            this=self.expression(
-                exp.InputOutputFormat, input_format=input_format, output_format=output_format
-            )
-            if input_format or output_format
-            else self._parse_var_or_string() or self._parse_number() or self._parse_id_var(),
+            this=(
+                self.expression(
+                    exp.InputOutputFormat, input_format=input_format, output_format=output_format
+                )
+                if input_format or output_format
+                else self._parse_var_or_string() or self._parse_number() or self._parse_id_var()
+            ),
         )
 
     def _parse_property_assignment(self, exp_class: t.Type[E], **kwargs: t.Any) -> E:
@@ -1662,8 +1666,15 @@ class Parser(metaclass=_Parser):
 
         return self.expression(exp.ChecksumProperty, on=on, default=self._match(TokenType.DEFAULT))
 
-    def _parse_cluster(self) -> exp.Cluster:
-        return self.expression(exp.Cluster, expressions=self._parse_csv(self._parse_ordered))
+    def _parse_cluster(self, wrapped: bool = False) -> exp.Cluster:
+        return self.expression(
+            exp.Cluster,
+            expressions=(
+                self._parse_wrapped_csv(self._parse_ordered)
+                if wrapped
+                else self._parse_csv(self._parse_ordered)
+            ),
+        )
 
     def _parse_clustered_by(self) -> exp.ClusteredByProperty:
         self._match_text_seq("BY")
@@ -3669,6 +3680,7 @@ class Parser(metaclass=_Parser):
 
                     return exp.DataType.build(type_name, udt=True)
                 else:
+                    self._retreat(self._index - 1)
                     return None
             else:
                 return None
@@ -4478,6 +4490,10 @@ class Parser(metaclass=_Parser):
             self._match_r_paren()
         else:
             index = self._index - 1
+
+            if self.NO_PAREN_IF_COMMANDS and index == 0:
+                return self._parse_as_command(self._prev)
+
             condition = self._parse_conjunction()
 
             if not condition:
@@ -4689,12 +4705,10 @@ class Parser(metaclass=_Parser):
         return None
 
     @t.overload
-    def _parse_json_object(self, agg: Literal[False]) -> exp.JSONObject:
-        ...
+    def _parse_json_object(self, agg: Lit[False]) -> exp.JSONObject: ...
 
     @t.overload
-    def _parse_json_object(self, agg: Literal[True]) -> exp.JSONObjectAgg:
-        ...
+    def _parse_json_object(self, agg: Lit[True]) -> exp.JSONObjectAgg: ...
 
     def _parse_json_object(self, agg=False):
         star = self._parse_star()
@@ -5343,6 +5357,8 @@ class Parser(metaclass=_Parser):
             return self.expression(exp.AlterColumn, this=column, drop=True)
         if self._match_pair(TokenType.SET, TokenType.DEFAULT):
             return self.expression(exp.AlterColumn, this=column, default=self._parse_conjunction())
+        if self._match(TokenType.COMMENT):
+            return self.expression(exp.AlterColumn, this=column, comment=self._parse_string())
 
         self._match_text_seq("SET", "DATA")
         return self.expression(
@@ -5728,14 +5744,12 @@ class Parser(metaclass=_Parser):
         return True
 
     @t.overload
-    def _replace_columns_with_dots(self, this: exp.Expression) -> exp.Expression:
-        ...
+    def _replace_columns_with_dots(self, this: exp.Expression) -> exp.Expression: ...
 
     @t.overload
     def _replace_columns_with_dots(
         self, this: t.Optional[exp.Expression]
-    ) -> t.Optional[exp.Expression]:
-        ...
+    ) -> t.Optional[exp.Expression]: ...
 
     def _replace_columns_with_dots(self, this):
         if isinstance(this, exp.Dot):
