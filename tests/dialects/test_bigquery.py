@@ -18,6 +18,29 @@ class TestBigQuery(Validator):
     maxDiff = None
 
     def test_bigquery(self):
+        self.validate_identity(
+            "create or replace view test (tenant_id OPTIONS(description='Test description on table creation')) select 1 as tenant_id, 1 as customer_id;",
+            "CREATE OR REPLACE VIEW test (tenant_id OPTIONS (description='Test description on table creation')) AS SELECT 1 AS tenant_id, 1 AS customer_id",
+        )
+
+        with self.assertLogs(helper_logger) as cm:
+            statements = parse(
+                """
+            BEGIN
+              DECLARE 1;
+              IF from_date IS NULL THEN SET x = 1;
+              END IF;
+            END
+            """,
+                read="bigquery",
+            )
+            self.assertIn("unsupported syntax", cm.output[0])
+
+        for actual, expected in zip(
+            statements, ("BEGIN DECLARE 1", "IF from_date IS NULL THEN SET x = 1", "END IF", "END")
+        ):
+            self.assertEqual(actual.sql(dialect="bigquery"), expected)
+
         with self.assertLogs(helper_logger) as cm:
             self.validate_identity(
                 "SELECT * FROM t AS t(c1, c2)",
@@ -87,7 +110,7 @@ class TestBigQuery(Validator):
                 [s.sql(dialect="bigquery") for s in for_in_stmts],
                 ["FOR record IN (SELECT word FROM shakespeare) DO SELECT record.word", "END FOR"],
             )
-            assert "Input 'END FOR'" in cm.output[0]
+            assert "'END FOR'" in cm.output[0]
 
         self.validate_identity("SELECT * FROM dataset.my_table TABLESAMPLE SYSTEM (10 PERCENT)")
         self.validate_identity("TIME('2008-12-25 15:30:00+08')")
