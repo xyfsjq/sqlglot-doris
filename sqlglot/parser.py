@@ -2203,7 +2203,7 @@ class Parser(metaclass=_Parser):
         )
 
     def _parse_explain(self) -> exp.Explain:
-        this = "explain"
+        this = self._prev.text
         comments = self._prev_comments
         return self.expression(
             exp.Explain,

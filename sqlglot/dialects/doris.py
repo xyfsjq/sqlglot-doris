@@ -416,5 +416,6 @@ class Doris(MySQL):
             return f"${{{this}}}"
 
         def explain_sql(self, expression: exp.Explain) -> str:
+            this = self.sql(expression, "this")
             expr = self.sql(expression, "expressions")
-            return f"EXPLAIN {expr}"
+            return f"{this} {expr}"

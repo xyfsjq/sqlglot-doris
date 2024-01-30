@@ -742,9 +742,33 @@ class TestDoris(Validator):
 
     def test_explain(self):
         self.validate_all(
-            "EXPLAIN SELECT * FROM (SELECT id, sum(CASE WHEN a = '2' THEN cost ELSE 0 END) AS avg FROM t GROUP BY id)",
+            "explain SELECT * FROM (SELECT id, sum(CASE WHEN a = '2' THEN cost ELSE 0 END) AS avg FROM t GROUP BY id)",
             read={
                 "presto": "explain select * from (select id,sum(cost) filter(where a='2') as avg from t group by id)",
+            },
+        )
+        self.validate_all(
+            "EXPLAIN SHAPE PLAN SELECT COUNT(*), ANY_VALUE(y) FROM (SELECT COUNT(*) FROM test1)",
+            read={
+                "presto": "explain shape plan select count(*),arbitrary(y) from (select count(*) from test1)",
+            },
+        )
+        self.validate_all(
+            "EXPLAIN VERBOSE SELECT COUNT(*), ANY_VALUE(y) FROM (SELECT COUNT(*) FROM test1)",
+            read={
+                "presto": "explain verbose select count(*),arbitrary(y) from (select count(*) from test1)",
+            },
+        )
+        self.validate_all(
+            "EXPLAIN MEMO PLAN SELECT COUNT(*), ANY_VALUE(y) FROM (SELECT COUNT(*) FROM test1)",
+            read={
+                "presto": "explain memo plan select count(*),arbitrary(y) from (select count(*) from test1)",
+            },
+        )
+        self.validate_all(
+            "EXPLAIN PHYSICAL PLAN SELECT COUNT(*), ANY_VALUE(y) FROM (SELECT COUNT(*) FROM test1)",
+            read={
+                "presto": "explain physical plan select count(*),arbitrary(y) from (select count(*) from test1)",
             },
         )
 
