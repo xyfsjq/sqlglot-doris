@@ -382,6 +382,14 @@ class TestDoris(Validator):
             "SELECT ARRAY_ZIP(ARRAY('a', 'b', 'c'), ARRAY(5, 2, 1))",
             read={"clickhouse": "SELECT arrayZip(['a', 'b', 'c'], [5, 2, 1])"},
         )
+        self.validate_all(
+            "SELECT ARRAY_ZIP(ARRAY('a', 'b', 'c'), ARRAY(5, 2, 1))",
+            read={"clickhouse": "SELECT arrayZip(['a', 'b', 'c'], [5, 2, 1])"},
+        )
+        self.validate_all(
+            "COLLECT_LIST(res)",
+            read={"clickhouse": " groupArray(res)"},
+        )
 
     def test_bitmap(self):
         self.validate_all(

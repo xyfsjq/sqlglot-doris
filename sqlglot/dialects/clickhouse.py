@@ -188,6 +188,7 @@ class ClickHouse(Dialect):
                 expression=seq_get(args, 0),
             ),
             "EXTRACTALL": exp.RegexpExtract.from_arg_list,
+            "GROUPARRAY": exp.ArrayAgg.from_arg_list,
             "GROUPBITAND": exp.GroupBitAnd.from_arg_list,
             "GROUPBITOR": exp.GroupBitOr.from_arg_list,
             "GROUPBITXOR": exp.GroupBitXor.from_arg_list,
