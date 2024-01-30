@@ -51,7 +51,7 @@ def to_char(args: t.List) -> t.Union[exp.TimeToStr, exp.ToChar, exp.Round]:
         if expr is not None:
             expression = expr.this
             try:
-                # 尝试将字符串转换为浮点数
+                # Try to convert a string to a floating point number
                 float(expression)
                 strlen = len(expression.split(".")[1]) if "." in expression else 0
                 return exp.Round(this=this.this, decimals=exp.Literal.number(strlen))

@@ -194,6 +194,8 @@ class ClickHouse(Dialect):
             "HAS": exp.ArrayContains.from_arg_list,
             "IPV4STRINGTONUMORDEFAULT": exp.Ipv4StringToNumOrDefault.from_arg_list,
             "IPV6STRINGTONUMORDEFAULT": exp.Ipv6StringToNumOrDefault.from_arg_list,
+            "ISIPV4STRING": exp.IsIpv4String.from_arg_list,
+            "ISIPV6STRING": exp.IsIpv6String.from_arg_list,
             "LENGTHUTF8": exp.CharLength.from_arg_list,
             "LOWERUTF8": exp.Lower.from_arg_list,
             "MAP": parse_var_map,

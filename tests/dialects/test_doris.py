@@ -496,6 +496,18 @@ class TestDoris(Validator):
                 "clickhouse": "IPv6StringToNumOrDefault(addr)",
             },
         )
+        self.validate_all(
+            "IS_IPV4_STRING(addr)",
+            read={
+                "clickhouse": "IsIPv4String(addr)",
+            },
+        )
+        self.validate_all(
+            "IS_IPV6_STRING(addr)",
+            read={
+                "clickhouse": "IsIPv6String(addr)",
+            },
+        )
 
     def test_varchar(self):
         self.validate_all(
