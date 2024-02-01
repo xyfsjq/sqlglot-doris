@@ -1111,7 +1111,7 @@ class TestDialect(Validator):
             },
             write={
                 "bigquery": "JSON_EXTRACT(x, '$.y')",
-                "doris": "JSONB_EXTRACT(x,'$.y')",
+                "doris": "JSONB_EXTRACT(x, '$.y')",
                 "duckdb": "x -> '$.y'",
                 "mysql": "JSON_EXTRACT(x, '$.y')",
                 "oracle": "JSON_EXTRACT(x, '$.y')",
@@ -1158,7 +1158,7 @@ class TestDialect(Validator):
             },
             write={
                 "bigquery": "JSON_EXTRACT(x, '$.y[0].z')",
-                "doris": "x -> '$.y[0].z'",
+                "doris": "JSONB_EXTRACT(x, '$.y[0].z')",
                 "duckdb": "x -> '$.y[0].z'",
                 "mysql": "JSON_EXTRACT(x, '$.y[0].z')",
                 "oracle": "JSON_EXTRACT(x, '$.y[0].z')",

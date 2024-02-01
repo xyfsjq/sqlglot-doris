@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import re
+import typing as t
 
 from sqlglot import exp, generator
 from sqlglot.dialects.dialect import (
     approx_count_distinct_sql,
     count_if_to_sum,
     parse_timestamp_trunc,
+    prepend_dollar_to_path,
     rename_func,
     time_format,
 )
@@ -249,6 +251,28 @@ def arrow_jsonb_extract_scalar_sql(self, expression: exp.JSONBExtractScalar) -> 
     return f"JSON_EXTRACT({self.sql(expression, 'this')},'$.{path}')"
 
 
+def _json_extract_sql(
+    self: Doris.Generator,
+    expression: exp.JSONExtract | exp.JSONExtractScalar | exp.JSONBExtract | exp.JSONBExtractScalar,
+) -> str:
+    return self.func(
+        "JSONB_EXTRACT",
+        expression.this,
+        expression.expression,
+        # *json_path_segments(self, expression.expression),
+        expression.args.get("null_if_invalid"),
+    )
+
+
+def path_to_jsonpath(
+    name: str = "JSONB_EXTRACT",
+) -> t.Callable[[generator.Generator, exp.GetPath], str]:
+    def _transform(self: generator.Generator, expression: exp.GetPath) -> str:
+        return rename_func(name)(self, prepend_dollar_to_path(expression))
+
+    return _transform
+
+
 class Doris(MySQL):
     DATE_FORMAT = "'yyyy-MM-dd'"
     DATEINT_FORMAT = "'yyyyMMdd'"
@@ -344,10 +368,11 @@ class Doris(MySQL):
             exp.Empty: rename_func("NULL_OR_EMPTY"),
             exp.Filter: handle_filter,
             exp.GroupConcat: _string_agg_sql,
-            exp.JSONExtractScalar: arrow_json_extract_scalar_sql,
-            exp.JSONExtract: arrow_json_extract_sql,
-            exp.JSONBExtract: arrow_jsonb_extract_sql,
-            exp.JSONBExtractScalar: arrow_jsonb_extract_scalar_sql,
+            exp.GetPath: path_to_jsonpath(),
+            exp.JSONExtractScalar: _json_extract_sql,
+            exp.JSONExtract: _json_extract_sql,
+            exp.JSONBExtract: _json_extract_sql,
+            exp.JSONBExtractScalar: _json_extract_sql,
             exp.JSONArrayContains: rename_func("JSON_CONTAINS"),
             exp.ParseJSON: rename_func("JSON_PARSE"),
             exp.JsonArrayLength: rename_func("JSON_LENGTH"),

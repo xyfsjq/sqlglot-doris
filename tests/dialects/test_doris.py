@@ -656,13 +656,13 @@ class TestDoris(Validator):
 
     def test_json(self):
         self.validate_all(
-            "JSONB_EXTRACT('{\"id\": \"33\"}','$.id')",
+            "JSONB_EXTRACT('{\"id\": \"33\"}', '$.id')",
             read={
-                "clickhouse": "JSONExtractString('{\"id\": \"33\"}' , 'id')",
+                "clickhouse": "JSONExtractString('{\"id\": \"33\"}' , '$.id')",
             },
         )
         self.validate_all(
-            'JSON_EXTRACT(\'{"f2":{"f3":1},"f4":{"f5":99,"f6":"foo"}}\',\'$.f4\')',
+            'JSONB_EXTRACT(\'{"f2":{"f3":1},"f4":{"f5":99,"f6":"foo"}}\', \'$.f4\')',
             read={
                 "postgres": 'json_extract_path(\'{"f2":{"f3":1},"f4":{"f5":99,"f6":"foo"}}\', \'f4\')',
             },
