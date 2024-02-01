@@ -5595,7 +5595,7 @@ class ArrayPushfront(Func):
 
 
 class ArraySlice(Func):
-    arg_types = {"this": True, "off": False, "len": False}
+    arg_types = {"this": True, "off": True, "len": False}
 
 
 class ArrayRange(Func):

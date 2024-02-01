@@ -206,7 +206,7 @@ class TestDoris(Validator):
             "DATE_FORMAT(CAST('2022-08-20 08:23:42' AS DATETIME), '%Y-%m-%d %H:%i:%s')",
             read={
                 "presto": "format_datetime(TIMESTAMP '2022-08-20 08:23:42', 'yyyy-MM-dd HH:mm:ss')"
-            }
+            },
         )
 
     def test_regex(self):
@@ -301,6 +301,12 @@ class TestDoris(Validator):
             "ARRAY_SHUFFLE(x)",
             read={
                 "presto": "Shuffle(x)",
+            },
+        )
+        self.validate_all(
+            "ARRAY_SLICE(ARRAY(1, 2, 3), 1)",
+            read={
+                "presto": "slice([1,2,3],1)",
             },
         )
         self.validate_all(

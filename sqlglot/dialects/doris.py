@@ -264,7 +264,6 @@ class Doris(MySQL):
         "%H": "HH24",
         "%H": "hh24",  # oracle to_date('2005-01-01 13:14:20','yyyy-MM-dd hh24:mm:ss')
         "%H": "HH",
-        "%i": "mi",
         "%i": "mm",
     }
 
