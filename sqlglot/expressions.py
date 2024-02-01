@@ -29,6 +29,7 @@ from sqlglot.helper import (
     camel_to_snake_case,
     ensure_collection,
     ensure_list,
+    is_int,
     seq_get,
     subclasses,
 )
@@ -175,13 +176,7 @@ class Expression(metaclass=_Expression):
         """
         Checks whether a Literal expression is an integer.
         """
-        if self.is_number:
-            try:
-                int(self.name)
-                return True
-            except ValueError:
-                pass
-        return False
+        return self.is_number and is_int(self.name)
 
     @property
     def is_star(self) -> bool:
@@ -3807,6 +3802,7 @@ class DataType(Expression):
         dtype: DATA_TYPE,
         dialect: DialectType = None,
         udt: bool = False,
+        copy: bool = True,
         **kwargs,
     ) -> DataType:
         """
@@ -3817,7 +3813,8 @@ class DataType(Expression):
             dialect: the dialect to use for parsing `dtype`, in case it's a string.
             udt: when set to True, `dtype` will be used as-is if it can't be parsed into a
                 DataType, thus creating a user-defined type.
-            kawrgs: additional arguments to pass in the constructor of DataType.
+            copy: whether or not to copy the data type.
+            kwargs: additional arguments to pass in the constructor of DataType.
 
         Returns:
             The constructed DataType object.
@@ -3839,7 +3836,7 @@ class DataType(Expression):
         elif isinstance(dtype, DataType.Type):
             data_type_exp = DataType(this=dtype)
         elif isinstance(dtype, DataType):
-            return dtype
+            return maybe_copy(dtype, copy)
         else:
             raise ValueError(f"Invalid data type: {type(dtype)}. Expected str or DataType.Type")
 
@@ -3857,7 +3854,7 @@ class DataType(Expression):
             True, if and only if there is a type in `dtypes` which is equal to this DataType.
         """
         for dtype in dtypes:
-            other = DataType.build(dtype, udt=True)
+            other = DataType.build(dtype, copy=False, udt=True)
 
             if (
                 other.expressions
@@ -4492,15 +4489,37 @@ class Avg(AggFunc):
 
 
 class AnyValue(AggFunc):
-    arg_types = {"this": True, "having": False, "max": False, "ignore_nulls": False}
+    arg_types = {"this": True, "having": False, "max": False}
 
 
-class First(Func):
-    arg_types = {"this": True, "ignore_nulls": False}
+class Lag(AggFunc):
+    arg_types = {"this": True, "offset": False, "default": False}
 
 
-class Last(Func):
-    arg_types = {"this": True, "ignore_nulls": False}
+class Lead(AggFunc):
+    arg_types = {"this": True, "offset": False, "default": False}
+
+
+# some dialects have a distinction between first and first_value, usually first is an aggregate func
+# and first_value is a window func
+class First(AggFunc):
+    pass
+
+
+class Last(AggFunc):
+    pass
+
+
+class FirstValue(AggFunc):
+    pass
+
+
+class LastValue(AggFunc):
+    pass
+
+
+class NthValue(AggFunc):
+    arg_types = {"this": True, "offset": True}
 
 
 class Case(Func):
@@ -4714,6 +4733,7 @@ class TimestampSub(Func, TimeUnit):
 
 
 class TimestampDiff(Func, TimeUnit):
+    _sql_names = ["TIMESTAMPDIFF", "TIMESTAMP_DIFF"]
     arg_types = {"this": True, "expression": True, "unit": False}
 
 
@@ -4859,6 +4879,58 @@ class IsInf(Func):
     _sql_names = ["IS_INF", "ISINF"]
 
 
+class JSONPath(Expression):
+    arg_types = {"expressions": True}
+
+
+class JSONPathPart(Expression):
+    arg_types = {}
+
+
+class JSONPathChild(JSONPathPart):
+    arg_types = {"this": False}
+
+
+class JSONPathFilter(JSONPathPart):
+    arg_types = {"this": True}
+
+
+class JSONPathKey(JSONPathPart):
+    arg_types = {"this": True}
+
+
+class JSONPathRecursive(JSONPathPart):
+    arg_types = {"this": False}
+
+
+class JSONPathRoot(JSONPathPart):
+    pass
+
+
+class JSONPathScript(JSONPathPart):
+    arg_types = {"this": True}
+
+
+class JSONPathSlice(JSONPathPart):
+    arg_types = {"start": False, "end": False, "step": False}
+
+
+class JSONPathSelector(JSONPathPart):
+    arg_types = {"this": True}
+
+
+class JSONPathSubscript(JSONPathPart):
+    arg_types = {"this": True}
+
+
+class JSONPathUnion(JSONPathPart):
+    arg_types = {"expressions": True}
+
+
+class JSONPathWildcard(JSONPathPart):
+    pass
+
+
 class FormatJson(Expression):
     pass
 
@@ -4943,17 +5015,21 @@ class JSONBContains(Binary):
 
 class JSONExtract(Binary, Func):
     _sql_names = ["JSON_EXTRACT", "JSONEXTRACTSTRING"]
+    # MySQL and SQLite support a variant of JSON_EXTRACT where you can have multiple JSON
+    # paths and you get back a list of values. These paths will be stored in `expressions`
+    arg_types = {"this": True, "expression": True, "expressions": False}
 
 
-class JSONExtractScalar(JSONExtract):
+class JSONExtractScalar(Binary, Func):
+    arg_types = {"this": True, "expression": True, "null_if_invalid": False}
     _sql_names = ["JSON_EXTRACT_SCALAR"]
 
 
-class JSONBExtract(JSONExtract):
+class JSONBExtract(Binary, Func):
     _sql_names = ["JSONB_EXTRACT"]
 
 
-class JSONBExtractScalar(JSONExtract):
+class JSONBExtractScalar(Binary, Func):
     _sql_names = ["JSONB_EXTRACT_SCALAR"]
 
 
@@ -5477,6 +5553,8 @@ def _norm_arg(arg):
 
 ALL_FUNCTIONS = subclasses(__name__, Func, (AggFunc, Anonymous, Func))
 FUNCTION_BY_NAME = {name: func for func in ALL_FUNCTIONS for name in func.sql_names()}
+
+JSON_PATH_PARTS = subclasses(__name__, JSONPathPart, (JSONPathPart,))
 
 
 # @liujiwen add expr
@@ -6532,7 +6610,7 @@ def paren(expression: ExpOrStr, copy: bool = True) -> Paren:
     return Paren(this=maybe_parse(expression, copy=copy))
 
 
-SAFE_IDENTIFIER_RE = re.compile(r"^[_a-zA-Z][\w]*$")
+SAFE_IDENTIFIER_RE: t.Pattern[str] = re.compile(r"^[_a-zA-Z][\w]*$")
 
 
 @t.overload
@@ -6831,7 +6909,7 @@ def column(
     return this
 
 
-def cast(expression: ExpOrStr, to: DATA_TYPE, **opts) -> Cast:
+def cast(expression: ExpOrStr, to: DATA_TYPE, copy: bool = True, **opts) -> Cast:
     """Cast an expression to a data type.
 
     Example:
@@ -6841,12 +6919,13 @@ def cast(expression: ExpOrStr, to: DATA_TYPE, **opts) -> Cast:
     Args:
         expression: The expression to cast.
         to: The datatype to cast to.
+        copy: Whether or not to copy the supplied expressions.
 
     Returns:
         The new Cast instance.
     """
-    expression = maybe_parse(expression, **opts)
-    data_type = DataType.build(to, **opts)
+    expression = maybe_parse(expression, copy=copy, **opts)
+    data_type = DataType.build(to, copy=copy, **opts)
     expression = Cast(this=expression, to=data_type)
     expression.type = data_type
     return expression

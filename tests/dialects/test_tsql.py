@@ -941,6 +941,16 @@ WHERE
         self.validate_all(
             "LEN(x)", read={"": "LENGTH(x)"}, write={"spark": "LENGTH(CAST(x AS STRING))"}
         )
+        self.validate_all(
+            "RIGHT(x, 1)",
+            read={"": "RIGHT(CAST(x AS STRING), 1)"},
+            write={"spark": "RIGHT(CAST(x AS STRING), 1)"},
+        )
+        self.validate_all(
+            "LEFT(x, 1)",
+            read={"": "LEFT(CAST(x AS STRING), 1)"},
+            write={"spark": "LEFT(CAST(x AS STRING), 1)"},
+        )
         self.validate_all("LEN(1)", write={"tsql": "LEN(1)", "spark": "LENGTH(CAST(1 AS STRING))"})
         self.validate_all("LEN('x')", write={"tsql": "LEN('x')", "spark": "LENGTH('x')"})
 
@@ -950,10 +960,20 @@ WHERE
     def test_isnull(self):
         self.validate_all("ISNULL(x, y)", write={"spark": "COALESCE(x, y)"})
 
-    def test_jsonvalue(self):
+    def test_json(self):
+        self.validate_all(
+            "JSON_QUERY(r.JSON, '$.Attr_INT')",
+            write={
+                "spark": "GET_JSON_OBJECT(r.JSON, '$.Attr_INT')",
+                "tsql": "ISNULL(JSON_QUERY(r.JSON, '$.Attr_INT'), JSON_VALUE(r.JSON, '$.Attr_INT'))",
+            },
+        )
         self.validate_all(
             "JSON_VALUE(r.JSON, '$.Attr_INT')",
-            write={"spark": "GET_JSON_OBJECT(r.JSON, '$.Attr_INT')"},
+            write={
+                "spark": "GET_JSON_OBJECT(r.JSON, '$.Attr_INT')",
+                "tsql": "ISNULL(JSON_QUERY(r.JSON, '$.Attr_INT'), JSON_VALUE(r.JSON, '$.Attr_INT'))",
+            },
         )
 
     def test_datefromparts(self):

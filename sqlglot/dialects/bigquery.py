@@ -538,6 +538,7 @@ class BigQuery(Dialect):
         UNPIVOT_ALIASES_ARE_IDENTIFIERS = False
         JSON_KEY_VALUE_PAIR_SEP = ","
         NULL_ORDERING_SUPPORTED = False
+        IGNORE_NULLS_IN_FUNC = True
 
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
@@ -612,6 +613,7 @@ class BigQuery(Dialect):
             exp.TimeFromParts: rename_func("TIME"),
             exp.TimeSub: date_add_interval_sql("TIME", "SUB"),
             exp.TimestampAdd: date_add_interval_sql("TIMESTAMP", "ADD"),
+            exp.TimestampDiff: rename_func("TIMESTAMP_DIFF"),
             exp.TimestampSub: date_add_interval_sql("TIMESTAMP", "SUB"),
             exp.TimeStrToTime: timestrtotime_sql,
             exp.Trim: lambda self, e: self.func(f"TRIM", e.this, e.expression),
@@ -623,6 +625,13 @@ class BigQuery(Dialect):
             exp.UnixToTime: _unix_to_time_sql,
             exp.Values: _derived_table_values_to_unnest,
             exp.VariancePop: rename_func("VAR_POP"),
+        }
+
+        SUPPORTED_JSON_PATH_PARTS = {
+            exp.JSONPathChild,
+            exp.JSONPathKey,
+            exp.JSONPathRoot,
+            exp.JSONPathSubscript,
         }
 
         TYPE_MAPPING = {

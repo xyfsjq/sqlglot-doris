@@ -7,6 +7,7 @@ from collections import defaultdict
 from sqlglot import exp
 from sqlglot.errors import ErrorLevel, ParseError, concat_messages, merge_errors
 from sqlglot.helper import apply_index_offset, ensure_list, seq_get
+from sqlglot.jsonpath import parse as _parse_json_path
 from sqlglot.time import format_time
 from sqlglot.tokens import Token, Tokenizer, TokenType
 from sqlglot.trie import TrieResult, in_trie, new_trie
@@ -60,6 +61,30 @@ def parse_logarithm(args: t.List, dialect: Dialect) -> exp.Func:
     return (exp.Ln if dialect.parser_class.LOG_DEFAULTS_TO_LN else exp.Log)(this=this)
 
 
+def parse_json_path(path: t.Optional[exp.Expression]) -> t.Optional[exp.Expression]:
+    if isinstance(path, exp.Literal):
+        path_text = path.name
+        if path.is_number:
+            path_text = f"[{path_text}]"
+        try:
+            return exp.JSONPath(expressions=_parse_json_path(path_text))
+        except ParseError:
+            logger.warning(f"Invalid JSON path syntax: {path_text}")
+
+    return path
+
+
+def parse_extract_json_with_path(expr_type: t.Type[E]) -> t.Callable[[t.List], E]:
+    def _parser(args: t.List) -> E:
+        expression = expr_type(this=seq_get(args, 0), expression=parse_json_path(seq_get(args, 1)))
+        if len(args) > 2 and expr_type is exp.JSONExtract:
+            expression.set("expressions", args[2:])
+
+        return expression
+
+    return _parser
+
+
 class _Parser(type):
     def __new__(cls, clsname, bases, attrs):
         klass = super().__new__(cls, clsname, bases, attrs)
@@ -102,6 +127,8 @@ class Parser(metaclass=_Parser):
             to=exp.DataType(this=exp.DataType.Type.TEXT),
         ),
         "GLOB": lambda args: exp.Glob(this=seq_get(args, 1), expression=seq_get(args, 0)),
+        "JSON_EXTRACT": parse_extract_json_with_path(exp.JSONExtract),
+        "JSON_EXTRACT_SCALAR": parse_extract_json_with_path(exp.JSONExtractScalar),
         "LIKE": parse_like,
         "LOG": parse_logarithm,
         "TIME_TO_TIME_STR": lambda args: exp.Cast(
@@ -531,12 +558,12 @@ class Parser(metaclass=_Parser):
         TokenType.ARROW: lambda self, this, path: self.expression(
             exp.JSONExtract,
             this=this,
-            expression=path,
+            expression=parse_json_path(path),
         ),
         TokenType.DARROW: lambda self, this, path: self.expression(
             exp.JSONExtractScalar,
             this=this,
-            expression=path,
+            expression=parse_json_path(path),
         ),
         TokenType.HASH_ARROW: lambda self, this, path: self.expression(
             exp.JSONBExtract,
@@ -4952,6 +4979,13 @@ class Parser(metaclass=_Parser):
         #   (https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/img_text/first_value.html)
         #   and Snowflake chose to do the same for familiarity
         #   https://docs.snowflake.com/en/sql-reference/functions/first_value.html#usage-notes
+        if isinstance(this, exp.AggFunc):
+            ignore_respect = this.find(exp.IgnoreNulls, exp.RespectNulls)
+
+            if ignore_respect and ignore_respect is not this:
+                ignore_respect.replace(ignore_respect.this)
+                this = self.expression(ignore_respect.__class__, this=this)
+
         this = self._parse_respect_or_ignore_nulls(this)
 
         # bigquery select from window x AS (partition by ...)
@@ -5055,11 +5089,12 @@ class Parser(metaclass=_Parser):
 
         if alias:
             this = self.expression(exp.Alias, comments=comments, this=this, alias=alias)
+            column = this.this
 
             # Moves the comment next to the alias in `expr /* comment */ AS alias`
-            if not this.comments and this.this.comments:
-                this.comments = this.this.comments
-                this.this.comments = None
+            if not this.comments and column and column.comments:
+                this.comments = column.comments
+                column.comments = None
 
         return this
 

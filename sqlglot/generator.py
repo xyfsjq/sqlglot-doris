@@ -9,6 +9,10 @@ from functools import reduce
 from sqlglot import exp
 from sqlglot.errors import ErrorLevel, UnsupportedError, concat_messages
 from sqlglot.helper import apply_index_offset, csv, seq_get
+from sqlglot.jsonpath import (
+    MAPPING as JSON_PATH_MAPPING,
+    generate as generate_json_path,
+)
 from sqlglot.time import format_time
 from sqlglot.tokens import TokenType
 
@@ -21,7 +25,23 @@ logger = logging.getLogger("sqlglot")
 ESCAPED_UNICODE_RE = re.compile(r"\\(\d+)")
 
 
-class Generator:
+class _Generator(type):
+    def __new__(cls, clsname, bases, attrs):
+        klass = super().__new__(cls, clsname, bases, attrs)
+
+        # Fill in default implementations for every non-overridden supported JSONPathPart
+        klass._JSON_PATH_MAPPING = {
+            **{
+                expr_type: JSON_PATH_MAPPING[expr_type]
+                for expr_type in klass.SUPPORTED_JSON_PATH_PARTS
+            },
+            **(klass.JSON_PATH_MAPPING or {}),
+        }
+
+        return klass
+
+
+class Generator(metaclass=_Generator):
     """
     Generator converts a given syntax tree to the corresponding SQL string.
 
@@ -58,7 +78,13 @@ class Generator:
             Default: True
     """
 
-    TRANSFORMS = {
+    TRANSFORMS: t.Dict[t.Type[exp.Expression], t.Callable[..., str]] = {
+        **{
+            expr_type: lambda self, e: generate_json_path(
+                e, mapping=self._JSON_PATH_MAPPING, unsupported_callback=self.unsupported
+            )
+            for expr_type in exp.JSON_PATH_PARTS
+        },
         exp.DateAdd: lambda self, e: self.func(
             "DATE_ADD", e.this, e.expression, exp.Literal.string(e.text("unit"))
         ),
@@ -116,6 +142,10 @@ class Generator:
     # Whether or not null ordering is supported in order by
     # True: Full Support, None: No support, False: No support in window specifications
     NULL_ORDERING_SUPPORTED: t.Optional[bool] = True
+
+    # Whether or not ignore nulls is inside the agg or outside.
+    # FIRST(x IGNORE NULLS) OVER vs FIRST (x) IGNORE NULLS OVER
+    IGNORE_NULLS_IN_FUNC = False
 
     # Whether or not locking reads (i.e. SELECT ... FOR UPDATE/SHARE) are supported
     LOCKING_READS_SUPPORTED = False
@@ -266,6 +296,19 @@ class Generator:
     # Whether or not UNLOGGED tables can be created
     SUPPORTS_UNLOGGED_TABLES = False
 
+    # Whether or not the JSON extraction operators expect a value of type JSON
+    JSON_TYPE_REQUIRED_FOR_EXTRACTION = False
+
+    # The JSONPathPart expressions supported by this dialect
+    SUPPORTED_JSON_PATH_PARTS: t.Set[t.Type[exp.JSONPathPart]] = set(JSON_PATH_MAPPING)
+
+    # Mapping that specifies how each JSONPathPart supported by this dialect should be generated.
+    # This is populated based on SUPPORTED_JSON_PATH_PARTS and the default MAPPING in jsonpath.py,
+    # but it's possible to override specific entries as well
+    JSON_PATH_MAPPING: t.Optional[
+        t.Dict[t.Type[exp.JSONPathPart], t.Callable[[exp.JSONPathPart], str]]
+    ] = None
+
     TYPE_MAPPING = {
         exp.DataType.Type.NCHAR: "CHAR",
         exp.DataType.Type.NVARCHAR: "VARCHAR",
@@ -409,6 +452,11 @@ class Generator:
     KEY_VALUE_DEFINITIONS = (exp.Bracket, exp.EQ, exp.PropertyEQ, exp.Slice)
 
     SENTINEL_LINE_BREAK = "__SQLGLOT__LB__"
+
+    # Autofilled
+    _JSON_PATH_MAPPING: t.Optional[
+        t.Dict[t.Type[exp.JSONPathPart], t.Callable[[exp.JSONPathPart], str]]
+    ] = None
 
     __slots__ = (
         "pretty",
@@ -2372,6 +2420,14 @@ class Generator:
     def jsonkeyvalue_sql(self, expression: exp.JSONKeyValue) -> str:
         return f"{self.sql(expression, 'this')}{self.JSON_KEY_VALUE_PAIR_SEP} {self.sql(expression, 'expression')}"
 
+    def jsonpath_sql(self, expression: exp.JSONPath) -> str:
+        path = generate_json_path(
+            expression.expressions,
+            mapping=self._JSON_PATH_MAPPING,
+            unsupported_callback=self.unsupported,
+        )
+        return f"{self.dialect.QUOTE_START}{path.lstrip('.')}{self.dialect.QUOTE_END}"
+
     def formatjson_sql(self, expression: exp.FormatJson) -> str:
         return f"{self.sql(expression, 'this')} FORMAT JSON"
 
@@ -2766,10 +2822,20 @@ class Generator:
         return f"DISTINCT{this}{on}"
 
     def ignorenulls_sql(self, expression: exp.IgnoreNulls) -> str:
-        return f"{self.sql(expression, 'this')} IGNORE NULLS"
+        return self._embed_ignore_nulls(expression, "IGNORE NULLS")
 
     def respectnulls_sql(self, expression: exp.RespectNulls) -> str:
-        return f"{self.sql(expression, 'this')} RESPECT NULLS"
+        return self._embed_ignore_nulls(expression, "RESPECT NULLS")
+
+    def _embed_ignore_nulls(self, expression: exp.IgnoreNulls | exp.RespectNulls, text: str) -> str:
+        if self.IGNORE_NULLS_IN_FUNC:
+            this = expression.find(exp.AggFunc)
+            if this:
+                sql = self.sql(this)
+                sql = sql[:-1] + f" {text})"
+                return sql
+
+        return f"{self.sql(expression, 'this')} {text}"
 
     def intdiv_sql(self, expression: exp.IntDiv) -> str:
         return self.sql(
