@@ -202,6 +202,13 @@ class TestDoris(Validator):
             },
         )
 
+        self.validate_all(
+            "DATE_FORMAT(CAST('2022-08-20 08:23:42' AS DATETIME), '%Y-%m-%d %H:%i:%s')",
+            read={
+                "presto": "format_datetime(TIMESTAMP '2022-08-20 08:23:42', 'yyyy-MM-dd HH:mm:ss')"
+            }
+        )
+
     def test_regex(self):
         self.validate_all(
             "SELECT REGEXP_LIKE(abc, '%foo%')",
