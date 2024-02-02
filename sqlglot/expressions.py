@@ -607,7 +607,8 @@ class Expression(metaclass=_Expression):
             >>> sqlglot.parse_one("SELECT x from y").assert_is(Select).select("z").sql()
             'SELECT x, z FROM y'
         """
-        assert isinstance(self, type_)
+        if not isinstance(self, type_):
+            raise AssertionError(f"{self} is not {type_}.")
         return self
 
     def error_messages(self, args: t.Optional[t.Sequence] = None) -> t.List[str]:
@@ -4127,10 +4128,6 @@ class Sub(Binary):
     pass
 
 
-class ArrayOverlaps(Binary):
-    pass
-
-
 # Unary Expressions
 # (NOT a)
 class Unary(Condition):
@@ -4466,6 +4463,10 @@ class ArrayFilter(Func):
 
 class ArrayJoin(Func):
     arg_types = {"this": True, "expression": True, "null": False}
+
+
+class ArrayOverlaps(Binary, Func):
+    pass
 
 
 class ArraySize(Func):
