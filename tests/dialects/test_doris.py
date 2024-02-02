@@ -658,7 +658,13 @@ class TestDoris(Validator):
         self.validate_all(
             "JSONB_EXTRACT('{\"id\": \"33\"}', '$.id')",
             read={
-                "clickhouse": "JSONExtractString('{\"id\": \"33\"}' , '$.id')",
+                "clickhouse": "JSONExtractString('{\"id\": \"33\"}' , 'id')",
+            },
+        )
+        self.validate_all(
+            "JSONB_EXTRACT('{\"id\": \"33\"}', '$.id','$.name')",
+            read={
+                "clickhouse": "JSONExtractString('{\"id\": \"33\"}' , 'id', 'name')",
             },
         )
         self.validate_all(

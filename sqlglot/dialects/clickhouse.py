@@ -9,6 +9,7 @@ from sqlglot.dialects.dialect import (
     date_delta_sql,
     inline_array_sql,
     no_pivot_sql,
+    parse_json_extract_string,
     rename_func,
     var_map_sql,
 )
@@ -197,6 +198,7 @@ class ClickHouse(Dialect):
             "IPV6STRINGTONUMORDEFAULT": exp.Ipv6StringToNumOrDefault.from_arg_list,
             "ISIPV4STRING": exp.IsIpv4String.from_arg_list,
             "ISIPV6STRING": exp.IsIpv6String.from_arg_list,
+            "JSONEXTRACTSTRING": parse_json_extract_string(exp.JSONExtract),
             "LENGTHUTF8": exp.CharLength.from_arg_list,
             "LOWERUTF8": exp.Lower.from_arg_list,
             "MAP": parse_var_map,

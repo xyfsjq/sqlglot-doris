@@ -187,6 +187,7 @@ MAPPING = {
     exp.JSONPathSubscript: lambda n, **kwargs: f"[{generate(n.this, **kwargs)}]",
     exp.JSONPathUnion: lambda n, **kwargs: f"[{','.join(generate(p, **kwargs) for p in n.expressions)}]",
     exp.JSONPathWildcard: lambda n, **kwargs: "*",
+    exp.JSONPathSeparator: lambda n, **kwargs: "','",
 }
 
 

@@ -1068,3 +1068,41 @@ def json_path_segments(self: Generator, expression: exp.JSONPath) -> t.List[str]
             segments.append(f"{self.dialect.QUOTE_START}{path}{self.dialect.QUOTE_END}")
 
     return segments
+
+
+def parse_json_extract_string(
+    expr_type: t.Type[E],
+    supports_null_if_invalid: bool = False,
+) -> t.Callable[[t.List], E]:
+    def _parse_json_extract_string(args: t.List) -> E:
+        null_if_invalid = None
+
+        segments: t.List[exp.JSONPathPart] = []
+        len_args = len(args) - 1
+        for arg in args[1:]:
+            if isinstance(arg, exp.Literal):
+                text = arg.name
+                if is_int(text):
+                    segments.append(exp.JSONPathSubscript(this=int(text)))
+                else:
+                    len_args -= 1
+                    segments.append(exp.JSONPathRoot())
+                    segments.append(exp.JSONPathChild(this=text))
+                    if len_args > 0:
+                        segments.append(exp.JSONPathSeparator())
+
+            elif supports_null_if_invalid:
+                null_if_invalid = arg
+
+        this = seq_get(args, 0)
+        jsonpath = exp.JSONPath(expressions=segments)
+
+        # This is done to avoid failing in the expression validator due to the arg count
+        del args[2:]
+
+        if expr_type is exp.JSONExtractScalar:
+            return expr_type(this=this, expression=jsonpath, null_if_invalid=null_if_invalid)
+
+        return expr_type(this=this, expression=jsonpath)
+
+    return _parse_json_extract_string

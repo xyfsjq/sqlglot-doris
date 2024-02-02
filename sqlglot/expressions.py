@@ -4931,6 +4931,10 @@ class JSONPathWildcard(JSONPathPart):
     pass
 
 
+class JSONPathSeparator(JSONPathPart):
+    arg_types = {"this": False}
+
+
 class FormatJson(Expression):
     pass
 
@@ -5027,10 +5031,12 @@ class JSONExtractScalar(Binary, Func):
 
 class JSONBExtract(Binary, Func):
     _sql_names = ["JSONB_EXTRACT"]
+    arg_types = {"this": True, "expression": True, "expressions": False}
 
 
 class JSONBExtractScalar(Binary, Func):
     _sql_names = ["JSONB_EXTRACT_SCALAR"]
+    arg_types = {"this": True, "expression": True, "expressions": False}
 
 
 class JSONFormat(Func):
