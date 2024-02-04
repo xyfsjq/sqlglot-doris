@@ -369,6 +369,7 @@ class TokenType(AutoName):
     EXPLAIN = auto()
     MATCH_ANY = auto()
     MATCH_ALL = auto()
+    MATCH_PHRASE = auto()
 
 
 _ALL_TOKEN_TYPES = list(TokenType)

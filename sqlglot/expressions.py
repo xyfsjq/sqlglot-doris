@@ -5610,6 +5610,10 @@ class MatchAll(Binary, Predicate):
     pass
 
 
+class MatchPhrase(Binary, Predicate):
+    pass
+
+
 # @HuangHaijun add expr
 class ArrayToString(Func):
     arg_types = {"this": True, "sep": True, "null_replace": False}

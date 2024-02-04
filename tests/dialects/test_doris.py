@@ -171,6 +171,10 @@ class TestDoris(Validator):
             "select * from t where comment Match_All 'OLAP'",
             "SELECT * FROM t WHERE comment MATCH_ALL 'OLAP'",
         )
+        self.validate_identity(
+            "select * from t where comment MATCH_PHRASE 'OLAP'",
+            "SELECT * FROM t WHERE comment MATCH_PHRASE 'OLAP'",
+        )
 
     def test_time(self):
         self.validate_identity("TIMESTAMP('2022-01-01')")

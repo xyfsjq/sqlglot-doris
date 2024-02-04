@@ -298,6 +298,7 @@ class Doris(MySQL):
             **MySQL.Parser.RANGE_PARSERS,
             TokenType.MATCH_ANY: binary_range_parser(exp.MatchAny),
             TokenType.MATCH_ALL: binary_range_parser(exp.MatchAll),
+            TokenType.MATCH_PHRASE: binary_range_parser(exp.MatchPhrase),
         }
         FUNCTIONS = {
             **MySQL.Parser.FUNCTIONS,
@@ -337,6 +338,7 @@ class Doris(MySQL):
             **MySQL.Tokenizer.KEYWORDS,
             "MATCH_ANY": TokenType.MATCH_ANY,
             "MATCH_ALL": TokenType.MATCH_ALL,
+            "MATCH_PHRASE": TokenType.MATCH_PHRASE,
         }
 
     class Generator(MySQL.Generator):
@@ -464,3 +466,6 @@ class Doris(MySQL):
 
         def matchall_sql(self, expression: exp.MatchAll) -> str:
             return self.binary(expression, "MATCH_ALL")
+
+        def matchphrase_sql(self, expression: exp.MatchPhrase) -> str:
+            return self.binary(expression, "MATCH_PHRASE")
