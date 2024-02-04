@@ -13,6 +13,8 @@ from sqlglot.dialects.dialect import (
     time_format,
 )
 from sqlglot.dialects.mysql import MySQL
+from sqlglot.parser import binary_range_parser
+from sqlglot.tokens import TokenType
 
 DATE_DELTA_INTERVAL = {
     "year": "year",
@@ -292,6 +294,11 @@ class Doris(MySQL):
     }
 
     class Parser(MySQL.Parser):
+        RANGE_PARSERS = {
+            **MySQL.Parser.RANGE_PARSERS,
+            TokenType.MATCH_ANY: binary_range_parser(exp.MatchAny),
+            TokenType.MATCH_ALL: binary_range_parser(exp.MatchAll),
+        }
         FUNCTIONS = {
             **MySQL.Parser.FUNCTIONS,
             "ARRAY_SHUFFLE": exp.Shuffle.from_arg_list,
@@ -324,6 +331,13 @@ class Doris(MySQL):
                     "expressions": self._parse_select(nested=True),
                 },
             )
+
+    class Tokenizer(MySQL.Tokenizer):
+        KEYWORDS = {
+            **MySQL.Tokenizer.KEYWORDS,
+            "MATCH_ANY": TokenType.MATCH_ANY,
+            "MATCH_ALL": TokenType.MATCH_ALL,
+        }
 
     class Generator(MySQL.Generator):
         CAST_MAPPING = {}
@@ -444,3 +458,9 @@ class Doris(MySQL):
             this = self.sql(expression, "this")
             expr = self.sql(expression, "expressions")
             return f"{this} {expr}"
+
+        def matchany_sql(self, expression: exp.MatchAny) -> str:
+            return self.binary(expression, "MATCH_ANY")
+
+        def matchall_sql(self, expression: exp.MatchAll) -> str:
+            return self.binary(expression, "MATCH_ALL")

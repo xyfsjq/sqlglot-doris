@@ -5602,6 +5602,14 @@ class JsonArrayLength(Func):
     arg_types = {"this": True, "expressions": False}
 
 
+class MatchAny(Binary, Predicate):
+    pass
+
+
+class MatchAll(Binary, Predicate):
+    pass
+
+
 # @HuangHaijun add expr
 class ArrayToString(Func):
     arg_types = {"this": True, "sep": True, "null_replace": False}

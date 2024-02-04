@@ -163,6 +163,14 @@ class TestDoris(Validator):
         self.validate_identity("random(2)", "FLOOR(RANDOM()*2.0)")
         self.validate_identity("random(2,3)", "FLOOR(RANDOM()*1.0+2.0)")
         self.validate_identity("a||b", "CONCAT(a,b)")
+        self.validate_identity(
+            "select * from t where comment Match_Any 'OLAP'",
+            "SELECT * FROM t WHERE comment MATCH_ANY 'OLAP'",
+        )
+        self.validate_identity(
+            "select * from t where comment Match_All 'OLAP'",
+            "SELECT * FROM t WHERE comment MATCH_ALL 'OLAP'",
+        )
 
     def test_time(self):
         self.validate_identity("TIMESTAMP('2022-01-01')")

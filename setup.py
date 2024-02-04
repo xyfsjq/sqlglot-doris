@@ -12,7 +12,7 @@ def sqlglotrs_version():
 setup(
     name="sqlglot-doris",
     description="An easily customizable SQL parser and transpiler",
-    version="1.0.9.3",
+    version="1.0.9.4",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     url="https://github.com/tobymao/sqlglot",
