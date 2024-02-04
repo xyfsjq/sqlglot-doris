@@ -1,3 +1,4 @@
+# ruff: noqa: F401
 """
 .. include:: ../README.md
 

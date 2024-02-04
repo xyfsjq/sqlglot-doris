@@ -236,7 +236,7 @@ def tsort(dag: t.Dict[T, t.Set[T]]) -> t.List[T]:
 
     for node, deps in tuple(dag.items()):
         for dep in deps:
-            if not dep in dag:
+            if dep not in dag:
                 dag[dep] = set()
 
     while dag:
