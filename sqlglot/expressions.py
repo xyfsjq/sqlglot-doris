@@ -6805,7 +6805,7 @@ def alias_(
     # Control table case
     # if case_sensitive is none,table keep. if case_sensitive is true, table to upper.
     # if case_sensitive is false, table to lower.
-    if case_sensitive != None:
+    if case_sensitive is not None:
         if case_sensitive:
             exp.set("this", exp.name.upper())
         else:

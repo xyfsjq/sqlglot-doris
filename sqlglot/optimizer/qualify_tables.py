@@ -92,7 +92,7 @@ def qualify_tables(
                     # if case_sensitive is none,table keep. if case_sensitive is true, table to upper.
                     # if case_sensitive is false, table to lower.
                     alias_name = name or source.name or next_alias_name()
-                    if case_sensitive == None:
+                    if case_sensitive is None:
                         pass
                     else:
                         if case_sensitive:

@@ -189,7 +189,7 @@ def handle_rand(self, expr: exp.Rand) -> str:
     min = self.sql(expr, "this")
     max = self.sql(expr, "expression")
     if min == "" and max == "":
-        return f"RANDOM()"
+        return "RANDOM()"
     elif max == "":
         return f"FLOOR(RANDOM()*{min}.0)"
     else:
@@ -287,8 +287,8 @@ class Doris(MySQL):
         "%m": "MM",
         "%d": "dd",
         "%s": "ss",
-        "%H": "HH24",
-        "%H": "hh24",  # oracle to_date('2005-01-01 13:14:20','yyyy-MM-dd hh24:mm:ss')
+        # "%H": "HH24",
+        # "%H": "hh24",  # oracle to_date('2005-01-01 13:14:20','yyyy-MM-dd hh24:mm:ss')
         "%H": "HH",
         "%i": "mm",
     }
@@ -370,7 +370,8 @@ class Doris(MySQL):
             exp.ArgMax: rename_func("MAX_BY"),
             exp.ArgMin: rename_func("MIN_BY"),
             exp.ArrayAgg: rename_func("COLLECT_LIST"),
-            exp.ArrayFilter: lambda self, e: f"ARRAY_FILTER({self.sql(e, 'expression')},{self.sql(e, 'this')})",
+            exp.ArrayFilter: lambda self,
+            e: f"ARRAY_FILTER({self.sql(e, 'expression')},{self.sql(e, 'this')})",
             exp.ArrayUniq: lambda self, e: f"SIZE(ARRAY_DISTINCT({self.sql(e, 'this')}))",
             exp.ArrayOverlaps: rename_func("ARRAYS_OVERLAP"),
             exp.ArrayPosition: rename_func("ELEMENT_AT"),
@@ -382,7 +383,8 @@ class Doris(MySQL):
             exp.BitwiseOr: rename_func("BITOR"),
             exp.BitwiseXor: rename_func("BITXOR"),
             exp.BitmapXOrCount: rename_func("BITMAP_XOR_COUNT"),
-            exp.CastToStrType: lambda self, e: f"CAST({self.sql(e, 'this')} AS {self.sql(e, 'to')})",
+            exp.CastToStrType: lambda self,
+            e: f"CAST({self.sql(e, 'this')} AS {self.sql(e, 'to')})",
             exp.ConcatWs: handle_concat_ws,
             exp.CountIf: count_if_to_sum,
             exp.CurrentDate: no_paren_current_date_sql,
@@ -405,8 +407,10 @@ class Doris(MySQL):
             exp.LTrim: rename_func("LTRIM"),
             exp.Map: rename_func("ARRAY_MAP"),
             exp.NotEmpty: rename_func("NOT_NULL_OR_EMPTY"),
-            exp.QuartersAdd: lambda self, e: f"MONTHS_ADD({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
-            exp.QuartersSub: lambda self, e: f"MONTHS_SUB({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
+            exp.QuartersAdd: lambda self,
+            e: f"MONTHS_ADD({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
+            exp.QuartersSub: lambda self,
+            e: f"MONTHS_SUB({self.sql(e, 'this')},{3 * int(self.sql(e, 'expression'))})",
             exp.Rand: handle_rand,
             exp.RegexpLike: rename_func("REGEXP"),
             exp.RegexpExtract: handle_regexp_extract,
@@ -431,8 +435,9 @@ class Doris(MySQL):
             exp.TimeStrToDate: rename_func("TO_DATE"),
             exp.TimeStrToUnix: rename_func("UNIX_TIMESTAMP"),
             exp.TimeToUnix: rename_func("UNIX_TIMESTAMP"),
-            exp.ToChar: lambda self, e: f"DATE_FORMAT({self.sql(e, 'this')}, {self.format_time(e)})",
-            exp.Today: lambda self, e: f"TO_DATE(NOW())",
+            exp.ToChar: lambda self,
+            e: f"DATE_FORMAT({self.sql(e, 'this')}, {self.format_time(e)})",
+            exp.Today: lambda self, e: "TO_DATE(NOW())",
             exp.ToStartOfDay: lambda self, e: f"DATE_TRUNC({self.sql(e, 'this')}, 'Day')",
             exp.ToStartOfHour: lambda self, e: f"DATE_TRUNC({self.sql(e, 'this')}, 'Hour')",
             exp.ToStartOfMinute: lambda self, e: f"DATE_TRUNC({self.sql(e, 'this')}, 'Minute')",
@@ -442,8 +447,10 @@ class Doris(MySQL):
             exp.ToStartOfWeek: lambda self, e: f"DATE_TRUNC({self.sql(e, 'this')}, 'Week')",
             exp.ToYyyymm: lambda self, e: f"DATE_FORMAT({self.sql(e, 'this')}, '%Y%m')",
             exp.ToYyyymmdd: lambda self, e: f"DATE_FORMAT({self.sql(e, 'this')}, '%Y%m%d')",
-            exp.ToYyyymmddhhmmss: lambda self, e: f"DATE_FORMAT({self.sql(e, 'this')}, '%Y%m%d%H%i%s')",
-            exp.TsOrDsAdd: lambda self, e: f"DATE_ADD({self.sql(e, 'this')}, {self.sql(e, 'expression')})",  # Only for day level
+            exp.ToYyyymmddhhmmss: lambda self,
+            e: f"DATE_FORMAT({self.sql(e, 'this')}, '%Y%m%d%H%i%s')",
+            exp.TsOrDsAdd: lambda self,
+            e: f"DATE_ADD({self.sql(e, 'this')}, {self.sql(e, 'expression')})",  # Only for day level
             exp.TsOrDsToDate: handle_to_date,
             exp.UnixToStr: lambda self, e: self.func(
                 "FROM_UNIXTIME", e.this, time_format("doris")(self, e)
