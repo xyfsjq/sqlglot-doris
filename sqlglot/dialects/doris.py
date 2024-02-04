@@ -314,12 +314,19 @@ class Doris(MySQL):
             "DATEDIFF": exp.DateDiff.from_arg_list,
             "FROM_UNIXTIME": exp.StrToUnix.from_arg_list,
             "GROUP_ARRAY": exp.ArrayAgg.from_arg_list,
+            "GROUP_CONCAT": exp.GroupConcat.from_arg_list,
             "NOW": exp.CurrentTimestamp.from_arg_list,
             "REGEXP": exp.RegexpLike.from_arg_list,
             "SIZE": exp.ArraySize.from_arg_list,
             "SPLIT_BY_STRING": exp.RegexpSplit.from_arg_list,
             "TO_DATE": exp.TsOrDsToDate.from_arg_list,
         }
+
+        FUNCTION_PARSERS = {
+            **MySQL.Parser.FUNCTION_PARSERS,
+        }
+        # Since it is incompatible with the implementation of mysql, we will pop it out here.
+        FUNCTION_PARSERS.pop("GROUP_CONCAT")
 
         def _parse_explain(self) -> exp.Explain:
             this = "explain"

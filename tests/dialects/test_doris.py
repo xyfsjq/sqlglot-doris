@@ -779,6 +779,17 @@ class TestDoris(Validator):
             },
         )
 
+    def test_agg(self):
+        self.validate_all(
+            "GROUP_CONCAT(`base_caseNumber_labelObject`, '|')",
+            read={"doris": "GROUP_CONCAT(`base_caseNumber_labelObject`, '|')"},
+            write={
+                "redshift": "LISTAGG(\"base_caseNumber_labelObject\", '|')",
+                "snowflake": "LISTAGG(\"base_caseNumber_labelObject\", '|')",
+                "postgres": "STRING_AGG(\"base_caseNumber_labelObject\", '|')",
+            },
+        )
+
     def test_explain(self):
         self.validate_all(
             "explain SELECT * FROM (SELECT id, sum(CASE WHEN a = '2' THEN cost ELSE 0 END) AS avg FROM t GROUP BY id)",
