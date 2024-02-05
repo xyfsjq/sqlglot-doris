@@ -359,7 +359,6 @@ class Doris(MySQL):
             exp.DataType.Type.TIMESTAMPTZ: "DATETIME",
         }
 
-        LAST_DAY_SUPPORTS_DATE_PART = False
 
         TIMESTAMP_FUNC_TYPES = set()
 
