@@ -415,6 +415,13 @@ class TestDoris(Validator):
             "COLLECT_LIST(res)",
             read={"clickhouse": " groupArray(res)"},
         )
+        self.validate_all(
+            "LAST_DAY(x)",
+            read={
+                "clickhouse": " toLastDayOfMonth(x)",
+                "presto": " last_day_of_month(x)",
+            },
+        )
 
     def test_bitmap(self):
         self.validate_all(
@@ -679,6 +686,18 @@ class TestDoris(Validator):
             "JSONB_EXTRACT('{\"id\": \"33\"}', '$.id')",
             read={
                 "clickhouse": "JSONExtractString('{\"id\": \"33\"}' , 'id')",
+            },
+        )
+        self.validate_all(
+            "JSONB_EXTRACT('{\"id\": \"33\"}', '$.id')",
+            read={
+                "clickhouse": "JSONExtractRaw('{\"id\": \"33\"}' , 'id')",
+            },
+        )
+        self.validate_all(
+            "JSONB_EXTRACT('{\"id\": \"33\"}', '$.id')",
+            read={
+                "clickhouse": "JSONExtractInt('{\"id\": \"33\"}' , 'id')",
             },
         )
         self.validate_all(

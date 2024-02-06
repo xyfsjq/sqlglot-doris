@@ -359,7 +359,6 @@ class Doris(MySQL):
             exp.DataType.Type.TIMESTAMPTZ: "DATETIME",
         }
 
-
         TIMESTAMP_FUNC_TYPES = set()
 
         TRANSFORMS = {
