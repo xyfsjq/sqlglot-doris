@@ -637,6 +637,14 @@ class TestDoris(Validator):
                 "oracle": "to_char(1210.73, '9999.99')",
             },
         )
+        self.validate_all(
+            "DATE_FORMAT(CURRENT_DATE(), '%Y-%m')",
+            read={"presto": "to_char(current_date, 'yyyy-mm')"},
+        )
+        self.validate_all(
+            "DATE_FORMAT(DATE_ADD(CAST(day AS DATE), INTERVAL 1 DAY), '%d') = '01'",
+            read={"presto": "to_char(date_add('day', 1, cast(day as date)),'dd') ='01'"},
+        )
 
     def test_code(self):
         self.validate_all(
