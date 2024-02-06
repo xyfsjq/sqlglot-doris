@@ -279,6 +279,7 @@ class Presto(Dialect):
             "SHUFFLE": exp.Shuffle.from_arg_list,
             "SLICE": exp.ArraySlice.from_arg_list,
             "TO_CHAR": _parse_to_char,
+            "TO_DATE": exp.TsOrDsToDate.from_arg_list,
             "TO_HEX": exp.Hex.from_arg_list,
             "TO_UNIXTIME": exp.TimeToUnix.from_arg_list,
             "TO_UTF8": lambda args: exp.Encode(

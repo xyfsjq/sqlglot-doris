@@ -196,7 +196,6 @@ class TestDoris(Validator):
                 "clickhouse": "date_sub(YEAR, 3, toDate('2018-01-01'))",
             },
         )
-
         self.validate_all(
             "DATE_TRUNC(NOW(), 'day')",
             read={
@@ -204,7 +203,6 @@ class TestDoris(Validator):
                 "oracle": "TRUNC(current_timestamp(), 'DD')",
             },
         )
-
         self.validate_all(
             "NOW()",
             read={
@@ -213,12 +211,15 @@ class TestDoris(Validator):
                 "redshift": "SYSDATE",
             },
         )
-
         self.validate_all(
             "DATE_FORMAT(CAST('2022-08-20 08:23:42' AS DATETIME), '%Y-%m-%d %H:%i:%s')",
             read={
                 "presto": "format_datetime(TIMESTAMP '2022-08-20 08:23:42', 'yyyy-MM-dd HH:mm:ss')"
             },
+        )
+        self.validate_all(
+            "DATE_FORMAT(x, '%Y')",
+            read={"presto": "to_date(x,'yyyy') "},
         )
 
     def test_regex(self):
@@ -328,6 +329,7 @@ class TestDoris(Validator):
                 "clickhouse": "arrayElement([1, 2, 3],1)",
             },
         )
+        self.validate_all("arr_int[1]", read={"presto": "element_at(arr_int, 1)"})
         self.validate_all(
             "SELECT ARRAY_AVG(ARRAY(1, 2, 4))",
             read={"clickhouse": "SELECT arrayAvg([1, 2, 4]);"},

@@ -276,6 +276,7 @@ def path_to_jsonpath(
 
 
 class Doris(MySQL):
+    INDEX_OFFSET = 1
     DATE_FORMAT = "'yyyy-MM-dd'"
     DATEINT_FORMAT = "'yyyyMMdd'"
     TIME_FORMAT = "'yyyy-MM-dd HH:mm:ss'"
