@@ -392,6 +392,7 @@ class Doris(MySQL):
             exp.DateTrunc: handle_date_trunc,
             exp.Empty: rename_func("NULL_OR_EMPTY"),
             exp.Filter: handle_filter,
+            exp.GenerateSeries: rename_func("ARRAY_RANGE"),
             exp.GroupConcat: _string_agg_sql,
             exp.GetPath: path_to_jsonpath(),
             exp.JSONExtractScalar: _json_extract_sql,

@@ -304,9 +304,10 @@ class TestDoris(Validator):
             },
         )
         self.validate_all(
-            "ARRAY_RANGE(5)",
+            "ARRAY_RANGE(0, 5)",
             read={
-                "clickhouse": "range(5) ",
+                "clickhouse": "range(0, 5) ",
+                "presto": "sequence(0, 5)",
             },
         )
         self.validate_all(
