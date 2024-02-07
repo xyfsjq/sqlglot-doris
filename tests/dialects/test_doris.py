@@ -221,6 +221,16 @@ class TestDoris(Validator):
             "DATE_FORMAT(x, '%Y')",
             read={"presto": "to_date(x,'yyyy') "},
         )
+        self.validate_all(
+            "DATE_FORMAT(x, '%Y-%i-%d %H:%m:%s')",
+            read={"presto": "to_date(x,'yyyy-mm-dd hh24:mi:ss')"},
+        )
+        # self.validate_all(
+        #     "STR_TO_DATE('2005-01-01 13:14:20', '%Y-%m-%d %H:%i:%s')",
+        #     read={
+        #         "oracle": "to_date('2005-01-01 13:14:20','yyyy-MM-dd hh24:mm:ss')"
+        #     }
+        # )
 
     def test_regex(self):
         self.validate_all(

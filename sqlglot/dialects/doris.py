@@ -166,9 +166,21 @@ def handle_regexp_extract(self, expr: exp.RegexpExtract) -> str:
     return f"REGEXP_EXTRACT({this}, '({expression[1:-1]})', {position})"
 
 
-def handle_to_date(self: Doris.Generator, expression: exp.TsOrDsToDate) -> str:
+def handle_to_date(self: Doris.Generator, expression: exp.TsOrDsToDate | exp.StrToTime) -> str:
     this = self.sql(expression, "this")
     time_format = self.format_time(expression)
+    # Handle special formats
+    #  Replace mi with %m
+    if time_format is not None and "mi" in time_format:
+        time_format = time_format.replace("mi", "%m")
+    # Replace both hh24 and HH24 with HH, case-insensitively
+    if time_format is not None:
+        time_format = re.sub("hh24", "%H", time_format, flags=re.IGNORECASE)
+
+    # remove  all digits from the time_format
+    if time_format is not None:
+        time_format = re.sub(r"\d", "", time_format)
+
     if time_format and time_format not in (Doris.TIME_FORMAT, Doris.DATE_FORMAT):
         return f"DATE_FORMAT({this}, {time_format})"
     if isinstance(expression.this, exp.TsOrDsToDate):
@@ -288,8 +300,6 @@ class Doris(MySQL):
         "%m": "MM",
         "%d": "dd",
         "%s": "ss",
-        # "%H": "HH24",
-        # "%H": "hh24",  # oracle to_date('2005-01-01 13:14:20','yyyy-MM-dd hh24:mm:ss')
         "%H": "HH",
         "%i": "mm",
     }
