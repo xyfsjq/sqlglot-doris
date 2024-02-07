@@ -353,14 +353,85 @@ class Doris(MySQL):
         CAST_MAPPING = {}
         INTERVAL_ALLOWS_PLURAL_FORM = False
         LAST_DAY_SUPPORTS_DATE_PART = False
+
+        STRING_TYPE_MAPPING = {
+            exp.DataType.Type.TEXT: "STRING",
+            exp.DataType.Type.TIME: "STRING",
+            exp.DataType.Type.TINYTEXT: "STRING",
+            exp.DataType.Type.MEDIUMTEXT: "STRING",
+            exp.DataType.Type.LONGTEXT: "STRING",
+            exp.DataType.Type.TINYBLOB: "STRING",
+            exp.DataType.Type.MEDIUMBLOB: "STRING",
+            exp.DataType.Type.LONGBLOB: "STRING",
+            exp.DataType.Type.SET: "STRING",
+            exp.DataType.Type.BINARY: "STRING",
+            exp.DataType.Type.VARBINARY: "STRING",
+            exp.DataType.Type.ENUM: "STRING",
+
+            exp.DataType.Type.ENUM8: "STRING",
+            exp.DataType.Type.ENUM16: "STRING",
+            exp.DataType.Type.IPV4: "STRING",
+            exp.DataType.Type.IPV6: "STRING",
+            exp.DataType.Type.FIXEDSTRING: "STRING",
+            exp.DataType.Type.INT256: "STRING",
+            exp.DataType.Type.UINT128: "STRING",
+            exp.DataType.Type.UINT256: "STRING",
+            exp.DataType.Type.LOWCARDINALITY: "STRING",
+        }
+
+        FIRST_COLUMN_NOT_SUPPORT_TYPE_DECIMAL = [
+            exp.DataType.Type.FLOAT,
+            exp.DataType.Type.DOUBLE,
+        ]
+
+        FIRST_COLUMN_NOT_SUPPORT_TYPE_VARCHAR = [
+            exp.DataType.Type.TEXT,
+            exp.DataType.Type.ARRAY,
+            exp.DataType.Type.STRUCT,
+            exp.DataType.Type.MAP
+        ]
+
+
         TYPE_MAPPING = {
             **MySQL.Generator.TYPE_MAPPING,
-            exp.DataType.Type.TEXT: "STRING",
+            **STRING_TYPE_MAPPING,
             exp.DataType.Type.TIMESTAMP: "DATETIME",
             exp.DataType.Type.TIMESTAMPTZ: "DATETIME",
+            exp.DataType.Type.BIT: "BOOLEAN",
+
+            exp.DataType.Type.UTINYINT: "SMALLINT",
+            exp.DataType.Type.USMALLINT: "INT",
+            exp.DataType.Type.UMEDIUMINT: "INT",
+            exp.DataType.Type.UINT: "BIGINT",
+            exp.DataType.Type.UBIGINT: "LARGEINT",
+
+            exp.DataType.Type.MEDIUMINT: "INT",
+            exp.DataType.Type.YEAR: "SMALLINT",
+            exp.DataType.Type.DATE32: "DATE",
+
+            exp.DataType.Type.INT128: "LARGEINT",
+            exp.DataType.Type.AGGREGATEFUNCTION: "STRING",
+            # exp.DataType.Type.SIMPLEAGGREGATEFUNCTION: "STRING",
+        }
+
+        CLICKHOUSE_TYPE_MAPPING = {
+
         }
 
         TIMESTAMP_FUNC_TYPES = set()
+
+        PROPERTIES_LOCATION = {
+            **MySQL.Generator.PROPERTIES_LOCATION,
+            exp.PartitionedByProperty: exp.Properties.Location.UNSUPPORTED,
+            exp.WithDataProperty: exp.Properties.Location.UNSUPPORTED,
+            exp.EngineProperty: exp.Properties.Location.UNSUPPORTED,
+            exp.AutoIncrementProperty: exp.Properties.Location.UNSUPPORTED,
+            exp.CharacterSetProperty: exp.Properties.Location.UNSUPPORTED,
+            exp.CollateProperty: exp.Properties.Location.UNSUPPORTED,
+            exp.Order: exp.Properties.Location.UNSUPPORTED,
+            exp.MergeTreeTTL: exp.Properties.Location.UNSUPPORTED,
+            exp.SettingsProperty: exp.Properties.Location.UNSUPPORTED,
+        }
 
         TRANSFORMS = {
             **MySQL.Generator.TRANSFORMS,
@@ -417,6 +488,7 @@ class Doris(MySQL):
             exp.RegexpSplit: rename_func("SPLIT_BY_STRING"),
             exp.Replace: handle_replace,
             exp.RTrim: rename_func("RTRIM"),
+            exp.SchemaCommentProperty: lambda self, e: self.naked_property(e),
             exp.SHA2: lambda self, e: f"SHA2({self.sql(e, 'this')},{self.sql(e, 'length')})",
             exp.Shuffle: rename_func("ARRAY_SHUFFLE"),
             exp.Slice: rename_func("ARRAY_SLICE"),
@@ -485,3 +557,122 @@ class Doris(MySQL):
 
         def matchphrase_sql(self, expression: exp.MatchPhrase) -> str:
             return self.binary(expression, "MATCH_PHRASE")
+
+        def datatype_sql(self, expression: exp.DataType) -> str:
+            if expression.this in self.STRING_TYPE_MAPPING:
+                return "STRING"
+            elif expression.is_type(exp.DataType.Type.UDECIMAL):
+                precision_expression = expression.find(exp.DataTypeParam)
+                if precision_expression:
+                    precision = int(precision_expression.name) + 1
+                    if precision <= 38:
+                        precision_expression.this.set("this", precision)
+                    else:
+                        return "STRING"
+            elif expression.is_type(exp.DataType.Type.CHAR):
+                size_expression = expression.find(exp.DataTypeParam)
+                if size_expression:
+                    size = int(size_expression.name)
+                    return "STRING" if size * 3 > 255 else f"CHAR({size * 3})"
+            elif expression.is_type(exp.DataType.Type.VARCHAR):
+                size_expression = expression.find(exp.DataTypeParam)
+                if size_expression:
+                    size = int(size_expression.name)
+                    return "STRING" if size * 3 > 65533 else f"VARCHAR({size * 3})"
+            elif expression.is_type(exp.DataType.Type.BIT):
+                size_expression = expression.find(exp.DataTypeParam)
+                if size_expression:
+                    size = int(size_expression.name)
+                    return "BOOLEAN" if size == 1 else "STRING"
+            elif expression.this in (exp.DataType.Type.DATETIME, exp.DataType.Type.TIMESTAMP, exp.DataType.Type.DATETIME64):
+                size_expression = expression.find(exp.DataTypeParam)
+                if size_expression:
+                    size = int(size_expression.name)
+                    precision = 6 if size > 6 else size
+                    return f"DATETIME({precision})"
+            elif expression.is_type(exp.DataType.Type.NULLABLE):
+                expression = expression.expressions[0]
+            elif expression.is_type(exp.DataType.Type.STRUCT):
+                col_list = []
+                for index, col in enumerate(expression.expressions, start=1):
+                    col_list.append(f"col_{index}: {col.this}")
+                cols = ", ".join(col_list)
+                return f"STRUCT<{cols}>"
+
+            return generator.Generator.datatype_sql(self, expression)
+
+        def create_sql(self, expression: exp.Create) -> str:
+            pk_list = []
+            defs = []
+            for e in expression.this.expressions:
+                if isinstance(e, exp.ColumnDef):
+                    defs.append(e)
+
+            first_data_type = expression.find(exp.DataType)
+            if first_data_type.is_type(exp.DataType.Type.NULLABLE):
+                first_data_type = first_data_type.expressions[0]
+            if first_data_type.this in self.FIRST_COLUMN_NOT_SUPPORT_TYPE_DECIMAL:
+                expression.find(exp.ColumnDef).set("kind", exp.DataType.build("decimal"))
+            if first_data_type.this in self.FIRST_COLUMN_NOT_SUPPORT_TYPE_VARCHAR:
+                expression.find(exp.ColumnDef).set("kind", exp.DataType.build("varchar"))
+
+            for column in defs:
+                primary_key = None
+                auto_increment = None
+                unique = None
+                for constraint in column.constraints:
+                    if isinstance(constraint.kind, exp.PrimaryKeyColumnConstraint):
+                        primary_key = constraint
+                    if isinstance(constraint.kind, exp.AutoIncrementColumnConstraint):
+                        auto_increment = constraint
+                    if isinstance(constraint.kind, exp.UniqueColumnConstraint):
+                        unique = constraint
+                if primary_key:
+                    pk_list.append(f"`{primary_key.parent.name}`")
+                    column.constraints.remove(primary_key)
+                if auto_increment:
+                    column.constraints.remove(auto_increment)
+                if unique:
+                    column.constraints.remove(unique)
+
+            expression_sql = super().create_sql(expression)
+
+            if len(pk_list) == 0:
+                for pk in expression.find_all(exp.PrimaryKey):
+                    for e in pk:
+                        pk_list.append(f"`{e.name}`")
+
+            if pk_list:  # UNIQUE模型
+                pk_name = ", ".join(pk_list)
+                return (f"{expression_sql} "
+                        f"UNIQUE KEY({pk_name}) "
+                        f"DISTRIBUTED BY HASH({pk_name}) BUCKETS AUTO "
+                        f"PROPERTIES ("
+                        f"\"replication_allocation\" = \"tag.location.default: 1\""
+                        f");")
+            else:  # DUPLICATE模型
+                first_field_name = expression.find(exp.ColumnDef).name
+                return (f"{expression_sql} "
+                        f"DUPLICATE KEY(`{first_field_name}`) "
+                        f"DISTRIBUTED BY HASH(`{first_field_name}`) BUCKETS AUTO "
+                        f"PROPERTIES ("
+                        f"\"replication_allocation\" = \"tag.location.default: 1\""
+                        f");")
+
+        def createable_sql(self, expression: exp.Create, locations: t.DefaultDict) -> str:
+            # 移除pk和index信息，并在生成createable_sql后重新加上，防止后续的create_sql()执行错误
+            remove_list = []
+            expressions = expression.this.expressions
+            for e in expressions:
+                if isinstance(e, exp.PrimaryKey) or isinstance(e, exp.IndexColumnConstraint):
+                    remove_list.append(e)
+
+            for e in remove_list:
+                expressions.remove(e)
+
+            createable_sql = super().createable_sql(expression, locations)
+
+            for e in remove_list:
+                expressions.append(e)
+
+            return createable_sql
