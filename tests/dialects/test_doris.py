@@ -877,25 +877,25 @@ class TestDoris(Validator):
         ), f"Transpile result doesn't match expected result. Expected: {expected_result_2}, Actual: {result_2}"
         print("Test2 passed!")
 
-    def test_doris_ddl(self):
+    def test_mysql2doris_create(self):
         self.validate_all(
             "CREATE TABLE IF NOT EXISTS z (a INT, b string) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARACTER SET=utf8 COLLATE=utf8_bin COMMENT='x'",
             write={
-                "doris": "CREATE TABLE IF NOT EXISTS z (a INT, b STRING) COMMENT 'x' DUPLICATE KEY(`a`) DISTRIBUTED BY HASH(`a`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\");",
+                "doris": "CREATE TABLE IF NOT EXISTS z (a INT, b STRING) DUPLICATE KEY(`a`) DISTRIBUTED BY HASH(`a`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\");",
             },
         )
 
         self.validate_all(
             "CREATE TABLE `x` (`username` VARCHAR(200), PRIMARY KEY (`username`(16))) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARACTER SET=utf8 COLLATE=utf8_bin COMMENT='x'",
             write={
-                "doris": "CREATE TABLE `x` (`username` VARCHAR(600)) COMMENT 'x' UNIQUE KEY(`username`) DISTRIBUTED BY HASH(`username`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\");",
+                "doris": "CREATE TABLE `x` (`username` VARCHAR(200)) UNIQUE KEY(`username`) DISTRIBUTED BY HASH(`username`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\");",
             },
         )
 
         self.validate_all(
             "CREATE TABLE `x` (`a` INT, `b` string, `c` varchar(20), PRIMARY KEY (`a`, `b`)) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARACTER SET=utf8 COLLATE=utf8_bin COMMENT='x'",
             write={
-                "doris": "CREATE TABLE `x` (`a` INT, `b` STRING, `c` VARCHAR(60)) COMMENT 'x' UNIQUE KEY(`a`, `b`) DISTRIBUTED BY HASH(`a`, `b`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\");",
+                "doris": "CREATE TABLE `x` (`a` INT, `b` STRING, `c` VARCHAR(20)) UNIQUE KEY(`a`, `b`) DISTRIBUTED BY HASH(`a`, `b`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\");",
             },
         )
 
@@ -916,7 +916,7 @@ class TestDoris(Validator):
         self.validate_all(
             "CREATE TABLE t1(id varchar(10) NOT NULL PRIMARY KEY, dsc longtext) ENGINE=InnoDB AUTO_INCREMENT=1;",
             write={
-                "doris": "CREATE TABLE t1 (id VARCHAR(30) NOT NULL, dsc STRING) UNIQUE KEY(`id`) DISTRIBUTED BY HASH(`id`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\");",
+                "doris": "CREATE TABLE t1 (id VARCHAR(10) NOT NULL, dsc STRING) UNIQUE KEY(`id`) DISTRIBUTED BY HASH(`id`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\");",
             },
         )
 
@@ -957,7 +957,7 @@ class TestDoris(Validator):
             write={
                 "doris": "CREATE TABLE t1 (a INT, b SMALLINT, c INT, d BOOLEAN, e SMALLINT, f INT, "
             "g BIGINT, h LARGEINT, i DECIMAL(20, 10), j DECIMAL(33, 10), k DATETIME(6), "
-            "l SMALLINT, m STRING, n CHAR, o VARCHAR(30), p STRING, q BOOLEAN, "
+            "l SMALLINT, m STRING, n CHAR, o VARCHAR(10), p STRING, q BOOLEAN, "
             "u STRING, v STRING, w STRING, x STRING, y STRING, z STRING, aa STRING, bb STRING, cc STRING, "
             "ff STRING, gg STRING, hh STRING, ii STRING) "
             "UNIQUE KEY(`a`) DISTRIBUTED BY HASH(`a`) BUCKETS AUTO PROPERTIES "
@@ -972,49 +972,16 @@ class TestDoris(Validator):
             },
         )
 
-        # self.validate_all(
-        #     "CREATE TABLE block_chain.bc_playrecord_month_analysis_local (`companycode` int64 COMMENT '商家号', `encryptcode` String COMMENT '加密商家号', `songid` String COMMENT '歌曲id', `playnum` UInt8 COMMENT '点播次数', `hashdir` String COMMENT 'hash地址', `playmonth` Date COMMENT '日期分区键') ENGINE = MergeTree PARTITION BY toYYYYMM(playmonth) ORDER BY (companycode, songid, playmonth) TTL playmonth + toIntervalYear(1) SETTINGS index_granularity = 8192",
-        #     write={
-        #         "doris": "CREATE TABLE t2 (a INT, b BOOLEAN, c DATETIME, d DECIMAL, e DECIMAL) DUPLICATE KEY(`a`) DISTRIBUTED BY HASH(`a`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\");",
-        #     },
-        # )
-
-        # self.validate_all(
-        #     "CREATE TABLE kdwuser.km_tbl_active_user_event_comp_bitmap (`p_ds` Date COMMENT '快照日期', `event_id` String COMMENT '事件id', `company_code` String COMMENT '商家编码', `openid_bit` AggregateFunction(groupBitmap, UInt64) COMMENT '位图数据', `crossopenid_bit` AggregateFunction(groupBitmap, UInt64) COMMENT 'crosspenid位图数据') ENGINE = Distributed('ktvme_ck_cluster', 'kdwuser', 'km_tbl_active_user_event_comp_bitmap_local', rand())",
-        #     write={
-        #         "doris": "CREATE TABLE t2 (a INT, b BOOLEAN, c DATETIME, d DECIMAL, e DECIMAL) DUPLICATE KEY(`a`) DISTRIBUTED BY HASH(`a`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\");",
-        #     },
-        # )
-
-        # self.validate_all(
-        #     "CREATE TABLE kdwtemp.top300song (`songid` String, `room_cnt` Array(Tuple(String, String, Int32)), `max_cnt` Int32) ENGINE = MergeTree ORDER BY songid SETTINGS index_granularity = 8192;",
-        #     read={"clickhouse": "CREATE TABLE kdwtemp.top300song (`songid` String, `room_cnt` Array(Tuple(String, String, Int32)), `max_cnt` Int32) ENGINE = MergeTree ORDER BY songid SETTINGS index_granularity = 8192;"},
-        #     write={
-        #         "doris": "CREATE TABLE t2 (a INT, b BOOLEAN, c DATETIME, d DECIMAL, e DECIMAL) DUPLICATE KEY(`a`) DISTRIBUTED BY HASH(`a`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\");",
-        #     },
-        # )
-
-    def test(self):
-        import csv
-        import sqlglot
-        list = []
-        with open('/Users/hechao/Downloads/_select_create_table_query_from_system_tables_where_database_in__202401031629.csv', 'r') as file:
-            # 创建 CSV 读取器
-            reader = csv.reader(file)
-
-            # 逐行读取 CSV 内容
-            for row in reader:
-                var = sqlglot.transpile(row[0], read="clickhouse", write="doris")[0]
-                list.append(var)
-        print('-----------')
-        for e in list:
-            print(e)
-
-    def test1(self):
+    def test_clickhouse2doris_create(self):
         import sqlglot
         sql = "CREATE TABLE kdwtemp.top300song (`songid` String, `room_cnt` Array(Tuple(String, String, Int32)), `max_cnt` Int32) ENGINE = MergeTree ORDER BY songid SETTINGS index_granularity = 8192;"
-        var = sqlglot.transpile(sql,
-                                read="clickhouse",
-                                write="doris")[0]
-        sqlglot.parse_one(sql, read="clickhouse")
-        print(var)
+        self.assertEqual(sqlglot.transpile(sql, read="clickhouse", write="doris")[0],
+                         "CREATE TABLE kdwtemp.top300song (`songid` VARCHAR, `room_cnt` ARRAY<STRUCT<col_1: STRING, col_2: STRING, col_3: INT>>, `max_cnt` INT) DUPLICATE KEY(`songid`) DISTRIBUTED BY HASH(`songid`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\");")
+
+        sql = "CREATE TABLE block_chain.bc_playrecord_month_analysis_local (`companycode` int64 COMMENT '商家号', `encryptcode` String COMMENT '加密商家号', `songid` String COMMENT '歌曲id', `playnum` UInt8 COMMENT '点播次数', `hashdir` String COMMENT 'hash地址', `playmonth` Date COMMENT '日期分区键') ENGINE = MergeTree PARTITION BY toYYYYMM(playmonth) ORDER BY (companycode, songid, playmonth) TTL playmonth + toIntervalYear(1) SETTINGS index_granularity = 8192"
+        self.assertEqual(sqlglot.transpile(sql, read="clickhouse", write="doris")[0],
+                         "CREATE TABLE block_chain.bc_playrecord_month_analysis_local (`companycode` BIGINT COMMENT '商家号', `encryptcode` STRING COMMENT '加密商家号', `songid` STRING COMMENT '歌曲id', `playnum` SMALLINT COMMENT '点播次数', `hashdir` STRING COMMENT 'hash地址', `playmonth` DATE COMMENT '日期分区键') DUPLICATE KEY(`companycode`) DISTRIBUTED BY HASH(`companycode`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\");")
+
+        sql = "CREATE TABLE kdwuser.km_tbl_active_user_event_comp_bitmap (`p_ds` Date COMMENT '快照日期', `event_id` String COMMENT '事件id', `company_code` String COMMENT '商家编码', `openid_bit` AggregateFunction(groupBitmap, UInt64) COMMENT '位图数据', `crossopenid_bit` AggregateFunction(groupBitmap, UInt64) COMMENT 'crosspenid位图数据') ENGINE = Distributed('ktvme_ck_cluster', 'kdwuser', 'km_tbl_active_user_event_comp_bitmap_local', rand())"
+        self.assertEqual(sqlglot.transpile(sql, read="clickhouse", write="doris")[0],
+                         "CREATE TABLE kdwuser.km_tbl_active_user_event_comp_bitmap (`p_ds` DATE COMMENT '快照日期', `event_id` STRING COMMENT '事件id', `company_code` STRING COMMENT '商家编码', `openid_bit` STRING COMMENT '位图数据', `crossopenid_bit` STRING COMMENT 'crosspenid位图数据') DUPLICATE KEY(`p_ds`) DISTRIBUTED BY HASH(`p_ds`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\");")

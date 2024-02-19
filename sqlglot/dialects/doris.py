@@ -377,20 +377,9 @@ class Doris(MySQL):
             exp.DataType.Type.UINT128: "STRING",
             exp.DataType.Type.UINT256: "STRING",
             exp.DataType.Type.LOWCARDINALITY: "STRING",
+            exp.DataType.Type.AGGREGATEFUNCTION: "STRING",
+            exp.DataType.Type.SIMPLEAGGREGATEFUNCTION: "STRING",
         }
-
-        FIRST_COLUMN_NOT_SUPPORT_TYPE_DECIMAL = [
-            exp.DataType.Type.FLOAT,
-            exp.DataType.Type.DOUBLE,
-        ]
-
-        FIRST_COLUMN_NOT_SUPPORT_TYPE_VARCHAR = [
-            exp.DataType.Type.TEXT,
-            exp.DataType.Type.ARRAY,
-            exp.DataType.Type.STRUCT,
-            exp.DataType.Type.MAP
-        ]
-
 
         TYPE_MAPPING = {
             **MySQL.Generator.TYPE_MAPPING,
@@ -410,12 +399,33 @@ class Doris(MySQL):
             exp.DataType.Type.DATE32: "DATE",
 
             exp.DataType.Type.INT128: "LARGEINT",
-            exp.DataType.Type.AGGREGATEFUNCTION: "STRING",
-            # exp.DataType.Type.SIMPLEAGGREGATEFUNCTION: "STRING",
         }
 
+        # clickhouse和doris的type对应, 用于STRUCT类型适配
         CLICKHOUSE_TYPE_MAPPING = {
-
+            "int8": "TINYINT",
+            "int16": "SMALLINT",
+            "int32": "INT",
+            "int64": "BIGINT",
+            "int128": "LARGEINT",
+            "int256": "STRING",
+            "uint8": "SMALLINT",
+            "uint16": "INT",
+            "uint32": "BIGINT",
+            "uint64": "LARGEINT",
+            "uint128": "STRING",
+            "uint256": "STRING",
+            "date32": "DATE",
+            "datetime64": "DATETIME",
+            "float32": "FLOAT",
+            "float64": "DOUBLE",
+            "fixedstring": "STRING",
+            "lowcardinality": "STRING",
+            "enum": "STRING",
+            "enum8": "STRING",
+            "enum16": "STRING",
+            "ipv4": "STRING",
+            "ipv6": "STRING",
         }
 
         TIMESTAMP_FUNC_TYPES = set()
@@ -428,6 +438,7 @@ class Doris(MySQL):
             exp.AutoIncrementProperty: exp.Properties.Location.UNSUPPORTED,
             exp.CharacterSetProperty: exp.Properties.Location.UNSUPPORTED,
             exp.CollateProperty: exp.Properties.Location.UNSUPPORTED,
+            exp.SchemaCommentProperty: exp.Properties.Location.UNSUPPORTED,
             exp.Order: exp.Properties.Location.UNSUPPORTED,
             exp.MergeTreeTTL: exp.Properties.Location.UNSUPPORTED,
             exp.SettingsProperty: exp.Properties.Location.UNSUPPORTED,
@@ -564,21 +575,23 @@ class Doris(MySQL):
             elif expression.is_type(exp.DataType.Type.UDECIMAL):
                 precision_expression = expression.find(exp.DataTypeParam)
                 if precision_expression:
+                    # 如果p + 1 > 38, 将使用STRING类型
                     precision = int(precision_expression.name) + 1
                     if precision <= 38:
                         precision_expression.this.set("this", precision)
                     else:
                         return "STRING"
-            elif expression.is_type(exp.DataType.Type.CHAR):
-                size_expression = expression.find(exp.DataTypeParam)
-                if size_expression:
-                    size = int(size_expression.name)
-                    return "STRING" if size * 3 > 255 else f"CHAR({size * 3})"
-            elif expression.is_type(exp.DataType.Type.VARCHAR):
-                size_expression = expression.find(exp.DataTypeParam)
-                if size_expression:
-                    size = int(size_expression.name)
-                    return "STRING" if size * 3 > 65533 else f"VARCHAR({size * 3})"
+            # todo 对于mysql，CHAR和VARCHAR需要*3，但其他的数据库不需要，这里先不*3，后续讨论解决方法
+            # elif expression.is_type(exp.DataType.Type.CHAR):
+            #     size_expression = expression.find(exp.DataTypeParam)
+            #     if size_expression:
+            #         size = int(size_expression.name)
+            #         return "STRING" if size * 3 > 255 else f"CHAR({size * 3})"
+            # elif expression.is_type(exp.DataType.Type.VARCHAR):
+            #     size_expression = expression.find(exp.DataTypeParam)
+            #     if size_expression:
+            #         size = int(size_expression.name)
+            #         return "STRING" if size * 3 > 65533 else f"VARCHAR({size * 3})"
             elif expression.is_type(exp.DataType.Type.BIT):
                 size_expression = expression.find(exp.DataTypeParam)
                 if size_expression:
@@ -591,11 +604,15 @@ class Doris(MySQL):
                     precision = 6 if size > 6 else size
                     return f"DATETIME({precision})"
             elif expression.is_type(exp.DataType.Type.NULLABLE):
+                # clickhouse有Nullable(xxx)类型，doris取xxx作为类型
                 expression = expression.expressions[0]
             elif expression.is_type(exp.DataType.Type.STRUCT):
+                # todo STRUCT还需要考虑其他的数据库，这里先只实现clickhouse的
+                # clickhouse的STRUCT类型为STRUCT<String, String, Int>，而doris需要为STRUCT<cnt_1:String,cnt_2:String,cnt_3:Int>
                 col_list = []
                 for index, col in enumerate(expression.expressions, start=1):
-                    col_list.append(f"col_{index}: {col.this}")
+                    col_type = col.this.lower()
+                    col_list.append(f"col_{index}: {self.CLICKHOUSE_TYPE_MAPPING.get(col_type, col_type).upper()}")
                 cols = ", ".join(col_list)
                 return f"STRUCT<{cols}>"
 
@@ -603,20 +620,22 @@ class Doris(MySQL):
 
         def create_sql(self, expression: exp.Create) -> str:
             pk_list = []
-            defs = []
+            col_def_list = []
             for e in expression.this.expressions:
                 if isinstance(e, exp.ColumnDef):
-                    defs.append(e)
+                    col_def_list.append(e)
 
+            # first column could not be float, double, string or array, struct, map, please use decimal or varchar instead.
             first_data_type = expression.find(exp.DataType)
             if first_data_type.is_type(exp.DataType.Type.NULLABLE):
                 first_data_type = first_data_type.expressions[0]
-            if first_data_type.this in self.FIRST_COLUMN_NOT_SUPPORT_TYPE_DECIMAL:
+            if first_data_type.this in (exp.DataType.Type.FLOAT, exp.DataType.Type.DOUBLE):
                 expression.find(exp.ColumnDef).set("kind", exp.DataType.build("decimal"))
-            if first_data_type.this in self.FIRST_COLUMN_NOT_SUPPORT_TYPE_VARCHAR:
+            if first_data_type.this in (exp.DataType.Type.TEXT, exp.DataType.Type.ARRAY, exp.DataType.Type.STRUCT, exp.DataType.Type.MAP):
                 expression.find(exp.ColumnDef).set("kind", exp.DataType.build("varchar"))
 
-            for column in defs:
+            # 移除primary_key、auto_increment、unique等关键字信息
+            for column in col_def_list:
                 primary_key = None
                 auto_increment = None
                 unique = None
