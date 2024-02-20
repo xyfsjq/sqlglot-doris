@@ -367,7 +367,6 @@ class Doris(MySQL):
             exp.DataType.Type.BINARY: "STRING",
             exp.DataType.Type.VARBINARY: "STRING",
             exp.DataType.Type.ENUM: "STRING",
-
             exp.DataType.Type.ENUM8: "STRING",
             exp.DataType.Type.ENUM16: "STRING",
             exp.DataType.Type.IPV4: "STRING",
@@ -387,17 +386,14 @@ class Doris(MySQL):
             exp.DataType.Type.TIMESTAMP: "DATETIME",
             exp.DataType.Type.TIMESTAMPTZ: "DATETIME",
             exp.DataType.Type.BIT: "BOOLEAN",
-
             exp.DataType.Type.UTINYINT: "SMALLINT",
             exp.DataType.Type.USMALLINT: "INT",
             exp.DataType.Type.UMEDIUMINT: "INT",
             exp.DataType.Type.UINT: "BIGINT",
             exp.DataType.Type.UBIGINT: "LARGEINT",
-
             exp.DataType.Type.MEDIUMINT: "INT",
             exp.DataType.Type.YEAR: "SMALLINT",
             exp.DataType.Type.DATE32: "DATE",
-
             exp.DataType.Type.INT128: "LARGEINT",
         }
 
@@ -597,7 +593,11 @@ class Doris(MySQL):
                 if size_expression:
                     size = int(size_expression.name)
                     return "BOOLEAN" if size == 1 else "STRING"
-            elif expression.this in (exp.DataType.Type.DATETIME, exp.DataType.Type.TIMESTAMP, exp.DataType.Type.DATETIME64):
+            elif expression.this in (
+                exp.DataType.Type.DATETIME,
+                exp.DataType.Type.TIMESTAMP,
+                exp.DataType.Type.DATETIME64,
+            ):
                 size_expression = expression.find(exp.DataTypeParam)
                 if size_expression:
                     size = int(size_expression.name)
@@ -612,7 +612,9 @@ class Doris(MySQL):
                 col_list = []
                 for index, col in enumerate(expression.expressions, start=1):
                     col_type = col.this.lower()
-                    col_list.append(f"col_{index}: {self.CLICKHOUSE_TYPE_MAPPING.get(col_type, col_type).upper()}")
+                    col_list.append(
+                        f"col_{index}: {self.CLICKHOUSE_TYPE_MAPPING.get(col_type, col_type).upper()}"
+                    )
                 cols = ", ".join(col_list)
                 return f"STRUCT<{cols}>"
 
@@ -627,12 +629,24 @@ class Doris(MySQL):
 
             # first column could not be float, double, string or array, struct, map, please use decimal or varchar instead.
             first_data_type = expression.find(exp.DataType)
-            if first_data_type.is_type(exp.DataType.Type.NULLABLE):
+            if first_data_type and first_data_type.is_type(exp.DataType.Type.NULLABLE):
                 first_data_type = first_data_type.expressions[0]
-            if first_data_type.this in (exp.DataType.Type.FLOAT, exp.DataType.Type.DOUBLE):
-                expression.find(exp.ColumnDef).set("kind", exp.DataType.build("decimal"))
-            if first_data_type.this in (exp.DataType.Type.TEXT, exp.DataType.Type.ARRAY, exp.DataType.Type.STRUCT, exp.DataType.Type.MAP):
-                expression.find(exp.ColumnDef).set("kind", exp.DataType.build("varchar"))
+            if first_data_type and first_data_type.this in (
+                exp.DataType.Type.FLOAT,
+                exp.DataType.Type.DOUBLE,
+            ):
+                col_def = expression.find(exp.ColumnDef)
+                if col_def:
+                    col_def.set("kind", exp.DataType.build("decimal"))
+            if first_data_type and first_data_type.this in (
+                exp.DataType.Type.TEXT,
+                exp.DataType.Type.ARRAY,
+                exp.DataType.Type.STRUCT,
+                exp.DataType.Type.MAP,
+            ):
+                col_def = expression.find(exp.ColumnDef)
+                if col_def:
+                    col_def.set("kind", exp.DataType.build("varchar"))
 
             # 移除primary_key、auto_increment、unique等关键字信息
             for column in col_def_list:
@@ -646,7 +660,7 @@ class Doris(MySQL):
                         auto_increment = constraint
                     if isinstance(constraint.kind, exp.UniqueColumnConstraint):
                         unique = constraint
-                if primary_key:
+                if primary_key and primary_key.parent:
                     pk_list.append(f"`{primary_key.parent.name}`")
                     column.constraints.remove(primary_key)
                 if auto_increment:
@@ -663,20 +677,27 @@ class Doris(MySQL):
 
             if pk_list:  # UNIQUE模型
                 pk_name = ", ".join(pk_list)
-                return (f"{expression_sql} "
-                        f"UNIQUE KEY({pk_name}) "
-                        f"DISTRIBUTED BY HASH({pk_name}) BUCKETS AUTO "
-                        f"PROPERTIES ("
-                        f"\"replication_allocation\" = \"tag.location.default: 1\""
-                        f");")
+                return (
+                    f"{expression_sql} "
+                    f"UNIQUE KEY({pk_name}) "
+                    f"DISTRIBUTED BY HASH({pk_name}) BUCKETS AUTO "
+                    f"PROPERTIES ("
+                    f'"replication_allocation" = "tag.location.default: 1"'
+                    f");"
+                )
             else:  # DUPLICATE模型
-                first_field_name = expression.find(exp.ColumnDef).name
-                return (f"{expression_sql} "
-                        f"DUPLICATE KEY(`{first_field_name}`) "
-                        f"DISTRIBUTED BY HASH(`{first_field_name}`) BUCKETS AUTO "
-                        f"PROPERTIES ("
-                        f"\"replication_allocation\" = \"tag.location.default: 1\""
-                        f");")
+                first_field_name = ""
+                col_def = expression.find(exp.ColumnDef)
+                if col_def:
+                    first_field_name = col_def.name
+                return (
+                    f"{expression_sql} "
+                    f"DUPLICATE KEY(`{first_field_name}`) "
+                    f"DISTRIBUTED BY HASH(`{first_field_name}`) BUCKETS AUTO "
+                    f"PROPERTIES ("
+                    f'"replication_allocation" = "tag.location.default: 1"'
+                    f");"
+                )
 
         def createable_sql(self, expression: exp.Create, locations: t.DefaultDict) -> str:
             # 移除pk和index信息，并在生成createable_sql后重新加上，防止后续的create_sql()执行错误
