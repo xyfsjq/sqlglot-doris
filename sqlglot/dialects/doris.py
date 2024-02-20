@@ -155,13 +155,25 @@ def _string_agg_sql(self: Doris.Generator, expression: exp.GroupConcat) -> str:
     return f"GROUP_CONCAT({self.format_args(this, separator)}{order})"
 
 
+def handle_range(self, expression: exp.GenerateSeries) -> str:
+    start = self.sql(expression, "start")
+    end = str(int(self.sql(expression, "end")) + 1)
+    step = self.sql(expression, "step")
+
+    if step == "":
+        return self.func("Array_Range", start, end)
+
+    return self.func("Array_Range", start, end, step)
+
+
 def handle_regexp_extract(self, expr: exp.RegexpExtract) -> str:
     this = self.sql(expr, "this")
     expression = self.sql(expr, "expression")
-    position = self.sql(expr, "position")
-    if position == "":
+    occurrence = self.sql(expr, "occurrence")
+    if occurrence == "":
         return f"REGEXP_EXTRACT_ALL({this}, '({expression[1:-1]})')"
-    return f"REGEXP_EXTRACT({this}, '({expression[1:-1]})', {position})"
+
+    return f"REGEXP_EXTRACT({this}, '({expression[1:-1]})', {occurrence})"
 
 
 def handle_to_date(self: Doris.Generator, expression: exp.TsOrDsToDate | exp.StrToTime) -> str:
@@ -392,7 +404,7 @@ class Doris(MySQL):
             exp.DateTrunc: handle_date_trunc,
             exp.Empty: rename_func("NULL_OR_EMPTY"),
             exp.Filter: handle_filter,
-            exp.GenerateSeries: rename_func("ARRAY_RANGE"),
+            exp.GenerateSeries: handle_range,
             exp.GroupConcat: _string_agg_sql,
             exp.JSONExtractScalar: _json_extract_sql,
             exp.JSONExtract: _json_extract_sql,

@@ -244,6 +244,7 @@ class TestDoris(Validator):
             "SELECT REGEXP_EXTRACT('Abcd abCd aBcd', '(ab.)', 1)",
             read={
                 "postgres": "SELECT regexp_match('Abcd abCd aBcd', 'ab.')",
+                "presto": "SELECT REGEXP_EXTRACT('Abcd abCd aBcd', 'ab.')",
             },
         )
 
@@ -252,6 +253,7 @@ class TestDoris(Validator):
             read={
                 "postgres": "SELECT regexp_matches('abcd abcd abcd', 'ab.')",
                 "clickhouse": "SELECT extractAll('abcd abcd abcd', 'ab.')",
+                "presto": "SELECT REGEXP_EXTRACT_ALL('abcd abcd abcd', 'ab.')",
             },
         )
         self.validate_all(
@@ -318,7 +320,7 @@ class TestDoris(Validator):
             "ARRAY_RANGE(0, 5)",
             read={
                 "clickhouse": "range(0, 5) ",
-                "presto": "sequence(0, 5)",
+                "presto": "sequence(0, 4)",
             },
         )
         self.validate_all(

@@ -255,6 +255,12 @@ class Presto(Dialect):
             "JSON_ARRAY_LENGTH": exp.JsonArrayLength.from_arg_list,
             "NOW": exp.CurrentTimestamp.from_arg_list,
             "REGEXP_EXTRACT": lambda args: exp.RegexpExtract(
+                this=seq_get(args, 0),
+                expression=seq_get(args, 1),
+                occurrence=exp.Literal.number(1),
+                group=seq_get(args, 2),
+            ),
+            "REGEXP_EXTRACT_ALL": lambda args: exp.RegexpExtract(
                 this=seq_get(args, 0), expression=seq_get(args, 1), group=seq_get(args, 2)
             ),
             "REGEXP_REPLACE": lambda args: exp.RegexpReplace(

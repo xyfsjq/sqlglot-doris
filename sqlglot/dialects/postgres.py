@@ -329,7 +329,7 @@ class Postgres(Dialect):
             "REGEXP_MATCH": lambda args: exp.RegexpExtract(
                 this=seq_get(args, 0),
                 expression=seq_get(args, 1),
-                position="1",
+                occurrence="1",
             ),
             "REGEXP_MATCHES": exp.RegexpExtract.from_arg_list,
             "STRPOS": exp.StrPosition.from_arg_list,

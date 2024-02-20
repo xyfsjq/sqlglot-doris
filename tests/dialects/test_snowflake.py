@@ -1353,7 +1353,6 @@ FROM persons AS p, LATERAL FLATTEN(input => p.c, path => 'contact') AS _flattene
             read={
                 "bigquery": "REGEXP_EXTRACT(subject, pattern)",
                 "hive": "REGEXP_EXTRACT(subject, pattern)",
-                "presto": "REGEXP_EXTRACT(subject, pattern)",
                 "spark": "REGEXP_EXTRACT(subject, pattern)",
             },
             write={

@@ -5711,7 +5711,7 @@ class ArraySlice(Func):
 
 
 class ArrayRange(Func):
-    arg_types = {"this": True, "end": False, "step": False}
+    arg_types = {"start": True, "end": False, "step": False}
 
 
 class ArrayReverseSort(Func):
