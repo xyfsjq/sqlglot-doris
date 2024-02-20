@@ -18,158 +18,16 @@ class TestBigQuery(Validator):
     maxDiff = None
 
     def test_bigquery(self):
-        self.validate_all(
-            "SELECT SUM(x IGNORE NULLS) AS x",
-            read={
-                "bigquery": "SELECT SUM(x IGNORE NULLS) AS x",
-                "duckdb": "SELECT SUM(x IGNORE NULLS) AS x",
-                "postgres": "SELECT SUM(x) IGNORE NULLS AS x",
-                "spark": "SELECT SUM(x) IGNORE NULLS AS x",
-                "snowflake": "SELECT SUM(x) IGNORE NULLS AS x",
-            },
-            write={
-                "bigquery": "SELECT SUM(x IGNORE NULLS) AS x",
-                "duckdb": "SELECT SUM(x IGNORE NULLS) AS x",
-                "postgres": "SELECT SUM(x) IGNORE NULLS AS x",
-                "spark": "SELECT SUM(x) IGNORE NULLS AS x",
-                "snowflake": "SELECT SUM(x) IGNORE NULLS AS x",
-            },
-        )
-        self.validate_all(
-            "SELECT SUM(x RESPECT NULLS) AS x",
-            read={
-                "bigquery": "SELECT SUM(x RESPECT NULLS) AS x",
-                "duckdb": "SELECT SUM(x RESPECT NULLS) AS x",
-                "postgres": "SELECT SUM(x) RESPECT NULLS AS x",
-                "spark": "SELECT SUM(x) RESPECT NULLS AS x",
-                "snowflake": "SELECT SUM(x) RESPECT NULLS AS x",
-            },
-            write={
-                "bigquery": "SELECT SUM(x RESPECT NULLS) AS x",
-                "duckdb": "SELECT SUM(x RESPECT NULLS) AS x",
-                "postgres": "SELECT SUM(x) RESPECT NULLS AS x",
-                "spark": "SELECT SUM(x) RESPECT NULLS AS x",
-                "snowflake": "SELECT SUM(x) RESPECT NULLS AS x",
-            },
-        )
-        self.validate_all(
-            "SELECT PERCENTILE_CONT(x, 0.5 RESPECT NULLS) OVER ()",
-            write={
-                "duckdb": "SELECT QUANTILE_CONT(x, 0.5 RESPECT NULLS) OVER ()",
-                "spark": "SELECT PERCENTILE_CONT(x, 0.5) RESPECT NULLS OVER ()",
-            },
-        )
-        self.validate_all(
-            "SELECT ARRAY_AGG(DISTINCT x IGNORE NULLS ORDER BY a, b DESC LIMIT 10) AS x",
-            write={
-                "duckdb": "SELECT ARRAY_AGG(DISTINCT x ORDER BY a NULLS FIRST, b DESC LIMIT 10 IGNORE NULLS) AS x",
-                "spark": "SELECT COLLECT_LIST(DISTINCT x ORDER BY a, b DESC LIMIT 10) IGNORE NULLS AS x",
-            },
-        )
-        self.validate_all(
-            "SELECT ARRAY_AGG(DISTINCT x IGNORE NULLS ORDER BY a, b DESC LIMIT 1, 10) AS x",
-            write={
-                "duckdb": "SELECT ARRAY_AGG(DISTINCT x ORDER BY a NULLS FIRST, b DESC LIMIT 1, 10 IGNORE NULLS) AS x",
-                "spark": "SELECT COLLECT_LIST(DISTINCT x ORDER BY a, b DESC LIMIT 1, 10) IGNORE NULLS AS x",
-            },
-        )
-        self.validate_identity("SELECT COUNT(x RESPECT NULLS)")
-        self.validate_identity("SELECT LAST_VALUE(x IGNORE NULLS) OVER y AS x")
-
-        self.validate_identity(
-            "create or replace view test (tenant_id OPTIONS(description='Test description on table creation')) select 1 as tenant_id, 1 as customer_id;",
-            "CREATE OR REPLACE VIEW test (tenant_id OPTIONS (description='Test description on table creation')) AS SELECT 1 AS tenant_id, 1 AS customer_id",
-        )
-
-        with self.assertLogs(helper_logger) as cm:
-            statements = parse(
-                """
-            BEGIN
-              DECLARE 1;
-              IF from_date IS NULL THEN SET x = 1;
-              END IF;
-            END
-            """,
-                read="bigquery",
-            )
-            self.assertIn("unsupported syntax", cm.output[0])
-
-        for actual, expected in zip(
-            statements, ("BEGIN DECLARE 1", "IF from_date IS NULL THEN SET x = 1", "END IF", "END")
-        ):
-            self.assertEqual(actual.sql(dialect="bigquery"), expected)
-
-        with self.assertLogs(helper_logger) as cm:
-            self.validate_identity(
-                "SELECT * FROM t AS t(c1, c2)",
-                "SELECT * FROM t AS t",
-            )
-
-            self.assertEqual(
-                cm.output, ["WARNING:sqlglot:Named columns are not supported in table alias."]
-            )
-
-        with self.assertLogs(helper_logger) as cm:
-            self.validate_all(
-                "SELECT a[1], b[OFFSET(1)], c[ORDINAL(1)], d[SAFE_OFFSET(1)], e[SAFE_ORDINAL(1)]",
-                write={
-                    "duckdb": "SELECT a[2], b[2], c[1], d[2], e[1]",
-                    "bigquery": "SELECT a[1], b[OFFSET(1)], c[ORDINAL(1)], d[SAFE_OFFSET(1)], e[SAFE_ORDINAL(1)]",
-                    "presto": "SELECT a[2], b[2], c[1], ELEMENT_AT(d, 2), ELEMENT_AT(e, 1)",
-                },
-            )
-
-            self.validate_all(
-                "a[0]",
-                read={
-                    "duckdb": "a[1]",
-                    "presto": "a[1]",
-                },
-            )
-
-        self.validate_identity(
-            "select array_contains([1, 2, 3], 1)",
-            "SELECT EXISTS(SELECT 1 FROM UNNEST([1, 2, 3]) AS _col WHERE _col = 1)",
-        )
         self.validate_identity("CREATE SCHEMA x DEFAULT COLLATE 'en'")
         self.validate_identity("CREATE TABLE x (y INT64) DEFAULT COLLATE 'en'")
         self.validate_identity("PARSE_JSON('{}', wide_number_mode => 'exact')")
-
-        with self.assertRaises(TokenError):
-            transpile("'\\'", read="bigquery")
-
-        # Reference: https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax#set_operators
-        with self.assertRaises(UnsupportedError):
-            transpile(
-                "SELECT * FROM a INTERSECT ALL SELECT * FROM b",
-                write="bigquery",
-                unsupported_level=ErrorLevel.RAISE,
-            )
-
-        with self.assertRaises(UnsupportedError):
-            transpile(
-                "SELECT * FROM a EXCEPT ALL SELECT * FROM b",
-                write="bigquery",
-                unsupported_level=ErrorLevel.RAISE,
-            )
-
-        with self.assertRaises(ParseError):
-            transpile("SELECT * FROM UNNEST(x) AS x(y)", read="bigquery")
-
-        with self.assertRaises(ParseError):
-            transpile("DATE_ADD(x, day)", read="bigquery")
-
-        with self.assertLogs(parser_logger) as cm:
-            for_in_stmts = parse(
-                "FOR record IN (SELECT word FROM shakespeare) DO SELECT record.word; END FOR;",
-                read="bigquery",
-            )
-            self.assertEqual(
-                [s.sql(dialect="bigquery") for s in for_in_stmts],
-                ["FOR record IN (SELECT word FROM shakespeare) DO SELECT record.word", "END FOR"],
-            )
-            assert "'END FOR'" in cm.output[0]
-
+        self.validate_identity("FOO(values)")
+        self.validate_identity("STRUCT(values AS value)")
+        self.validate_identity("ARRAY_AGG(x IGNORE NULLS LIMIT 1)")
+        self.validate_identity("ARRAY_AGG(x IGNORE NULLS ORDER BY x LIMIT 1)")
+        self.validate_identity("ARRAY_AGG(DISTINCT x IGNORE NULLS ORDER BY x LIMIT 1)")
+        self.validate_identity("ARRAY_AGG(x IGNORE NULLS)")
+        self.validate_identity("ARRAY_AGG(DISTINCT x IGNORE NULLS HAVING MAX x ORDER BY x LIMIT 1)")
         self.validate_identity("SELECT * FROM dataset.my_table TABLESAMPLE SYSTEM (10 PERCENT)")
         self.validate_identity("TIME('2008-12-25 15:30:00+08')")
         self.validate_identity("TIME('2008-12-25 15:30:00+08', 'America/Los_Angeles')")
@@ -228,6 +86,13 @@ class TestBigQuery(Validator):
         self.validate_identity("SELECT TIMESTAMP_SECONDS(2) AS t")
         self.validate_identity("SELECT TIMESTAMP_MILLIS(2) AS t")
         self.validate_identity("""SELECT JSON_EXTRACT_SCALAR('{"a": 5}', '$.a')""")
+        self.validate_identity("UPDATE x SET y = NULL")
+        self.validate_identity("LOG(n, b)")
+        self.validate_identity("SELECT COUNT(x RESPECT NULLS)")
+        self.validate_identity("SELECT LAST_VALUE(x IGNORE NULLS) OVER y AS x")
+        self.validate_identity(
+            "SELECT * FROM test QUALIFY a IS DISTINCT FROM b WINDOW c AS (PARTITION BY d)"
+        )
         self.validate_identity(
             "FOR record IN (SELECT word, word_count FROM bigquery-public-data.samples.shakespeare LIMIT 5) DO SELECT record.word, record.word_count"
         )
@@ -254,6 +119,14 @@ class TestBigQuery(Validator):
         )
         self.validate_identity(
             """SELECT JSON_EXTRACT_SCALAR('5')""", """SELECT JSON_EXTRACT_SCALAR('5', '$')"""
+        )
+        self.validate_identity(
+            "select array_contains([1, 2, 3], 1)",
+            "SELECT EXISTS(SELECT 1 FROM UNNEST([1, 2, 3]) AS _col WHERE _col = 1)",
+        )
+        self.validate_identity(
+            "create or replace view test (tenant_id OPTIONS(description='Test description on table creation')) select 1 as tenant_id, 1 as customer_id;",
+            "CREATE OR REPLACE VIEW test (tenant_id OPTIONS (description='Test description on table creation')) AS SELECT 1 AS tenant_id, 1 AS customer_id",
         )
         self.validate_identity(
             "SELECT SPLIT(foo)",
@@ -303,7 +176,81 @@ class TestBigQuery(Validator):
             "SELECT * FROM UNNEST(x) WITH OFFSET EXCEPT DISTINCT SELECT * FROM UNNEST(y) WITH OFFSET",
             "SELECT * FROM UNNEST(x) WITH OFFSET AS offset EXCEPT DISTINCT SELECT * FROM UNNEST(y) WITH OFFSET AS offset",
         )
+        self.validate_identity(
+            "SELECT * FROM (SELECT a, b, c FROM test) PIVOT(SUM(b) d, COUNT(*) e FOR c IN ('x', 'y'))",
+            "SELECT * FROM (SELECT a, b, c FROM test) PIVOT(SUM(b) AS d, COUNT(*) AS e FOR c IN ('x', 'y'))",
+        )
+        self.validate_identity(
+            r"REGEXP_EXTRACT(svc_plugin_output, r'\\\((.*)')",
+            r"REGEXP_EXTRACT(svc_plugin_output, '\\\\\\((.*)')",
+        )
 
+        self.validate_all(
+            "TIMESTAMP(x)",
+            write={
+                "bigquery": "TIMESTAMP(x)",
+                "duckdb": "CAST(x AS TIMESTAMPTZ)",
+                "presto": "CAST(x AS TIMESTAMP WITH TIME ZONE)",
+            },
+        )
+        self.validate_all(
+            "SELECT SUM(x IGNORE NULLS) AS x",
+            read={
+                "bigquery": "SELECT SUM(x IGNORE NULLS) AS x",
+                "duckdb": "SELECT SUM(x IGNORE NULLS) AS x",
+                "postgres": "SELECT SUM(x) IGNORE NULLS AS x",
+                "spark": "SELECT SUM(x) IGNORE NULLS AS x",
+                "snowflake": "SELECT SUM(x) IGNORE NULLS AS x",
+            },
+            write={
+                "bigquery": "SELECT SUM(x IGNORE NULLS) AS x",
+                "duckdb": "SELECT SUM(x IGNORE NULLS) AS x",
+                "postgres": "SELECT SUM(x) IGNORE NULLS AS x",
+                "spark": "SELECT SUM(x) IGNORE NULLS AS x",
+                "snowflake": "SELECT SUM(x) IGNORE NULLS AS x",
+            },
+        )
+        self.validate_all(
+            "SELECT SUM(x RESPECT NULLS) AS x",
+            read={
+                "bigquery": "SELECT SUM(x RESPECT NULLS) AS x",
+                "duckdb": "SELECT SUM(x RESPECT NULLS) AS x",
+                "postgres": "SELECT SUM(x) RESPECT NULLS AS x",
+                "spark": "SELECT SUM(x) RESPECT NULLS AS x",
+                "snowflake": "SELECT SUM(x) RESPECT NULLS AS x",
+            },
+            write={
+                "bigquery": "SELECT SUM(x RESPECT NULLS) AS x",
+                "duckdb": "SELECT SUM(x RESPECT NULLS) AS x",
+                "postgres": "SELECT SUM(x) RESPECT NULLS AS x",
+                "spark": "SELECT SUM(x) RESPECT NULLS AS x",
+                "snowflake": "SELECT SUM(x) RESPECT NULLS AS x",
+            },
+        )
+        self.validate_all(
+            "SELECT PERCENTILE_CONT(x, 0.5 RESPECT NULLS) OVER ()",
+            write={
+                "bigquery": "SELECT PERCENTILE_CONT(x, 0.5 RESPECT NULLS) OVER ()",
+                "duckdb": "SELECT QUANTILE_CONT(x, 0.5 RESPECT NULLS) OVER ()",
+                "spark": "SELECT PERCENTILE_CONT(x, 0.5) RESPECT NULLS OVER ()",
+            },
+        )
+        self.validate_all(
+            "SELECT ARRAY_AGG(DISTINCT x IGNORE NULLS ORDER BY a, b DESC LIMIT 10) AS x",
+            write={
+                "bigquery": "SELECT ARRAY_AGG(DISTINCT x IGNORE NULLS ORDER BY a, b DESC LIMIT 10) AS x",
+                "duckdb": "SELECT ARRAY_AGG(DISTINCT x IGNORE NULLS ORDER BY a NULLS FIRST, b DESC LIMIT 10) AS x",
+                "spark": "SELECT COLLECT_LIST(DISTINCT x ORDER BY a, b DESC LIMIT 10) IGNORE NULLS AS x",
+            },
+        )
+        self.validate_all(
+            "SELECT ARRAY_AGG(DISTINCT x IGNORE NULLS ORDER BY a, b DESC LIMIT 1, 10) AS x",
+            write={
+                "bigquery": "SELECT ARRAY_AGG(DISTINCT x IGNORE NULLS ORDER BY a, b DESC LIMIT 1, 10) AS x",
+                "duckdb": "SELECT ARRAY_AGG(DISTINCT x IGNORE NULLS ORDER BY a NULLS FIRST, b DESC LIMIT 1, 10) AS x",
+                "spark": "SELECT COLLECT_LIST(DISTINCT x ORDER BY a, b DESC LIMIT 1, 10) IGNORE NULLS AS x",
+            },
+        )
         self.validate_all(
             "SELECT * FROM Produce UNPIVOT((first_half_sales, second_half_sales) FOR semesters IN ((Q1, Q2) AS 'semester_1', (Q3, Q4) AS 'semester_2'))",
             read={
@@ -456,7 +403,6 @@ class TestBigQuery(Validator):
                 "duckdb": "SELECT * FROM t WHERE EXISTS(SELECT * FROM UNNEST(nums) AS _t(x) WHERE x > 1)",
             },
         )
-        self.validate_identity("UPDATE x SET y = NULL")
         self.validate_all(
             "NULL",
             read={
@@ -613,6 +559,14 @@ class TestBigQuery(Validator):
             },
         )
         self.validate_all(
+            "SELECT IF(pos = pos_2, col, NULL) AS col FROM UNNEST(GENERATE_ARRAY(0, GREATEST(ARRAY_LENGTH(IF(ARRAY_LENGTH(COALESCE([], [])) = 0, [[][SAFE_ORDINAL(0)]], []))) - 1)) AS pos CROSS JOIN UNNEST(IF(ARRAY_LENGTH(COALESCE([], [])) = 0, [[][SAFE_ORDINAL(0)]], [])) AS col WITH OFFSET AS pos_2 WHERE pos = pos_2 OR (pos > (ARRAY_LENGTH(IF(ARRAY_LENGTH(COALESCE([], [])) = 0, [[][SAFE_ORDINAL(0)]], [])) - 1) AND pos_2 = (ARRAY_LENGTH(IF(ARRAY_LENGTH(COALESCE([], [])) = 0, [[][SAFE_ORDINAL(0)]], [])) - 1))",
+            read={"spark": "select explode_outer([])"},
+        )
+        self.validate_all(
+            "SELECT IF(pos = pos_2, col, NULL) AS col, IF(pos = pos_2, pos_2, NULL) AS pos_2 FROM UNNEST(GENERATE_ARRAY(0, GREATEST(ARRAY_LENGTH(IF(ARRAY_LENGTH(COALESCE([], [])) = 0, [[][SAFE_ORDINAL(0)]], []))) - 1)) AS pos CROSS JOIN UNNEST(IF(ARRAY_LENGTH(COALESCE([], [])) = 0, [[][SAFE_ORDINAL(0)]], [])) AS col WITH OFFSET AS pos_2 WHERE pos = pos_2 OR (pos > (ARRAY_LENGTH(IF(ARRAY_LENGTH(COALESCE([], [])) = 0, [[][SAFE_ORDINAL(0)]], [])) - 1) AND pos_2 = (ARRAY_LENGTH(IF(ARRAY_LENGTH(COALESCE([], [])) = 0, [[][SAFE_ORDINAL(0)]], [])) - 1))",
+            read={"spark": "select posexplode_outer([])"},
+        )
+        self.validate_all(
             "SELECT AS STRUCT ARRAY(SELECT AS STRUCT b FROM x) AS y FROM z",
             write={
                 "": "SELECT AS STRUCT ARRAY(SELECT AS STRUCT b FROM x) AS y FROM z",
@@ -651,10 +605,6 @@ class TestBigQuery(Validator):
             write={
                 "bigquery": "SELECT ARRAY(SELECT AS STRUCT 1 AS a, 2 AS b)",
             },
-        )
-        self.validate_identity(
-            r"REGEXP_EXTRACT(svc_plugin_output, r'\\\((.*)')",
-            r"REGEXP_EXTRACT(svc_plugin_output, '\\\\\\((.*)')",
         )
         self.validate_all(
             "REGEXP_CONTAINS('foo', '.*')",
@@ -978,9 +928,6 @@ class TestBigQuery(Validator):
                 "postgres": "CURRENT_DATE AT TIME ZONE 'UTC'",
             },
         )
-        self.validate_identity(
-            "SELECT * FROM test QUALIFY a IS DISTINCT FROM b WINDOW c AS (PARTITION BY d)"
-        )
         self.validate_all(
             "SELECT a FROM test WHERE a = 1 GROUP BY a HAVING a = 2 QUALIFY z ORDER BY a LIMIT 10",
             write={
@@ -989,43 +936,18 @@ class TestBigQuery(Validator):
             },
         )
         self.validate_all(
-            "SELECT cola, colb FROM (VALUES (1, 'test')) AS tab(cola, colb)",
-            write={
-                "spark": "SELECT cola, colb FROM VALUES (1, 'test') AS tab(cola, colb)",
+            "SELECT cola, colb FROM UNNEST([STRUCT(1 AS cola, 'test' AS colb)])",
+            read={
                 "bigquery": "SELECT cola, colb FROM UNNEST([STRUCT(1 AS cola, 'test' AS colb)])",
                 "snowflake": "SELECT cola, colb FROM (VALUES (1, 'test')) AS tab(cola, colb)",
-            },
-        )
-        self.validate_all(
-            "SELECT cola, colb FROM (VALUES (1, 'test')) AS tab",
-            write={
-                "bigquery": "SELECT cola, colb FROM UNNEST([STRUCT(1 AS _c0, 'test' AS _c1)])",
-            },
-        )
-        self.validate_all(
-            "SELECT cola, colb FROM (VALUES (1, 'test'))",
-            write={
-                "bigquery": "SELECT cola, colb FROM UNNEST([STRUCT(1 AS _c0, 'test' AS _c1)])",
+                "spark": "SELECT cola, colb FROM VALUES (1, 'test') AS tab(cola, colb)",
             },
         )
         self.validate_all(
             "SELECT * FROM UNNEST([STRUCT(1 AS id)]) CROSS JOIN UNNEST([STRUCT(1 AS id)])",
             read={
+                "bigquery": "SELECT * FROM UNNEST([STRUCT(1 AS id)]) CROSS JOIN UNNEST([STRUCT(1 AS id)])",
                 "postgres": "SELECT * FROM (VALUES (1)) AS t1(id) CROSS JOIN (VALUES (1)) AS t2(id)",
-            },
-        )
-        self.validate_all(
-            "SELECT cola, colb, colc FROM (VALUES (1, 'test', NULL)) AS tab(cola, colb, colc)",
-            write={
-                "spark": "SELECT cola, colb, colc FROM VALUES (1, 'test', NULL) AS tab(cola, colb, colc)",
-                "bigquery": "SELECT cola, colb, colc FROM UNNEST([STRUCT(1 AS cola, 'test' AS colb, NULL AS colc)])",
-                "snowflake": "SELECT cola, colb, colc FROM (VALUES (1, 'test', NULL)) AS tab(cola, colb, colc)",
-            },
-        )
-        self.validate_all(
-            "SELECT * FROM (SELECT a, b, c FROM test) PIVOT(SUM(b) d, COUNT(*) e FOR c IN ('x', 'y'))",
-            write={
-                "bigquery": "SELECT * FROM (SELECT a, b, c FROM test) PIVOT(SUM(b) AS d, COUNT(*) AS e FOR c IN ('x', 'y'))",
             },
         )
         self.validate_all(
@@ -1083,7 +1005,126 @@ WHERE
             pretty=True,
         )
 
-        self.validate_identity("LOG(n, b)")
+    def test_errors(self):
+        with self.assertRaises(TokenError):
+            transpile("'\\'", read="bigquery")
+
+        # Reference: https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax#set_operators
+        with self.assertRaises(UnsupportedError):
+            transpile(
+                "SELECT * FROM a INTERSECT ALL SELECT * FROM b",
+                write="bigquery",
+                unsupported_level=ErrorLevel.RAISE,
+            )
+
+        with self.assertRaises(UnsupportedError):
+            transpile(
+                "SELECT * FROM a EXCEPT ALL SELECT * FROM b",
+                write="bigquery",
+                unsupported_level=ErrorLevel.RAISE,
+            )
+
+        with self.assertRaises(ParseError):
+            transpile("SELECT * FROM UNNEST(x) AS x(y)", read="bigquery")
+
+        with self.assertRaises(ParseError):
+            transpile("DATE_ADD(x, day)", read="bigquery")
+
+    def test_warnings(self):
+        with self.assertLogs(helper_logger) as cm:
+            self.validate_identity(
+                "WITH cte(c) AS (SELECT * FROM t) SELECT * FROM cte",
+                "WITH cte AS (SELECT * FROM t) SELECT * FROM cte",
+            )
+
+            self.assertIn("Can't push down CTE column names for star queries.", cm.output[0])
+            self.assertIn("Named columns are not supported in table alias.", cm.output[1])
+
+        with self.assertLogs(helper_logger) as cm:
+            self.validate_identity(
+                "SELECT * FROM t AS t(c1, c2)",
+                "SELECT * FROM t AS t",
+            )
+
+            self.assertIn("Named columns are not supported in table alias.", cm.output[0])
+
+        with self.assertLogs(helper_logger) as cm:
+            statements = parse(
+                """
+            BEGIN
+              DECLARE 1;
+              IF from_date IS NULL THEN SET x = 1;
+              END IF;
+            END
+            """,
+                read="bigquery",
+            )
+
+            for actual, expected in zip(
+                statements,
+                ("BEGIN DECLARE 1", "IF from_date IS NULL THEN SET x = 1", "END IF", "END"),
+            ):
+                self.assertEqual(actual.sql(dialect="bigquery"), expected)
+
+            self.assertIn("unsupported syntax", cm.output[0])
+
+        with self.assertLogs(helper_logger) as cm:
+            statements = parse(
+                """
+                BEGIN CALL `project_id.dataset_id.stored_procedure_id`();
+                EXCEPTION WHEN ERROR THEN INSERT INTO `project_id.dataset_id.table_id` SELECT @@error.message, CURRENT_TIMESTAMP();
+                END
+                """,
+                read="bigquery",
+            )
+
+            expected_statements = (
+                "BEGIN CALL `project_id.dataset_id.stored_procedure_id`()",
+                "EXCEPTION WHEN ERROR THEN INSERT INTO `project_id.dataset_id.table_id` SELECT @@error.message, CURRENT_TIMESTAMP()",
+                "END",
+            )
+
+            for actual, expected in zip(statements, expected_statements):
+                self.assertEqual(actual.sql(dialect="bigquery"), expected)
+
+            self.assertIn("unsupported syntax", cm.output[0])
+
+        with self.assertLogs(helper_logger) as cm:
+            self.validate_identity(
+                "SELECT * FROM t AS t(c1, c2)",
+                "SELECT * FROM t AS t",
+            )
+
+            self.assertIn("Named columns are not supported in table alias.", cm.output[0])
+
+        with self.assertLogs(helper_logger):
+            self.validate_all(
+                "SELECT a[1], b[OFFSET(1)], c[ORDINAL(1)], d[SAFE_OFFSET(1)], e[SAFE_ORDINAL(1)]",
+                write={
+                    "duckdb": "SELECT a[2], b[2], c[1], d[2], e[1]",
+                    "bigquery": "SELECT a[1], b[OFFSET(1)], c[ORDINAL(1)], d[SAFE_OFFSET(1)], e[SAFE_ORDINAL(1)]",
+                    "presto": "SELECT a[2], b[2], c[1], ELEMENT_AT(d, 2), ELEMENT_AT(e, 1)",
+                },
+            )
+            self.validate_all(
+                "a[0]",
+                read={
+                    "bigquery": "a[0]",
+                    "duckdb": "a[1]",
+                    "presto": "a[1]",
+                },
+            )
+
+        with self.assertLogs(parser_logger) as cm:
+            for_in_stmts = parse(
+                "FOR record IN (SELECT word FROM shakespeare) DO SELECT record.word; END FOR;",
+                read="bigquery",
+            )
+            self.assertEqual(
+                [s.sql(dialect="bigquery") for s in for_in_stmts],
+                ["FOR record IN (SELECT word FROM shakespeare) DO SELECT record.word", "END FOR"],
+            )
+            self.assertIn("'END FOR'", cm.output[0])
 
     def test_user_defined_functions(self):
         self.validate_identity(
@@ -1106,35 +1147,22 @@ WHERE
         )
 
     def test_remove_precision_parameterized_types(self):
-        self.validate_all(
-            "SELECT CAST(1 AS NUMERIC(10, 2))",
-            write={
-                "bigquery": "SELECT CAST(1 AS NUMERIC)",
-            },
-        )
-        self.validate_all(
-            "CREATE TABLE test (a NUMERIC(10, 2))",
-            write={
-                "bigquery": "CREATE TABLE test (a NUMERIC(10, 2))",
-            },
-        )
-        self.validate_all(
-            "SELECT CAST('1' AS STRING(10)) UNION ALL SELECT CAST('2' AS STRING(10))",
-            write={
-                "bigquery": "SELECT CAST('1' AS STRING) UNION ALL SELECT CAST('2' AS STRING)",
-            },
-        )
-        self.validate_all(
-            "SELECT cola FROM (SELECT CAST('1' AS STRING(10)) AS cola UNION ALL SELECT CAST('2' AS STRING(10)) AS cola)",
-            write={
-                "bigquery": "SELECT cola FROM (SELECT CAST('1' AS STRING) AS cola UNION ALL SELECT CAST('2' AS STRING) AS cola)",
-            },
-        )
-        self.validate_all(
+        self.validate_identity("CREATE TABLE test (a NUMERIC(10, 2))")
+        self.validate_identity(
             "INSERT INTO test (cola, colb) VALUES (CAST(7 AS STRING(10)), CAST(14 AS STRING(10)))",
-            write={
-                "bigquery": "INSERT INTO test (cola, colb) VALUES (CAST(7 AS STRING), CAST(14 AS STRING))",
-            },
+            "INSERT INTO test (cola, colb) VALUES (CAST(7 AS STRING), CAST(14 AS STRING))",
+        )
+        self.validate_identity(
+            "SELECT CAST(1 AS NUMERIC(10, 2))",
+            "SELECT CAST(1 AS NUMERIC)",
+        )
+        self.validate_identity(
+            "SELECT CAST('1' AS STRING(10)) UNION ALL SELECT CAST('2' AS STRING(10))",
+            "SELECT CAST('1' AS STRING) UNION ALL SELECT CAST('2' AS STRING)",
+        )
+        self.validate_identity(
+            "SELECT cola FROM (SELECT CAST('1' AS STRING(10)) AS cola UNION ALL SELECT CAST('2' AS STRING(10)) AS cola)",
+            "SELECT cola FROM (SELECT CAST('1' AS STRING) AS cola UNION ALL SELECT CAST('2' AS STRING) AS cola)",
         )
 
     def test_models(self):

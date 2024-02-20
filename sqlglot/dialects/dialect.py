@@ -9,7 +9,7 @@ from sqlglot import exp
 from sqlglot.errors import ParseError
 from sqlglot.generator import Generator
 from sqlglot.helper import AutoName, flatten, is_int, seq_get
-from sqlglot.jsonpath import generate as generate_json_path, parse as parse_json_path
+from sqlglot.jsonpath import parse as parse_json_path
 from sqlglot.parser import Parser
 from sqlglot.time import TIMEZONES, format_time
 from sqlglot.tokens import Token, Tokenizer, TokenType
@@ -17,9 +17,11 @@ from sqlglot.trie import new_trie
 
 DATE_ADD_OR_DIFF = t.Union[exp.DateAdd, exp.TsOrDsAdd, exp.DateDiff, exp.TsOrDsDiff]
 DATE_ADD_OR_SUB = t.Union[exp.DateAdd, exp.TsOrDsAdd, exp.DateSub]
+JSON_EXTRACT_TYPE = t.Union[exp.JSONExtract, exp.JSONExtractScalar]
+
 
 if t.TYPE_CHECKING:
-    from sqlglot._typing import B, E
+    from sqlglot._typing import B, E, F
 
 logger = logging.getLogger("sqlglot")
 
@@ -146,47 +148,53 @@ class _Dialect(type):
 
 class Dialect(metaclass=_Dialect):
     INDEX_OFFSET = 0
-    """Determines the base index offset for arrays."""
+    """The base index offset for arrays."""
 
     WEEK_OFFSET = 0
-    """Determines the day of week of DATE_TRUNC(week). Defaults to 0 (Monday). -1 would be Sunday."""
+    """First day of the week in DATE_TRUNC(week). Defaults to 0 (Monday). -1 would be Sunday."""
 
     UNNEST_COLUMN_ONLY = False
-    """Determines whether or not `UNNEST` table aliases are treated as column aliases."""
+    """Whether `UNNEST` table aliases are treated as column aliases."""
 
     ALIAS_POST_TABLESAMPLE = False
-    """Determines whether or not the table alias comes after tablesample."""
+    """Whether the table alias comes after tablesample."""
 
     TABLESAMPLE_SIZE_IS_PERCENT = False
-    """Determines whether or not a size in the table sample clause represents percentage."""
+    """Whether a size in the table sample clause represents percentage."""
 
     NORMALIZATION_STRATEGY = NormalizationStrategy.LOWERCASE
     """Specifies the strategy according to which identifiers should be normalized."""
 
     IDENTIFIERS_CAN_START_WITH_DIGIT = False
-    """Determines whether or not an unquoted identifier can start with a digit."""
+    """Whether an unquoted identifier can start with a digit."""
 
     DPIPE_IS_STRING_CONCAT = True
-    """Determines whether or not the DPIPE token (`||`) is a string concatenation operator."""
+    """Whether the DPIPE token (`||`) is a string concatenation operator."""
 
     STRICT_STRING_CONCAT = False
-    """Determines whether or not `CONCAT`'s arguments must be strings."""
+    """Whether `CONCAT`'s arguments must be strings."""
 
     SUPPORTS_USER_DEFINED_TYPES = True
-    """Determines whether or not user-defined data types are supported."""
+    """Whether user-defined data types are supported."""
 
     SUPPORTS_SEMI_ANTI_JOIN = True
-    """Determines whether or not `SEMI` or `ANTI` joins are supported."""
+    """Whether `SEMI` or `ANTI` joins are supported."""
 
     NORMALIZE_FUNCTIONS: bool | str = "upper"
-    """Determines how function names are going to be normalized."""
+    """
+    Determines how function names are going to be normalized.
+    Possible values:
+        "upper" or True: Convert names to uppercase.
+        "lower": Convert names to lowercase.
+        False: Disables function name normalization.
+    """
 
     LOG_BASE_FIRST = True
-    """Determines whether the base comes first in the `LOG` function."""
+    """Whether the base comes first in the `LOG` function."""
 
     NULL_ORDERING = "nulls_are_small"
     """
-    Indicates the default `NULL` ordering method to use if not explicitly set.
+    Default `NULL` ordering method to use if not explicitly set.
     Possible values: `"nulls_are_small"`, `"nulls_are_large"`, `"nulls_are_last"`
     """
 
@@ -198,7 +206,7 @@ class Dialect(metaclass=_Dialect):
     """
 
     SAFE_DIVISION = False
-    """Determines whether division by zero throws an error (`False`) or returns NULL (`True`)."""
+    """Whether division by zero throws an error (`False`) or returns NULL (`True`)."""
 
     CONCAT_COALESCE = False
     """A `NULL` arg in `CONCAT` yields `NULL` by default, but in some dialects it yields an empty string."""
@@ -208,7 +216,7 @@ class Dialect(metaclass=_Dialect):
     TIME_FORMAT = "'%Y-%m-%d %H:%M:%S'"
 
     TIME_MAPPING: t.Dict[str, str] = {}
-    """Associates this dialect's time formats with their equivalent Python `strftime` format."""
+    """Associates this dialect's time formats with their equivalent Python `strftime` formats."""
 
     # https://cloud.google.com/bigquery/docs/reference/standard-sql/format-elements#format_model_rules_date_time
     # https://docs.teradata.com/r/Teradata-Database-SQL-Functions-Operators-Expressions-and-Predicates/March-2017/Data-Type-Conversions/Character-to-DATE-Conversion/Forcing-a-FORMAT-on-CAST-for-Converting-Character-to-DATE
@@ -260,7 +268,7 @@ class Dialect(metaclass=_Dialect):
 
     INVERSE_ESCAPE_SEQUENCES: t.Dict[str, str] = {}
 
-    # Delimiters for quotes, identifiers and the corresponding escape characters
+    # Delimiters for string literals and identifiers
     QUOTE_START = "'"
     QUOTE_END = "'"
     IDENTIFIER_START = '"'
@@ -416,7 +424,7 @@ class Dialect(metaclass=_Dialect):
                 `"safe"`: Only returns `True` if the identifier is case-insensitive.
 
         Returns:
-            Whether or not the given text can be identified.
+            Whether the given text can be identified.
         """
         if identify is True or identify == "always":
             return True
@@ -451,9 +459,9 @@ class Dialect(metaclass=_Dialect):
                 path_text = f"[{path_text}]"
 
             try:
-                return exp.JSONPath(expressions=parse_json_path(path_text))
-            except ParseError:
-                logger.warning(f"Invalid JSON path syntax: {path_text}")
+                return parse_json_path(path_text)
+            except ParseError as e:
+                logger.warning(f"Invalid JSON path syntax. {str(e)}")
 
         return path
 
@@ -517,9 +525,7 @@ def if_sql(
     return _if_sql
 
 
-def arrow_json_extract_sql(
-    self: Generator, expression: exp.JSONExtract | exp.JSONExtractScalar
-) -> str:
+def arrow_json_extract_sql(self: Generator, expression: JSON_EXTRACT_TYPE) -> str:
     this = expression.this
     if self.JSON_TYPE_REQUIRED_FOR_EXTRACTION and isinstance(this, exp.Literal) and this.is_string:
         this.replace(exp.cast(this, "json"))
@@ -569,11 +575,6 @@ def no_trycast_sql(self: Generator, expression: exp.TryCast) -> str:
     return self.cast_sql(expression)
 
 
-def no_properties_sql(self: Generator, expression: exp.Properties) -> str:
-    self.unsupported("Properties unsupported")
-    return ""
-
-
 def no_comment_column_constraint_sql(
     self: Generator, expression: exp.CommentColumnConstraint
 ) -> str:
@@ -619,7 +620,7 @@ def var_map_sql(
     return self.func(map_func_name, *args)
 
 
-def format_time_lambda(
+def build_formatted_time(
     exp_class: t.Type[E], dialect: str, default: t.Optional[bool | str] = None
 ) -> t.Callable[[t.List], E]:
     """Helper used for time expressions.
@@ -633,7 +634,7 @@ def format_time_lambda(
         A callable that can be used to return the appropriately formatted time expression.
     """
 
-    def _format_time(args: t.List):
+    def _builder(args: t.List):
         return exp_class(
             this=seq_get(args, 0),
             format=Dialect[dialect].format_time(
@@ -642,7 +643,7 @@ def format_time_lambda(
             ),
         )
 
-    return _format_time
+    return _builder
 
 
 def time_format(
@@ -659,45 +660,23 @@ def time_format(
     return _time_format
 
 
-def create_with_partitions_sql(self: Generator, expression: exp.Create) -> str:
-    """
-    In Hive and Spark, the PARTITIONED BY property acts as an extension of a table's schema. When the
-    PARTITIONED BY value is an array of column names, they are transformed into a schema. The corresponding
-    columns are removed from the create statement.
-    """
-    has_schema = isinstance(expression.this, exp.Schema)
-    is_partitionable = expression.args.get("kind") in ("TABLE", "VIEW")
-
-    if has_schema and is_partitionable:
-        prop = expression.find(exp.PartitionedByProperty)
-        if prop and prop.this and not isinstance(prop.this, exp.Schema):
-            schema = expression.this
-            columns = {v.name.upper() for v in prop.this.expressions}
-            partitions = [col for col in schema.expressions if col.name.upper() in columns]
-            schema.set("expressions", [e for e in schema.expressions if e not in partitions])
-            prop.replace(exp.PartitionedByProperty(this=exp.Schema(expressions=partitions)))
-            expression.set("this", schema)
-
-    return self.create_sql(expression)
-
-
-def parse_date_delta(
+def build_date_delta(
     exp_class: t.Type[E], unit_mapping: t.Optional[t.Dict[str, str]] = None
 ) -> t.Callable[[t.List], E]:
-    def inner_func(args: t.List) -> E:
+    def _builder(args: t.List) -> E:
         unit_based = len(args) == 3
         this = args[2] if unit_based else seq_get(args, 0)
         unit = args[0] if unit_based else exp.Literal.string("DAY")
         unit = exp.var(unit_mapping.get(unit.name.lower(), unit.name)) if unit_mapping else unit
         return exp_class(this=this, expression=seq_get(args, 1), unit=unit)
 
-    return inner_func
+    return _builder
 
 
-def parse_date_delta_with_interval(
+def build_date_delta_with_interval(
     expression_class: t.Type[E],
 ) -> t.Callable[[t.List], t.Optional[E]]:
-    def func(args: t.List) -> t.Optional[E]:
+    def _builder(args: t.List) -> t.Optional[E]:
         if len(args) < 2:
             return None
 
@@ -714,7 +693,7 @@ def parse_date_delta_with_interval(
             this=args[0], expression=expression, unit=exp.Literal.string(interval.text("unit"))
         )
 
-    return func
+    return _builder
 
 
 def date_trunc_to_time(args: t.List) -> exp.DateTrunc | exp.TimestampTrunc:
@@ -747,7 +726,10 @@ def timestamptrunc_sql(self: Generator, expression: exp.TimestampTrunc) -> str:
 
 def no_timestamp_sql(self: Generator, expression: exp.Timestamp) -> str:
     if not expression.expression:
-        return self.sql(exp.cast(expression.this, to=exp.DataType.Type.TIMESTAMP))
+        from sqlglot.optimizer.annotate_types import annotate_types
+
+        target_type = annotate_types(expression).type or exp.DataType.Type.TIMESTAMP
+        return self.sql(exp.cast(expression.this, to=target_type))
     if expression.text("expression").lower() in TIMEZONES:
         return self.sql(
             exp.AtTimeZone(
@@ -755,7 +737,7 @@ def no_timestamp_sql(self: Generator, expression: exp.Timestamp) -> str:
                 zone=expression.expression,
             )
         )
-    return self.function_fallback_sql(expression)
+    return self.func("TIMESTAMP", expression.this, expression.expression)
 
 
 def locate_to_strposition(args: t.List) -> exp.Expression:
@@ -912,7 +894,7 @@ def binary_from_function(expr_type: t.Type[B]) -> t.Callable[[t.List], B]:
 
 
 # Used to represent DATE_TRUNC in Doris, Postgres and Starrocks dialects
-def parse_timestamp_trunc(args: t.List) -> exp.TimestampTrunc:
+def build_timestamp_trunc(args: t.List) -> exp.TimestampTrunc:
     return exp.TimestampTrunc(this=seq_get(args, 1), unit=seq_get(args, 0))
 
 
@@ -982,32 +964,6 @@ def date_delta_sql(name: str, cast: bool = False) -> t.Callable[[Generator, DATE
     return _delta_sql
 
 
-def prepend_dollar_to_path(expression: exp.GetPath) -> exp.GetPath:
-    from sqlglot.optimizer.simplify import simplify
-
-    # Makes sure the path will be evaluated correctly at runtime to include the path root.
-    # For example, `[0].foo` will become `$[0].foo`, and `foo` will become `$.foo`.
-    path = expression.expression
-    path = exp.func(
-        "if",
-        exp.func("startswith", path, "'['"),
-        exp.func("concat", "'$'", path),
-        exp.func("concat", "'$.'", path),
-    )
-
-    expression.expression.replace(simplify(path))
-    return expression
-
-
-def path_to_jsonpath(
-    name: str = "JSON_EXTRACT",
-) -> t.Callable[[Generator, exp.GetPath], str]:
-    def _transform(self: Generator, expression: exp.GetPath) -> str:
-        return rename_func(name)(self, prepend_dollar_to_path(expression))
-
-    return _transform
-
-
 def no_last_day_sql(self: Generator, expression: exp.LastDay) -> str:
     trunc_curr_date = exp.func("date_trunc", "month", expression.this)
     plus_one_month = exp.func("date_add", trunc_curr_date, 1, "month")
@@ -1041,83 +997,76 @@ def merge_without_target_sql(self: Generator, expression: exp.Merge) -> str:
     return self.merge_sql(expression)
 
 
-def parse_json_extract_path(
-    expr_type: t.Type[E],
-    supports_null_if_invalid: bool = False,
-) -> t.Callable[[t.List], E]:
-    def _parse_json_extract_path(args: t.List) -> E:
-        null_if_invalid = None
-
+def build_json_extract_path(
+    expr_type: t.Type[F], zero_based_indexing: bool = True
+) -> t.Callable[[t.List], F]:
+    def _builder(args: t.List) -> F:
         segments: t.List[exp.JSONPathPart] = [exp.JSONPathRoot()]
         for arg in args[1:]:
-            if isinstance(arg, exp.Literal):
-                text = arg.name
-                if is_int(text):
-                    segments.append(exp.JSONPathSubscript(this=int(text)))
-                else:
-                    segments.append(exp.JSONPathChild(this=text))
-            elif supports_null_if_invalid:
-                null_if_invalid = arg
+            if not isinstance(arg, exp.Literal):
+                # We use the fallback parser because we can't really transpile non-literals safely
+                return expr_type.from_arg_list(args)
 
-        this = seq_get(args, 0)
-        jsonpath = exp.JSONPath(expressions=segments)
-
-        # This is done to avoid failing in the expression validator due to the arg count
-        del args[2:]
-
-        if expr_type is exp.JSONExtractScalar:
-            return expr_type(this=this, expression=jsonpath, null_if_invalid=null_if_invalid)
-
-        return expr_type(this=this, expression=jsonpath)
-
-    return _parse_json_extract_path
-
-
-def json_path_segments(self: Generator, expression: exp.JSONPath) -> t.List[str]:
-    segments = []
-    for segment in expression.expressions:
-        path = generate_json_path(
-            segment, mapping=self._JSON_PATH_MAPPING, unsupported_callback=self.unsupported
-        )
-        if path:
-            segments.append(f"{self.dialect.QUOTE_START}{path}{self.dialect.QUOTE_END}")
-
-    return segments
-
-
-def parse_json_extract_string(
-    expr_type: t.Type[E],
-    supports_null_if_invalid: bool = False,
-) -> t.Callable[[t.List], E]:
-    def _parse_json_extract_string(args: t.List) -> E:
-        null_if_invalid = None
-
-        segments: t.List[exp.JSONPathPart] = []
-        len_args = len(args) - 1
-        for arg in args[1:]:
-            if isinstance(arg, exp.Literal):
-                text = arg.name
-                if is_int(text):
-                    segments.append(exp.JSONPathSubscript(this=int(text)))
-                else:
-                    len_args -= 1
-                    segments.append(exp.JSONPathRoot())
-                    segments.append(exp.JSONPathChild(this=text))
-                    if len_args > 0:
-                        segments.append(exp.JSONPathSeparator())
-
-            elif supports_null_if_invalid:
-                null_if_invalid = arg
-
-        this = seq_get(args, 0)
-        jsonpath = exp.JSONPath(expressions=segments)
+            text = arg.name
+            if is_int(text):
+                index = int(text)
+                segments.append(
+                    exp.JSONPathSubscript(this=index if zero_based_indexing else index - 1)
+                )
+            else:
+                segments.append(exp.JSONPathKey(this=text))
 
         # This is done to avoid failing in the expression validator due to the arg count
         del args[2:]
+        return expr_type(this=seq_get(args, 0), expression=exp.JSONPath(expressions=segments))
 
-        if expr_type is exp.JSONExtractScalar:
-            return expr_type(this=this, expression=jsonpath, null_if_invalid=null_if_invalid)
+    return _builder
 
-        return expr_type(this=this, expression=jsonpath)
 
-    return _parse_json_extract_string
+def json_extract_segments(
+    name: str, quoted_index: bool = True, op: t.Optional[str] = None
+) -> t.Callable[[Generator, JSON_EXTRACT_TYPE], str]:
+    def _json_extract_segments(self: Generator, expression: JSON_EXTRACT_TYPE) -> str:
+        path = expression.expression
+        if not isinstance(path, exp.JSONPath):
+            return rename_func(name)(self, expression)
+
+        segments = []
+        for segment in path.expressions:
+            path = self.sql(segment)
+            if path:
+                if isinstance(segment, exp.JSONPathPart) and (
+                    quoted_index or not isinstance(segment, exp.JSONPathSubscript)
+                ):
+                    path = f"{self.dialect.QUOTE_START}{path}{self.dialect.QUOTE_END}"
+
+                segments.append(path)
+
+        if op:
+            return f" {op} ".join([self.sql(expression.this), *segments])
+        return self.func(name, expression.this, *segments)
+
+    return _json_extract_segments
+
+
+def json_path_key_only_name(self: Generator, expression: exp.JSONPathKey) -> str:
+    if isinstance(expression.this, exp.JSONPathWildcard):
+        self.unsupported("Unsupported wildcard in JSONPathKey expression")
+
+    return expression.name
+
+
+def filter_array_using_unnest(self: Generator, expression: exp.ArrayFilter) -> str:
+    cond = expression.expression
+    if isinstance(cond, exp.Lambda) and len(cond.expressions) == 1:
+        alias = cond.expressions[0]
+        cond = cond.this
+    elif isinstance(cond, exp.Predicate):
+        alias = "_u"
+    else:
+        self.unsupported("Unsupported filter condition")
+        return ""
+
+    unnest = exp.Unnest(expressions=[expression.this])
+    filtered = exp.select(alias).from_(exp.alias_(unnest, None, table=[alias])).where(cond)
+    return self.sql(exp.Array(expressions=[filtered]))

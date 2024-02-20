@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from pandas.testing import assert_frame_equal
 
-from sqlglot import exp, parse_one
+from sqlglot import exp, parse_one, transpile
 from sqlglot.errors import ExecuteError
 from sqlglot.executor import execute
 from sqlglot.executor.python import Python
@@ -50,7 +50,7 @@ class TestExecutor(unittest.TestCase):
 
     def cached_execute(self, sql):
         if sql not in self.cache:
-            self.cache[sql] = self.conn.execute(sql).fetchdf()
+            self.cache[sql] = self.conn.execute(transpile(sql, write="duckdb")[0]).fetchdf()
         return self.cache[sql]
 
     def rename_anonymous(self, source, target):
@@ -66,10 +66,10 @@ class TestExecutor(unittest.TestCase):
         self.assertEqual(generate(parse_one("x is null")), "scope[None][x] is None")
 
     def test_optimized_tpch(self):
-        for i, (sql, optimized) in enumerate(self.sqls[:20], start=1):
+        for i, (sql, optimized) in enumerate(self.sqls, start=1):
             with self.subTest(f"{i}, {sql}"):
                 a = self.cached_execute(sql)
-                b = self.conn.execute(optimized).fetchdf()
+                b = self.conn.execute(transpile(optimized, write="duckdb")[0]).fetchdf()
                 self.rename_anonymous(b, a)
                 assert_frame_equal(a, b)
 
@@ -777,13 +777,23 @@ class TestExecutor(unittest.TestCase):
                 self.assertEqual(result.rows, expected)
 
     def test_dict_values(self):
-        tables = {
-            "foo": [{"raw": {"name": "Hello, World"}}],
-        }
-        result = execute("SELECT raw:name AS name FROM foo", read="snowflake", tables=tables)
+        tables = {"foo": [{"raw": {"name": "Hello, World", "a": [{"b": 1}]}}]}
 
+        result = execute("SELECT raw:name AS name FROM foo", read="snowflake", tables=tables)
         self.assertEqual(result.columns, ("NAME",))
         self.assertEqual(result.rows, [("Hello, World",)])
+
+        result = execute("SELECT raw:a[0].b AS b FROM foo", read="snowflake", tables=tables)
+        self.assertEqual(result.columns, ("B",))
+        self.assertEqual(result.rows, [(1,)])
+
+        result = execute("SELECT raw:a[1].b AS b FROM foo", read="snowflake", tables=tables)
+        self.assertEqual(result.columns, ("B",))
+        self.assertEqual(result.rows, [(None,)])
+
+        result = execute("SELECT raw:a[0].c AS c FROM foo", read="snowflake", tables=tables)
+        self.assertEqual(result.columns, ("C",))
+        self.assertEqual(result.rows, [(None,)])
 
         tables = {
             '"ITEM"': [

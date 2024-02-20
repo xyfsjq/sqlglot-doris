@@ -40,6 +40,7 @@ WHERE
   )""",
         )
 
+        self.validate_identity("ALTER TABLE authors ADD CONSTRAINT c1 UNIQUE (id, email)")
         self.validate_identity("RM @parquet_stage", check_command_warning=True)
         self.validate_identity("REMOVE @parquet_stage", check_command_warning=True)
         self.validate_identity("SELECT TIMESTAMP_FROM_PARTS(d, t)")
@@ -85,6 +86,14 @@ WHERE
             "SELECT a FROM test PIVOT(SUM(x) FOR y IN ('z', 'q')) AS x TABLESAMPLE (0.1)"
         )
         self.validate_identity(
+            "value:values::string",
+            "CAST(GET_PATH(value, 'values') AS TEXT)",
+        )
+        self.validate_identity(
+            """SELECT GET_PATH(PARSE_JSON('{"y": [{"z": 1}]}'), 'y[0]:z')""",
+            """SELECT GET_PATH(PARSE_JSON('{"y": [{"z": 1}]}'), 'y[0].z')""",
+        )
+        self.validate_identity(
             "SELECT p FROM t WHERE p:val NOT IN ('2')",
             "SELECT p FROM t WHERE NOT GET_PATH(p, 'val') IN ('2')",
         )
@@ -118,7 +127,7 @@ WHERE
         )
         self.validate_identity(
             'SELECT v:"fruit" FROM vartab',
-            """SELECT GET_PATH(v, '"fruit"') FROM vartab""",
+            """SELECT GET_PATH(v, 'fruit') FROM vartab""",
         )
         self.validate_identity(
             "v:attr[0]:name",
@@ -249,7 +258,7 @@ WHERE
                 "mysql": """WITH vartab(v) AS (SELECT '[{"attr": [{"name": "banana"}]}]') SELECT JSON_EXTRACT(v, '$[0].attr[0].name') FROM vartab""",
                 "presto": """WITH vartab(v) AS (SELECT JSON_PARSE('[{"attr": [{"name": "banana"}]}]')) SELECT JSON_EXTRACT(v, '$[0].attr[0].name') FROM vartab""",
                 "snowflake": """WITH vartab(v) AS (SELECT PARSE_JSON('[{"attr": [{"name": "banana"}]}]')) SELECT GET_PATH(v, '[0].attr[0].name') FROM vartab""",
-                "tsql": """WITH vartab(v) AS (SELECT '[{"attr": [{"name": "banana"}]}]') SELECT JSON_VALUE(v, '$[0].attr[0].name') FROM vartab""",
+                "tsql": """WITH vartab(v) AS (SELECT '[{"attr": [{"name": "banana"}]}]') SELECT ISNULL(JSON_QUERY(v, '$[0].attr[0].name'), JSON_VALUE(v, '$[0].attr[0].name')) FROM vartab""",
             },
         )
         self.validate_all(
@@ -260,7 +269,7 @@ WHERE
                 "mysql": """WITH vartab(v) AS (SELECT '{"attr": [{"name": "banana"}]}') SELECT JSON_EXTRACT(v, '$.attr[0].name') FROM vartab""",
                 "presto": """WITH vartab(v) AS (SELECT JSON_PARSE('{"attr": [{"name": "banana"}]}')) SELECT JSON_EXTRACT(v, '$.attr[0].name') FROM vartab""",
                 "snowflake": """WITH vartab(v) AS (SELECT PARSE_JSON('{"attr": [{"name": "banana"}]}')) SELECT GET_PATH(v, 'attr[0].name') FROM vartab""",
-                "tsql": """WITH vartab(v) AS (SELECT '{"attr": [{"name": "banana"}]}') SELECT JSON_VALUE(v, '$.attr[0].name') FROM vartab""",
+                "tsql": """WITH vartab(v) AS (SELECT '{"attr": [{"name": "banana"}]}') SELECT ISNULL(JSON_QUERY(v, '$.attr[0].name'), JSON_VALUE(v, '$.attr[0].name')) FROM vartab""",
             },
         )
         self.validate_all(
@@ -271,7 +280,7 @@ WHERE
                 "mysql": """SELECT JSON_EXTRACT('{"fruit":"banana"}', '$.fruit')""",
                 "presto": """SELECT JSON_EXTRACT(JSON_PARSE('{"fruit":"banana"}'), '$.fruit')""",
                 "snowflake": """SELECT GET_PATH(PARSE_JSON('{"fruit":"banana"}'), 'fruit')""",
-                "tsql": """SELECT JSON_VALUE('{"fruit":"banana"}', '$.fruit')""",
+                "tsql": """SELECT ISNULL(JSON_QUERY('{"fruit":"banana"}', '$.fruit'), JSON_VALUE('{"fruit":"banana"}', '$.fruit'))""",
             },
         )
         self.validate_all(
@@ -458,7 +467,7 @@ WHERE
             "DIV0(foo, bar)",
             write={
                 "snowflake": "IFF(bar = 0, 0, foo / bar)",
-                "sqlite": "CASE WHEN bar = 0 THEN 0 ELSE CAST(foo AS REAL) / bar END",
+                "sqlite": "IIF(bar = 0, 0, CAST(foo AS REAL) / bar)",
                 "presto": "IF(bar = 0, 0, CAST(foo AS DOUBLE) / bar)",
                 "spark": "IF(bar = 0, 0, foo / bar)",
                 "hive": "IF(bar = 0, 0, foo / bar)",
@@ -469,7 +478,7 @@ WHERE
             "ZEROIFNULL(foo)",
             write={
                 "snowflake": "IFF(foo IS NULL, 0, foo)",
-                "sqlite": "CASE WHEN foo IS NULL THEN 0 ELSE foo END",
+                "sqlite": "IIF(foo IS NULL, 0, foo)",
                 "presto": "IF(foo IS NULL, 0, foo)",
                 "spark": "IF(foo IS NULL, 0, foo)",
                 "hive": "IF(foo IS NULL, 0, foo)",
@@ -480,7 +489,7 @@ WHERE
             "NULLIFZERO(foo)",
             write={
                 "snowflake": "IFF(foo = 0, NULL, foo)",
-                "sqlite": "CASE WHEN foo = 0 THEN NULL ELSE foo END",
+                "sqlite": "IIF(foo = 0, NULL, foo)",
                 "presto": "IF(foo = 0, NULL, foo)",
                 "spark": "IF(foo = 0, NULL, foo)",
                 "hive": "IF(foo = 0, NULL, foo)",
@@ -550,7 +559,7 @@ WHERE
             write={
                 "duckdb": """SELECT JSON('{"a": {"b c": "foo"}}') -> '$.a' -> '$."b c"'""",
                 "mysql": """SELECT JSON_EXTRACT(JSON_EXTRACT('{"a": {"b c": "foo"}}', '$.a'), '$."b c"')""",
-                "snowflake": """SELECT GET_PATH(GET_PATH(PARSE_JSON('{"a": {"b c": "foo"}}'), 'a'), '"b c"')""",
+                "snowflake": """SELECT GET_PATH(GET_PATH(PARSE_JSON('{"a": {"b c": "foo"}}'), 'a'), '["b c"]')""",
             },
         )
         self.validate_all(
@@ -586,9 +595,9 @@ WHERE
         self.validate_all(
             "SELECT TO_TIMESTAMP(16599817290000, 4)",
             write={
-                "bigquery": "SELECT TIMESTAMP_SECONDS(CAST(16599817290000 / POW(10, 4) AS INT64))",
+                "bigquery": "SELECT TIMESTAMP_SECONDS(CAST(16599817290000 / POWER(10, 4) AS INT64))",
                 "snowflake": "SELECT TO_TIMESTAMP(16599817290000, 4)",
-                "spark": "SELECT TIMESTAMP_SECONDS(16599817290000 / POW(10, 4))",
+                "spark": "SELECT TIMESTAMP_SECONDS(16599817290000 / POWER(10, 4))",
             },
         )
         self.validate_all(
@@ -601,11 +610,11 @@ WHERE
         self.validate_all(
             "SELECT TO_TIMESTAMP(1659981729000000000, 9)",
             write={
-                "bigquery": "SELECT TIMESTAMP_SECONDS(CAST(1659981729000000000 / POW(10, 9) AS INT64))",
-                "duckdb": "SELECT TO_TIMESTAMP(1659981729000000000 / POW(10, 9))",
+                "bigquery": "SELECT TIMESTAMP_SECONDS(CAST(1659981729000000000 / POWER(10, 9) AS INT64))",
+                "duckdb": "SELECT TO_TIMESTAMP(1659981729000000000 / POWER(10, 9))",
                 "presto": "SELECT FROM_UNIXTIME(CAST(1659981729000000000 AS DOUBLE) / POW(10, 9))",
                 "snowflake": "SELECT TO_TIMESTAMP(1659981729000000000, 9)",
-                "spark": "SELECT TIMESTAMP_SECONDS(1659981729000000000 / POW(10, 9))",
+                "spark": "SELECT TIMESTAMP_SECONDS(1659981729000000000 / POWER(10, 9))",
             },
         )
         self.validate_all(
@@ -1454,12 +1463,6 @@ MATCH_RECOGNIZE (
                 )
 
     def test_show(self):
-        # Parsed as Command
-        self.validate_identity(
-            "SHOW TABLES LIKE 'line%' IN tpch.public", check_command_warning=True
-        )
-        self.validate_identity("SHOW TABLES HISTORY IN tpch.public", check_command_warning=True)
-
         # Parsed as Show
         self.validate_identity("SHOW PRIMARY KEYS")
         self.validate_identity("SHOW PRIMARY KEYS IN ACCOUNT")
@@ -1487,6 +1490,22 @@ MATCH_RECOGNIZE (
             "show terse objects in db1.schema1 starts with 'a' limit 10 from 'b'",
             "SHOW TERSE OBJECTS IN SCHEMA db1.schema1 STARTS WITH 'a' LIMIT 10 FROM 'b'",
         )
+        self.validate_identity(
+            "SHOW TABLES LIKE 'line%' IN tpch.public",
+            "SHOW TABLES LIKE 'line%' IN SCHEMA tpch.public",
+        )
+        self.validate_identity(
+            "SHOW TABLES HISTORY IN tpch.public",
+            "SHOW TABLES HISTORY IN SCHEMA tpch.public",
+        )
+        self.validate_identity(
+            "show terse tables in schema db1.schema1 starts with 'a' limit 10 from 'b'",
+            "SHOW TERSE TABLES IN SCHEMA db1.schema1 STARTS WITH 'a' LIMIT 10 FROM 'b'",
+        )
+        self.validate_identity(
+            "show terse tables in db1.schema1 starts with 'a' limit 10 from 'b'",
+            "SHOW TERSE TABLES IN SCHEMA db1.schema1 STARTS WITH 'a' LIMIT 10 FROM 'b'",
+        )
 
         ast = parse_one('SHOW PRIMARY KEYS IN "TEST"."PUBLIC"."customers"', read="snowflake")
         table = ast.find(exp.Table)
@@ -1498,6 +1517,10 @@ MATCH_RECOGNIZE (
         self.validate_identity("SHOW COLUMNS LIKE '_foo%' IN TABLE dt_test")
         self.validate_identity("SHOW COLUMNS IN VIEW")
         self.validate_identity("SHOW COLUMNS LIKE '_foo%' IN VIEW dt_test")
+
+        self.validate_identity("SHOW USERS")
+        self.validate_identity("SHOW TERSE USERS")
+        self.validate_identity("SHOW USERS LIKE '_foo%' STARTS WITH 'bar' LIMIT 5 FROM 'baz'")
 
         ast = parse_one("SHOW COLUMNS LIKE '_testing%' IN dt_test", read="snowflake")
         table = ast.find(exp.Table)
@@ -1516,6 +1539,26 @@ MATCH_RECOGNIZE (
         self.assertEqual(ast.args.get("scope_kind"), "SCHEMA")
         table = ast.find(exp.Table)
         self.assertEqual(table.sql(dialect="snowflake"), "db1.schema1")
+
+        ast = parse_one("SHOW TABLES IN db1.schema1", read="snowflake")
+        self.assertEqual(ast.args.get("scope_kind"), "SCHEMA")
+        table = ast.find(exp.Table)
+        self.assertEqual(table.sql(dialect="snowflake"), "db1.schema1")
+
+        users_exp = self.validate_identity("SHOW USERS")
+        self.assertTrue(isinstance(users_exp, exp.Show))
+        self.assertEqual(users_exp.this, "USERS")
+
+    def test_storage_integration(self):
+        self.validate_identity(
+            """CREATE STORAGE INTEGRATION s3_int
+TYPE=EXTERNAL_STAGE
+STORAGE_PROVIDER='S3'
+STORAGE_AWS_ROLE_ARN='arn:aws:iam::001234567890:role/myrole'
+ENABLED=TRUE
+STORAGE_ALLOWED_LOCATIONS=('s3://mybucket1/path1/', 's3://mybucket2/path2/')""",
+            pretty=True,
+        )
 
     def test_swap(self):
         ast = parse_one("ALTER TABLE a SWAP WITH b", read="snowflake")

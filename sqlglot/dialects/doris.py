@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import re
-import typing as t
 
 from sqlglot import exp, generator
 from sqlglot.dialects.dialect import (
     approx_count_distinct_sql,
+    build_timestamp_trunc,
     count_if_to_sum,
-    parse_timestamp_trunc,
-    prepend_dollar_to_path,
     rename_func,
     time_format,
 )
@@ -172,7 +170,7 @@ def handle_to_date(self: Doris.Generator, expression: exp.TsOrDsToDate | exp.Str
     # Handle special formats
     #  Replace mi with %m
     if time_format is not None and "mi" in time_format:
-        time_format = time_format.replace("mi", "%m")
+        time_format = time_format.replace("mi", "%i")
     # Replace both hh24 and HH24 with HH, case-insensitively
     if time_format is not None:
         time_format = re.sub("hh24", "%H", time_format, flags=re.IGNORECASE)
@@ -278,15 +276,6 @@ def _json_extract_sql(
     )
 
 
-def path_to_jsonpath(
-    name: str = "JSONB_EXTRACT",
-) -> t.Callable[[generator.Generator, exp.GetPath], str]:
-    def _transform(self: generator.Generator, expression: exp.GetPath) -> str:
-        return rename_func(name)(self, prepend_dollar_to_path(expression))
-
-    return _transform
-
-
 class Doris(MySQL):
     INDEX_OFFSET = 1
     DATE_FORMAT = "'yyyy-MM-dd'"
@@ -318,8 +307,7 @@ class Doris(MySQL):
             "ARRAY_SORT": exp.SortArray.from_arg_list,
             "COLLECT_LIST": exp.ArrayAgg.from_arg_list,
             "COLLECT_SET": exp.ArrayUniqueAgg.from_arg_list,
-            "TRUNCATE": exp.Truncate.from_arg_list,
-            "DATE_TRUNC": parse_timestamp_trunc,
+            "DATE_TRUNC": build_timestamp_trunc,
             "DATE_ADD": exp.DateAdd.from_arg_list,
             "DATE_SUB": exp.DateSub.from_arg_list,
             "DATEDIFF": exp.DateDiff.from_arg_list,
@@ -331,6 +319,7 @@ class Doris(MySQL):
             "SIZE": exp.ArraySize.from_arg_list,
             "SPLIT_BY_STRING": exp.RegexpSplit.from_arg_list,
             "TO_DATE": exp.TsOrDsToDate.from_arg_list,
+            "TRUNCATE": exp.Truncate.from_arg_list,
         }
 
         FUNCTION_PARSERS = {
@@ -405,7 +394,6 @@ class Doris(MySQL):
             exp.Filter: handle_filter,
             exp.GenerateSeries: rename_func("ARRAY_RANGE"),
             exp.GroupConcat: _string_agg_sql,
-            exp.GetPath: path_to_jsonpath(),
             exp.JSONExtractScalar: _json_extract_sql,
             exp.JSONExtract: _json_extract_sql,
             exp.JSONBExtract: _json_extract_sql,

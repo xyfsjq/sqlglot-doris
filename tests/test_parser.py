@@ -805,3 +805,50 @@ class TestParser(unittest.TestCase):
             error_level=ErrorLevel.IGNORE,
         )
         self.assertEqual(ast[0].sql(), "CONCAT_WS()")
+
+    def test_parse_drop_schema(self):
+        for dialect in [None, "bigquery", "snowflake"]:
+            with self.subTest(dialect):
+                ast = parse_one("DROP SCHEMA catalog.schema", dialect=dialect)
+                self.assertEqual(
+                    ast,
+                    exp.Drop(
+                        this=exp.Table(
+                            this=None,
+                            db=exp.Identifier(this="schema", quoted=False),
+                            catalog=exp.Identifier(this="catalog", quoted=False),
+                        ),
+                        kind="SCHEMA",
+                    ),
+                )
+                self.assertEqual(ast.sql(dialect=dialect), "DROP SCHEMA catalog.schema")
+
+    def test_parse_create_schema(self):
+        for dialect in [None, "bigquery", "snowflake"]:
+            with self.subTest(dialect):
+                ast = parse_one("CREATE SCHEMA catalog.schema", dialect=dialect)
+                self.assertEqual(
+                    ast,
+                    exp.Create(
+                        this=exp.Table(
+                            this=None,
+                            db=exp.Identifier(this="schema", quoted=False),
+                            catalog=exp.Identifier(this="catalog", quoted=False),
+                        ),
+                        kind="SCHEMA",
+                    ),
+                )
+                self.assertEqual(ast.sql(dialect=dialect), "CREATE SCHEMA catalog.schema")
+
+    def test_values_as_identifier(self):
+        sql = "SELECT values FROM t WHERE values + 1 > x"
+        for dialect in (
+            "bigquery",
+            "clickhouse",
+            "duckdb",
+            "postgres",
+            "redshift",
+            "snowflake",
+        ):
+            with self.subTest(dialect):
+                self.assertEqual(parse_one(sql, dialect=dialect).sql(dialect=dialect), sql)

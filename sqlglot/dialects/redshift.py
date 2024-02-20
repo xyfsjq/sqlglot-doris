@@ -9,9 +9,8 @@ from sqlglot.dialects.dialect import (
     concat_ws_to_dpipe_sql,
     date_delta_sql,
     generatedasidentitycolumnconstraint_sql,
-    json_path_segments,
+    json_extract_segments,
     no_tablesample_sql,
-    parse_json_extract_path,
     rename_func,
 )
 from sqlglot.dialects.postgres import Postgres
@@ -22,26 +21,15 @@ if t.TYPE_CHECKING:
     from sqlglot._typing import E
 
 
-def _json_extract_sql(
-    self: Redshift.Generator, expression: exp.JSONExtract | exp.JSONExtractScalar
-) -> str:
-    return self.func(
-        "JSON_EXTRACT_PATH_TEXT",
-        expression.this,
-        *json_path_segments(self, expression.expression),
-        expression.args.get("null_if_invalid"),
-    )
-
-
-def _parse_date_delta(expr_type: t.Type[E]) -> t.Callable[[t.List], E]:
-    def _parse_delta(args: t.List) -> E:
+def _build_date_delta(expr_type: t.Type[E]) -> t.Callable[[t.List], E]:
+    def _builder(args: t.List) -> E:
         expr = expr_type(this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0))
         if expr_type is exp.TsOrDsAdd:
             expr.set("return_type", exp.DataType.build("TIMESTAMP"))
 
         return expr
 
-    return _parse_delta
+    return _builder
 
 
 class Redshift(Postgres):
@@ -67,14 +55,11 @@ class Redshift(Postgres):
                 unit=exp.var("month"),
                 return_type=exp.DataType.build("TIMESTAMP"),
             ),
-            "DATEADD": _parse_date_delta(exp.TsOrDsAdd),
-            "DATE_ADD": _parse_date_delta(exp.TsOrDsAdd),
-            "DATEDIFF": _parse_date_delta(exp.TsOrDsDiff),
-            "DATE_DIFF": _parse_date_delta(exp.TsOrDsDiff),
+            "DATEADD": _build_date_delta(exp.TsOrDsAdd),
+            "DATE_ADD": _build_date_delta(exp.TsOrDsAdd),
+            "DATEDIFF": _build_date_delta(exp.TsOrDsDiff),
+            "DATE_DIFF": _build_date_delta(exp.TsOrDsDiff),
             "GETDATE": exp.CurrentTimestamp.from_arg_list,
-            "JSON_EXTRACT_PATH_TEXT": parse_json_extract_path(
-                exp.JSONExtractScalar, supports_null_if_invalid=True
-            ),
             "LISTAGG": exp.GroupConcat.from_arg_list,
             "STRTOL": exp.FromBase.from_arg_list,
         }
@@ -91,6 +76,7 @@ class Redshift(Postgres):
             joins: bool = False,
             alias_tokens: t.Optional[t.Collection[TokenType]] = None,
             parse_bracket: bool = False,
+            is_db_reference: bool = False,
         ) -> t.Optional[exp.Expression]:
             # Redshift supports UNPIVOTing SUPER objects, e.g. `UNPIVOT foo.obj[0] AS val AT attr`
             unpivot = self._match(TokenType.UNPIVOT)
@@ -99,6 +85,7 @@ class Redshift(Postgres):
                 joins=joins,
                 alias_tokens=alias_tokens,
                 parse_bracket=parse_bracket,
+                is_db_reference=is_db_reference,
             )
 
             return self.expression(exp.Pivot, this=table, unpivot=True) if unpivot else table
@@ -149,11 +136,11 @@ class Redshift(Postgres):
                     refs.add(
                         (
                             this.args["from"] if i == 0 else this.args["joins"][i - 1]
-                        ).alias_or_name.lower()
+                        ).this.alias.lower()
                     )
-                    table = join.this
 
-                    if isinstance(table, exp.Table):
+                    table = join.this
+                    if isinstance(table, exp.Table) and not join.args.get("on"):
                         if table.parts[0].name.lower() in refs:
                             table.replace(table.to_column())
             return this
@@ -171,6 +158,7 @@ class Redshift(Postgres):
             "UNLOAD": TokenType.COMMAND,
             "VARBYTE": TokenType.VARBINARY,
         }
+        KEYWORDS.pop("VALUES")
 
         # Redshift allows # to appear as a table identifier prefix
         SINGLE_TOKENS = Postgres.Tokenizer.SINGLE_TOKENS.copy()
@@ -183,6 +171,7 @@ class Redshift(Postgres):
         TZ_TO_WITH_TIME_ZONE = True
         NVL2_SUPPORTED = True
         LAST_DAY_SUPPORTS_DATE_PART = False
+        CAN_IMPLEMENT_ARRAY_ANY = False
 
         TYPE_MAPPING = {
             **Postgres.Generator.TYPE_MAPPING,
@@ -191,11 +180,6 @@ class Redshift(Postgres):
             exp.DataType.Type.TIMETZ: "TIME",
             exp.DataType.Type.TIMESTAMPTZ: "TIMESTAMP",
             exp.DataType.Type.VARBINARY: "VARBYTE",
-        }
-
-        PROPERTIES_LOCATION = {
-            **Postgres.Generator.PROPERTIES_LOCATION,
-            exp.LikeProperty: exp.Properties.Location.POST_WITH,
         }
 
         TRANSFORMS = {
@@ -209,12 +193,12 @@ class Redshift(Postgres):
             ),
             exp.DateAdd: date_delta_sql("DATEADD"),
             exp.DateDiff: date_delta_sql("DATEDIFF"),
-            exp.DistKeyProperty: lambda self, e: f"DISTKEY({e.name})",
+            exp.DistKeyProperty: lambda self, e: self.func("DISTKEY", e.this),
             exp.DistStyleProperty: lambda self, e: self.naked_property(e),
             exp.FromBase: rename_func("STRTOL"),
             exp.GeneratedAsIdentityColumnConstraint: generatedasidentitycolumnconstraint_sql,
-            exp.JSONExtract: _json_extract_sql,
-            exp.JSONExtractScalar: _json_extract_sql,
+            exp.JSONExtract: json_extract_segments("JSON_EXTRACT_PATH_TEXT"),
+            exp.JSONExtractScalar: json_extract_segments("JSON_EXTRACT_PATH_TEXT"),
             exp.GroupConcat: rename_func("LISTAGG"),
             exp.ParseJSON: rename_func("JSON_PARSE"),
             exp.Select: transforms.preprocess(

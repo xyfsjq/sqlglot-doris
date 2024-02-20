@@ -95,7 +95,7 @@ class TestLineage(unittest.TestCase):
             downstream.source.sql(),
             "SELECT x.a AS a FROM x AS x",
         )
-        self.assertEqual(downstream.alias, "")
+        self.assertEqual(downstream.alias, "z")
 
     def test_lineage_source_with_star(self) -> None:
         node = lineage(
@@ -153,7 +153,7 @@ class TestLineage(unittest.TestCase):
         downstream = downstream.downstream[0]
         self.assertEqual(downstream.source.sql(), "(VALUES (1), (2)) AS t(a)")
         self.assertEqual(downstream.expression.sql(), "a")
-        self.assertEqual(downstream.alias, "")
+        self.assertEqual(downstream.alias, "y")
 
     def test_lineage_cte_name_appears_in_schema(self) -> None:
         schema = {"a": {"b": {"t1": {"c1": "int"}, "t2": {"c2": "int"}}}}
@@ -282,6 +282,35 @@ class TestLineage(unittest.TestCase):
         self.assertEqual(downstream_a.source.sql(), "SELECT * FROM catalog.db.table_a AS table_a")
         downstream_b = node.downstream[1]
         self.assertEqual(downstream_b.name, "0")
+        self.assertEqual(downstream_b.source.sql(), "SELECT * FROM catalog.db.table_b AS table_b")
+
+    def test_lineage_source_union(self) -> None:
+        query = "SELECT x, created_at FROM dataset;"
+        node = lineage(
+            "x",
+            query,
+            sources={
+                "dataset": """
+                SELECT *
+                FROM catalog.db.table_a
+
+                UNION
+
+                SELECT *
+                FROM catalog.db.table_b
+                """
+            },
+        )
+
+        self.assertEqual(node.name, "x")
+
+        downstream_a = node.downstream[0]
+        self.assertEqual(downstream_a.name, "0")
+        self.assertEqual(downstream_a.alias, "dataset")
+        self.assertEqual(downstream_a.source.sql(), "SELECT * FROM catalog.db.table_a AS table_a")
+        downstream_b = node.downstream[1]
+        self.assertEqual(downstream_b.name, "0")
+        self.assertEqual(downstream_b.alias, "dataset")
         self.assertEqual(downstream_b.source.sql(), "SELECT * FROM catalog.db.table_b AS table_b")
 
     def test_select_star(self) -> None:

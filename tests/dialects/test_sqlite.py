@@ -10,11 +10,9 @@ class TestSQLite(Validator):
         self.validate_identity("INSERT OR IGNORE INTO foo (x, y) VALUES (1, 2)")
         self.validate_identity("INSERT OR REPLACE INTO foo (x, y) VALUES (1, 2)")
         self.validate_identity("INSERT OR ROLLBACK INTO foo (x, y) VALUES (1, 2)")
+        self.validate_identity("CREATE TABLE foo (id INTEGER PRIMARY KEY ASC)")
+        self.validate_identity("CREATE TEMPORARY TABLE foo (id INTEGER)")
 
-        self.validate_all(
-            "CREATE TABLE foo (id INTEGER PRIMARY  KEY ASC)",
-            write={"sqlite": "CREATE TABLE foo (id INTEGER PRIMARY KEY ASC)"},
-        )
         self.validate_all(
             """
             CREATE TABLE "Track"
@@ -73,7 +71,7 @@ class TestSQLite(Validator):
         self.validate_identity("SELECT UNIXEPOCH('now', 'subsec')")
         self.validate_identity("SELECT TIMEDIFF('now', '1809-02-12')")
         self.validate_identity(
-            "SELECT JSON_EXTRACT('[10, 20, [30, 40]]', '$[2]', '$[0]')",
+            "SELECT JSON_EXTRACT('[10, 20, [30, 40]]', '$[2]', '$[0]', '$[1]')",
         )
         self.validate_identity(
             """SELECT item AS "item", some AS "some" FROM data WHERE (item = 'value_1' COLLATE NOCASE) AND (some = 't' COLLATE NOCASE) ORDER BY item ASC LIMIT 1 OFFSET 0"""

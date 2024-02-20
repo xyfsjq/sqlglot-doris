@@ -378,6 +378,31 @@ class TestDialect(Validator):
             read={"postgres": "INET '127.0.0.1/32'"},
         )
 
+    def test_ddl(self):
+        self.validate_all(
+            "CREATE TABLE a LIKE b",
+            write={
+                "": "CREATE TABLE a LIKE b",
+                "bigquery": "CREATE TABLE a LIKE b",
+                "clickhouse": "CREATE TABLE a AS b",
+                "databricks": "CREATE TABLE a LIKE b",
+                "doris": "CREATE TABLE a LIKE b",
+                "drill": "CREATE TABLE a AS SELECT * FROM b LIMIT 0",
+                "duckdb": "CREATE TABLE a AS SELECT * FROM b LIMIT 0",
+                "hive": "CREATE TABLE a LIKE b",
+                "mysql": "CREATE TABLE a LIKE b",
+                "oracle": "CREATE TABLE a LIKE b",
+                "postgres": "CREATE TABLE a (LIKE b)",
+                "presto": "CREATE TABLE a (LIKE b)",
+                "redshift": "CREATE TABLE a (LIKE b)",
+                "snowflake": "CREATE TABLE a LIKE b",
+                "spark": "CREATE TABLE a LIKE b",
+                "sqlite": "CREATE TABLE a AS SELECT * FROM b LIMIT 0",
+                "trino": "CREATE TABLE a (LIKE b)",
+                "tsql": "SELECT TOP 0 * INTO a FROM b AS temp",
+            },
+        )
+
     def test_heredoc_strings(self):
         for dialect in ("clickhouse", "postgres", "redshift"):
             # Invalid matching tag
@@ -705,7 +730,7 @@ class TestDialect(Validator):
             write={
                 "duckdb": "TO_TIMESTAMP(x)",
                 "hive": "FROM_UNIXTIME(x)",
-                "oracle": "TO_DATE('1970-01-01','YYYY-MM-DD') + (x / 86400)",
+                "oracle": "TO_DATE('1970-01-01', 'YYYY-MM-DD') + (x / 86400)",
                 "postgres": "TO_TIMESTAMP(x)",
                 "presto": "FROM_UNIXTIME(x)",
                 "starrocks": "FROM_UNIXTIME(x)",
@@ -1098,6 +1123,24 @@ class TestDialect(Validator):
 
     def test_json(self):
         self.validate_all(
+            """JSON_EXTRACT(x, '$["a b"]')""",
+            write={
+                "": """JSON_EXTRACT(x, '$["a b"]')""",
+                "bigquery": """JSON_EXTRACT(x, '$[\\'a b\\']')""",
+                "clickhouse": "JSONExtractString(x, 'a b')",
+                "duckdb": """x -> '$."a b"'""",
+                "mysql": """JSON_EXTRACT(x, '$."a b"')""",
+                "postgres": "JSON_EXTRACT_PATH(x, 'a b')",
+                "presto": """JSON_EXTRACT(x, '$["a b"]')""",
+                "redshift": "JSON_EXTRACT_PATH_TEXT(x, 'a b')",
+                "snowflake": """GET_PATH(x, '["a b"]')""",
+                "spark": """GET_JSON_OBJECT(x, '$[\\'a b\\']')""",
+                "sqlite": """x -> '$."a b"'""",
+                "trino": """JSON_EXTRACT(x, '$["a b"]')""",
+                "tsql": """ISNULL(JSON_QUERY(x, '$."a b"'), JSON_VALUE(x, '$."a b"'))""",
+            },
+        )
+        self.validate_all(
             "JSON_EXTRACT(x, '$.y')",
             read={
                 "bigquery": "JSON_EXTRACT(x, '$.y')",
@@ -1106,17 +1149,20 @@ class TestDialect(Validator):
                 "mysql": "JSON_EXTRACT(x, '$.y')",
                 "postgres": "x->'y'",
                 "presto": "JSON_EXTRACT(x, '$.y')",
+                "snowflake": "GET_PATH(x, 'y')",
                 "sqlite": "x -> '$.y'",
                 "starrocks": "x -> '$.y'",
             },
             write={
                 "bigquery": "JSON_EXTRACT(x, '$.y')",
+                "clickhouse": "JSONExtractString(x, 'y')",
                 "doris": "JSONB_EXTRACT(x, '$.y')",
                 "duckdb": "x -> '$.y'",
                 "mysql": "JSON_EXTRACT(x, '$.y')",
                 "oracle": "JSON_EXTRACT(x, '$.y')",
                 "postgres": "JSON_EXTRACT_PATH(x, 'y')",
                 "presto": "JSON_EXTRACT(x, '$.y')",
+                "snowflake": "GET_PATH(x, 'y')",
                 "spark": "GET_JSON_OBJECT(x, '$.y')",
                 "sqlite": "x -> '$.y'",
                 "starrocks": "x -> '$.y'",
@@ -1127,19 +1173,23 @@ class TestDialect(Validator):
             "JSON_EXTRACT_SCALAR(x, '$.y')",
             read={
                 "bigquery": "JSON_EXTRACT_SCALAR(x, '$.y')",
+                "clickhouse": "JSONExtractString(x, 'y')",
                 "duckdb": "x ->> 'y'",
                 "postgres": "x ->> 'y'",
                 "presto": "JSON_EXTRACT_SCALAR(x, '$.y')",
                 "redshift": "JSON_EXTRACT_PATH_TEXT(x, 'y')",
                 "spark": "GET_JSON_OBJECT(x, '$.y')",
+                "snowflake": "JSON_EXTRACT_PATH_TEXT(x, 'y')",
                 "sqlite": "x ->> '$.y'",
             },
             write={
                 "bigquery": "JSON_EXTRACT_SCALAR(x, '$.y')",
+                "clickhouse": "JSONExtractString(x, 'y')",
                 "duckdb": "x ->> '$.y'",
                 "postgres": "JSON_EXTRACT_PATH_TEXT(x, 'y')",
                 "presto": "JSON_EXTRACT_SCALAR(x, '$.y')",
                 "redshift": "JSON_EXTRACT_PATH_TEXT(x, 'y')",
+                "snowflake": "JSON_EXTRACT_PATH_TEXT(x, 'y')",
                 "spark": "GET_JSON_OBJECT(x, '$.y')",
                 "sqlite": "x ->> '$.y'",
                 "tsql": "ISNULL(JSON_QUERY(x, '$.y'), JSON_VALUE(x, '$.y'))",
@@ -1153,11 +1203,13 @@ class TestDialect(Validator):
                 "doris": "x -> '$.y[0].z'",
                 "mysql": "JSON_EXTRACT(x, '$.y[0].z')",
                 "presto": "JSON_EXTRACT(x, '$.y[0].z')",
+                "snowflake": "GET_PATH(x, 'y[0].z')",
                 "sqlite": "x -> '$.y[0].z'",
                 "starrocks": "x -> '$.y[0].z'",
             },
             write={
                 "bigquery": "JSON_EXTRACT(x, '$.y[0].z')",
+                "clickhouse": "JSONExtractString(x, 'y', 1, 'z')",
                 "doris": "JSONB_EXTRACT(x, '$.y[0].z')",
                 "duckdb": "x -> '$.y[0].z'",
                 "mysql": "JSON_EXTRACT(x, '$.y[0].z')",
@@ -1165,6 +1217,7 @@ class TestDialect(Validator):
                 "postgres": "JSON_EXTRACT_PATH(x, 'y', '0', 'z')",
                 "presto": "JSON_EXTRACT(x, '$.y[0].z')",
                 "redshift": "JSON_EXTRACT_PATH_TEXT(x, 'y', '0', 'z')",
+                "snowflake": "GET_PATH(x, 'y[0].z')",
                 "spark": "GET_JSON_OBJECT(x, '$.y[0].z')",
                 "sqlite": "x -> '$.y[0].z'",
                 "starrocks": "x -> '$.y[0].z'",
@@ -1175,17 +1228,21 @@ class TestDialect(Validator):
             "JSON_EXTRACT_SCALAR(x, '$.y[0].z')",
             read={
                 "bigquery": "JSON_EXTRACT_SCALAR(x, '$.y[0].z')",
+                "clickhouse": "JSONExtractString(x, 'y', 1, 'z')",
                 "duckdb": "x ->> '$.y[0].z'",
                 "presto": "JSON_EXTRACT_SCALAR(x, '$.y[0].z')",
-                "spark": "GET_JSON_OBJECT(x, '$.y[0].z')",
+                "snowflake": "JSON_EXTRACT_PATH_TEXT(x, 'y[0].z')",
+                "spark": 'GET_JSON_OBJECT(x, "$.y[0].z")',
                 "sqlite": "x ->> '$.y[0].z'",
             },
             write={
                 "bigquery": "JSON_EXTRACT_SCALAR(x, '$.y[0].z')",
+                "clickhouse": "JSONExtractString(x, 'y', 1, 'z')",
                 "duckdb": "x ->> '$.y[0].z'",
                 "postgres": "JSON_EXTRACT_PATH_TEXT(x, 'y', '0', 'z')",
                 "presto": "JSON_EXTRACT_SCALAR(x, '$.y[0].z')",
                 "redshift": "JSON_EXTRACT_PATH_TEXT(x, 'y', '0', 'z')",
+                "snowflake": "JSON_EXTRACT_PATH_TEXT(x, 'y[0].z')",
                 "spark": "GET_JSON_OBJECT(x, '$.y[0].z')",
                 "sqlite": "x ->> '$.y[0].z'",
                 "tsql": "ISNULL(JSON_QUERY(x, '$.y[0].z'), JSON_VALUE(x, '$.y[0].z'))",
@@ -1195,11 +1252,42 @@ class TestDialect(Validator):
             "JSON_EXTRACT(x, '$.y[*]')",
             write={
                 "bigquery": UnsupportedError,
+                "clickhouse": UnsupportedError,
                 "duckdb": "x -> '$.y[*]'",
+                "mysql": "JSON_EXTRACT(x, '$.y[*]')",
                 "postgres": UnsupportedError,
                 "presto": "JSON_EXTRACT(x, '$.y[*]')",
                 "redshift": UnsupportedError,
+                "snowflake": UnsupportedError,
                 "spark": "GET_JSON_OBJECT(x, '$.y[*]')",
+                "sqlite": UnsupportedError,
+                "tsql": UnsupportedError,
+            },
+        )
+        self.validate_all(
+            "JSON_EXTRACT(x, '$.y[*]')",
+            write={
+                "bigquery": "JSON_EXTRACT(x, '$.y')",
+                "clickhouse": "JSONExtractString(x, 'y')",
+                "postgres": "JSON_EXTRACT_PATH(x, 'y')",
+                "redshift": "JSON_EXTRACT_PATH_TEXT(x, 'y')",
+                "snowflake": "GET_PATH(x, 'y')",
+                "sqlite": "x -> '$.y'",
+                "tsql": "ISNULL(JSON_QUERY(x, '$.y'), JSON_VALUE(x, '$.y'))",
+            },
+        )
+        self.validate_all(
+            "JSON_EXTRACT(x, '$.y.*')",
+            write={
+                "bigquery": UnsupportedError,
+                "clickhouse": UnsupportedError,
+                "duckdb": "x -> '$.y.*'",
+                "mysql": "JSON_EXTRACT(x, '$.y.*')",
+                "postgres": UnsupportedError,
+                "presto": "JSON_EXTRACT(x, '$.y.*')",
+                "redshift": UnsupportedError,
+                "snowflake": UnsupportedError,
+                "spark": UnsupportedError,
                 "sqlite": UnsupportedError,
                 "tsql": UnsupportedError,
             },
@@ -2017,7 +2105,7 @@ SELECT
                 "databricks": "SELECT COUNT_IF(col % 2 = 0) FROM foo",
                 "presto": "SELECT COUNT_IF(col % 2 = 0) FROM foo",
                 "snowflake": "SELECT COUNT_IF(col % 2 = 0) FROM foo",
-                "sqlite": "SELECT SUM(CASE WHEN col % 2 = 0 THEN 1 ELSE 0 END) FROM foo",
+                "sqlite": "SELECT SUM(IIF(col % 2 = 0, 1, 0)) FROM foo",
                 "tsql": "SELECT COUNT_IF(col % 2 = 0) FROM foo",
                 "doris": "SELECT SUM(CASE WHEN col % 2 = 0 THEN 1 ELSE 0 END) FROM foo",
             },
@@ -2033,7 +2121,7 @@ SELECT
                 "": "SELECT COUNT_IF(col % 2 = 0) FILTER(WHERE col < 1000) FROM foo",
                 "databricks": "SELECT COUNT_IF(col % 2 = 0) FILTER(WHERE col < 1000) FROM foo",
                 "presto": "SELECT COUNT_IF(col % 2 = 0) FILTER(WHERE col < 1000) FROM foo",
-                "sqlite": "SELECT SUM(CASE WHEN col % 2 = 0 THEN 1 ELSE 0 END) FILTER(WHERE col < 1000) FROM foo",
+                "sqlite": "SELECT SUM(IIF(col % 2 = 0, 1, 0)) FILTER(WHERE col < 1000) FROM foo",
                 "tsql": "SELECT COUNT_IF(col % 2 = 0) FILTER(WHERE col < 1000) FROM foo",
             },
         )
@@ -2187,5 +2275,34 @@ SELECT
                 "spark": "RAND()",
                 "sqlite": "RANDOM()",
                 "tsql": "RAND()",
+            },
+        )
+
+    def test_array_any(self):
+        self.validate_all(
+            "ARRAY_ANY(arr, x -> pred)",
+            write={
+                "": "ARRAY_ANY(arr, x -> pred)",
+                "bigquery": "(ARRAY_LENGTH(arr) = 0 OR ARRAY_LENGTH(ARRAY(SELECT x FROM UNNEST(arr) AS x WHERE pred)) <> 0)",
+                "clickhouse": "(LENGTH(arr) = 0 OR LENGTH(arrayFilter(x -> pred, arr)) <> 0)",
+                "databricks": "(SIZE(arr) = 0 OR SIZE(FILTER(arr, x -> pred)) <> 0)",
+                "doris": UnsupportedError,
+                "drill": UnsupportedError,
+                "duckdb": "(ARRAY_LENGTH(arr) = 0 OR ARRAY_LENGTH(LIST_FILTER(arr, x -> pred)) <> 0)",
+                "hive": UnsupportedError,
+                "mysql": UnsupportedError,
+                "oracle": UnsupportedError,
+                "postgres": "(ARRAY_LENGTH(arr, 1) = 0 OR ARRAY_LENGTH(ARRAY(SELECT x FROM UNNEST(arr) AS _t(x) WHERE pred), 1) <> 0)",
+                "presto": "ANY_MATCH(arr, x -> pred)",
+                "redshift": UnsupportedError,
+                "snowflake": UnsupportedError,
+                "spark": "(SIZE(arr) = 0 OR SIZE(FILTER(arr, x -> pred)) <> 0)",
+                "spark2": "(SIZE(arr) = 0 OR SIZE(FILTER(arr, x -> pred)) <> 0)",
+                "sqlite": UnsupportedError,
+                "starrocks": UnsupportedError,
+                "tableau": UnsupportedError,
+                "teradata": "(CARDINALITY(arr) = 0 OR CARDINALITY(FILTER(arr, x -> pred)) <> 0)",
+                "trino": "ANY_MATCH(arr, x -> pred)",
+                "tsql": UnsupportedError,
             },
         )

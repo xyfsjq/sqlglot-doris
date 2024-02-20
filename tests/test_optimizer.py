@@ -156,7 +156,7 @@ class TestOptimizer(unittest.TestCase):
                     df1 = self.conn.execute(
                         sqlglot.transpile(sql, read=dialect, write="duckdb")[0]
                     ).df()
-                    df2 = self.conn.execute(optimized.sql(pretty=pretty, dialect="duckdb")).df()
+                    df2 = self.conn.execute(optimized.sql(dialect="duckdb")).df()
                     assert_frame_equal(df1, df2)
 
     @patch("sqlglot.generator.logger")
@@ -874,6 +874,12 @@ FROM READ_CSV('tests/fixtures/optimizer/tpc-h/nation.csv.gz', 'delimiter', '|') 
         self.assertEqual(case_ifs_expr.type.this, exp.DataType.Type.VARCHAR)
         self.assertEqual(case_ifs_expr.args["true"].type.this, exp.DataType.Type.VARCHAR)
 
+        timestamp = annotate_types(parse_one("TIMESTAMP(x)"))
+        self.assertEqual(timestamp.type.this, exp.DataType.Type.TIMESTAMP)
+
+        timestamptz = annotate_types(parse_one("TIMESTAMP(x)", read="bigquery"))
+        self.assertEqual(timestamptz.type.this, exp.DataType.Type.TIMESTAMPTZ)
+
     def test_unknown_annotation(self):
         schema = {"x": {"cola": "VARCHAR"}}
         sql = "SELECT x.cola + SOME_ANONYMOUS_FUNC(x.cola) AS col FROM x AS x"
@@ -979,6 +985,12 @@ FROM READ_CSV('tests/fixtures/optimizer/tpc-h/nation.csv.gz', 'delimiter', '|') 
         expression = annotate_types(parse_one("SELECT t.c FROM t"), schema=schema)
 
         self.assertEqual(expression.selects[0].type.sql(dialect="bigquery"), "STRUCT<`f` STRING>")
+
+        expression = annotate_types(
+            parse_one("SELECT unnest(t.x) FROM t AS t", dialect="postgres"),
+            schema={"t": {"x": "array<int>"}},
+        )
+        self.assertTrue(expression.selects[0].is_type("int"))
 
     def test_type_annotation_cache(self):
         sql = "SELECT 1 + 1"

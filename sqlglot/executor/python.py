@@ -9,7 +9,7 @@ from sqlglot.errors import ExecuteError
 from sqlglot.executor.context import Context
 from sqlglot.executor.env import ENV
 from sqlglot.executor.table import RowReader, Table
-from sqlglot.helper import csv_reader, subclasses
+from sqlglot.helper import csv_reader, ensure_list, subclasses
 
 
 class PythonExecutor:
@@ -368,7 +368,7 @@ def _rename(self, e):
 
         if isinstance(e, exp.Func) and e.is_var_len_args:
             *head, tail = values
-            return self.func(e.key, *head, *tail)
+            return self.func(e.key, *head, *ensure_list(tail))
 
         return self.func(e.key, *values)
     except Exception as ex:
@@ -444,6 +444,9 @@ class Python(Dialect):
             exp.Is: lambda self, e: (
                 self.binary(e, "==") if isinstance(e.this, exp.Literal) else self.binary(e, "is")
             ),
+            exp.JSONPath: lambda self, e: f"[{','.join(self.sql(p) for p in e.expressions[1:])}]",
+            exp.JSONPathKey: lambda self, e: f"'{self.sql(e.this)}'",
+            exp.JSONPathSubscript: lambda self, e: f"'{e.this}'",
             exp.Lambda: _lambda_sql,
             exp.Not: lambda self, e: f"not {self.sql(e.this)}",
             exp.Null: lambda *_: "None",

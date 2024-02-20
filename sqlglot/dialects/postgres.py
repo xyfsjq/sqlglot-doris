@@ -6,11 +6,14 @@ from sqlglot import exp, generator, parser, tokens, transforms
 from sqlglot.dialects.dialect import (
     DATE_ADD_OR_SUB,
     Dialect,
+    JSON_EXTRACT_TYPE,
     any_value_to_max_sql,
     bool_xor_sql,
     datestrtodate_sql,
-    format_time_lambda,
-    json_path_segments,
+    build_formatted_time,
+    filter_array_using_unnest,
+    json_extract_segments,
+    json_path_key_only_name,
     max_or_greatest,
     merge_without_target_sql,
     min_or_least,
@@ -19,8 +22,8 @@ from sqlglot.dialects.dialect import (
     no_paren_current_date_sql,
     no_pivot_sql,
     no_trycast_sql,
-    parse_json_extract_path,
-    parse_timestamp_trunc,
+    build_json_extract_path,
+    build_timestamp_trunc,
     rename_func,
     str_position_sql,
     struct_extract_sql,
@@ -162,7 +165,7 @@ def _serial_to_generated(expression: exp.Expression) -> exp.Expression:
     return expression
 
 
-def _generate_series(args: t.List) -> exp.Expression:
+def _build_generate_series(args: t.List) -> exp.GenerateSeries:
     # The goal is to convert step values like '1 day' or INTERVAL '1 day' into INTERVAL '1' day
     step = seq_get(args, 2)
 
@@ -178,28 +181,25 @@ def _generate_series(args: t.List) -> exp.Expression:
     return exp.GenerateSeries.from_arg_list(args)
 
 
-def _to_timestamp(args: t.List) -> exp.Expression:
+def _build_to_timestamp(args: t.List) -> exp.UnixToTime | exp.StrToTime:
     # TO_TIMESTAMP accepts either a single double argument or (text, text)
     if len(args) == 1:
         # https://www.postgresql.org/docs/current/functions-datetime.html#FUNCTIONS-DATETIME-TABLE
         return exp.UnixToTime.from_arg_list(args)
 
     # https://www.postgresql.org/docs/current/functions-formatting.html
-    return format_time_lambda(exp.StrToTime, "postgres")(args)
+    return build_formatted_time(exp.StrToTime, "postgres")(args)
 
 
 def _json_extract_sql(
-    self: Postgres.Generator, expression: exp.JSONExtract | exp.JSONExtractScalar
-) -> str:
-    return self.func(
-        (
-            "JSON_EXTRACT_PATH"
-            if isinstance(expression, exp.JSONExtract)
-            else "JSON_EXTRACT_PATH_TEXT"
-        ),
-        expression.this,
-        *json_path_segments(self, expression.expression),
-    )
+    name: str, op: str
+) -> t.Callable[[Postgres.Generator, JSON_EXTRACT_TYPE], str]:
+    def _generate(self: Postgres.Generator, expression: JSON_EXTRACT_TYPE) -> str:
+        if expression.args.get("only_json_types"):
+            return json_extract_segments(name, quoted_index=False, op=op)(self, expression)
+        return json_extract_segments(name)(self, expression)
+
+    return _generate
 
 
 class Postgres(Dialect):
@@ -245,6 +245,9 @@ class Postgres(Dialect):
         BYTE_STRINGS = [("e'", "'"), ("E'", "'")]
         HEREDOC_STRINGS = ["$"]
 
+        HEREDOC_TAG_IS_IDENTIFIER = True
+        HEREDOC_STRING_ALTERNATIVE = TokenType.PARAMETER
+
         KEYWORDS = {
             **tokens.Tokenizer.KEYWORDS,
             "~~": TokenType.LIKE,
@@ -254,6 +257,8 @@ class Postgres(Dialect):
             "@@": TokenType.DAT,
             "@>": TokenType.AT_GT,
             "<@": TokenType.LT_AT,
+            "|/": TokenType.PIPE_SLASH,
+            "||/": TokenType.DPIPE_SLASH,
             "BEGIN": TokenType.COMMAND,
             "BEGIN TRANSACTION": TokenType.BEGIN,
             "BIGSERIAL": TokenType.BIGSERIAL,
@@ -300,7 +305,7 @@ class Postgres(Dialect):
             **parser.Parser.PROPERTY_PARSERS,
             "SET": lambda self: self.expression(exp.SetConfigProperty, this=self._parse_set()),
         }
-        PROPERTY_PARSERS.pop("INPUT", None)
+        PROPERTY_PARSERS.pop("INPUT")
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
@@ -313,10 +318,10 @@ class Postgres(Dialect):
             "BIT_AND": exp.GroupBitAnd.from_arg_list,
             "BIT_OR": exp.GroupBitOr.from_arg_list,
             "BIT_XOR": exp.GroupBitXor.from_arg_list,
-            "DATE_TRUNC": parse_timestamp_trunc,
-            "GENERATE_SERIES": _generate_series,
-            "JSON_EXTRACT_PATH": parse_json_extract_path(exp.JSONExtract),
-            "JSON_EXTRACT_PATH_TEXT": parse_json_extract_path(exp.JSONExtractScalar),
+            "DATE_TRUNC": build_timestamp_trunc,
+            "GENERATE_SERIES": _build_generate_series,
+            "JSON_EXTRACT_PATH": build_json_extract_path(exp.JSONExtract),
+            "JSON_EXTRACT_PATH_TEXT": build_json_extract_path(exp.JSONExtractScalar),
             "MAKE_TIME": exp.TimeFromParts.from_arg_list,
             "MAKE_TIMESTAMP": exp.TimestampFromParts.from_arg_list,
             "NOW": exp.CurrentTimestamp.from_arg_list,
@@ -328,9 +333,9 @@ class Postgres(Dialect):
             ),
             "REGEXP_MATCHES": exp.RegexpExtract.from_arg_list,
             "STRPOS": exp.StrPosition.from_arg_list,
-            "TO_CHAR": format_time_lambda(exp.TimeToStr, "postgres"),
+            "TO_CHAR": build_formatted_time(exp.TimeToStr, "postgres"),
             "TO_HEX": exp.Hex.from_arg_list,
-            "TO_TIMESTAMP": _to_timestamp,
+            "TO_TIMESTAMP": _build_to_timestamp,
             "TRUNC": exp.Truncate.from_arg_list,
             "UNNEST": exp.Explode.from_arg_list,
         }
@@ -364,6 +369,8 @@ class Postgres(Dialect):
             **parser.Parser.STATEMENT_PARSERS,
             TokenType.END: lambda self: self._parse_commit_or_rollback(),
         }
+
+        JSON_ARROWS_REQUIRE_JSON_TYPE = True
 
         def _parse_operator(self, this: t.Optional[exp.Expression]) -> t.Optional[exp.Expression]:
             while True:
@@ -412,17 +419,15 @@ class Postgres(Dialect):
         SUPPORTS_SELECT_INTO = True
         JSON_TYPE_REQUIRED_FOR_EXTRACTION = True
         SUPPORTS_UNLOGGED_TABLES = True
+        LIKE_PROPERTY_INSIDE_SCHEMA = True
+        MULTI_ARG_DISTINCT = False
+        CAN_IMPLEMENT_ARRAY_ANY = True
 
-        JSON_PATH_MAPPING = {
-            exp.JSONPathChild: lambda n, **kwargs: n.name,
-            exp.JSONPathKey: lambda n, **kwargs: n.name,
-            exp.JSONPathRoot: lambda n, **kwargs: "",
-            exp.JSONPathSubscript: lambda n, **kwargs: generator.generate_json_path(
-                n.this, **kwargs
-            ),
+        SUPPORTED_JSON_PATH_PARTS = {
+            exp.JSONPathKey,
+            exp.JSONPathRoot,
+            exp.JSONPathSubscript,
         }
-
-        SUPPORTED_JSON_PATH_PARTS = set(JSON_PATH_MAPPING)
 
         TYPE_MAPPING = {
             **generator.Generator.TYPE_MAPPING,
@@ -446,6 +451,8 @@ class Postgres(Dialect):
             exp.ArrayContained: lambda self, e: self.binary(e, "<@"),
             exp.ArrayContains: lambda self, e: self.binary(e, "@>"),
             exp.ArrayOverlaps: lambda self, e: self.binary(e, "&&"),
+            exp.ArrayFilter: filter_array_using_unnest,
+            exp.ArraySize: lambda self, e: self.func("ARRAY_LENGTH", e.this, e.expression or "1"),
             exp.BitwiseXor: lambda self, e: self.binary(e, "#"),
             exp.ColumnDef: transforms.preprocess([_auto_increment_to_serial, _serial_to_generated]),
             exp.CurrentDate: no_paren_current_date_sql,
@@ -458,11 +465,14 @@ class Postgres(Dialect):
             exp.DateSub: _date_add_sql("-"),
             exp.Explode: rename_func("UNNEST"),
             exp.GroupConcat: _string_agg_sql,
-            exp.JSONExtract: _json_extract_sql,
-            exp.JSONExtractScalar: _json_extract_sql,
+            exp.JSONExtract: _json_extract_sql("JSON_EXTRACT_PATH", "->"),
+            exp.JSONExtractScalar: _json_extract_sql("JSON_EXTRACT_PATH_TEXT", "->>"),
             exp.JSONBExtract: lambda self, e: self.binary(e, "#>"),
             exp.JSONBExtractScalar: lambda self, e: self.binary(e, "#>>"),
             exp.JSONBContains: lambda self, e: self.binary(e, "?"),
+            exp.JSONPathKey: json_path_key_only_name,
+            exp.JSONPathRoot: lambda *_: "",
+            exp.JSONPathSubscript: lambda self, e: self.json_path_part(e.this),
             exp.LastDay: no_last_day_sql,
             exp.LogicalOr: rename_func("BOOL_OR"),
             exp.LogicalAnd: rename_func("BOOL_AND"),
@@ -489,21 +499,20 @@ class Postgres(Dialect):
                 ]
             ),
             exp.StrPosition: str_position_sql,
-            exp.StrToTime: lambda self,
-            e: f"TO_TIMESTAMP({self.sql(e, 'this')}, {self.format_time(e)})",
+            exp.StrToTime: lambda self, e: self.func("TO_TIMESTAMP", e.this, self.format_time(e)),
             exp.StructExtract: struct_extract_sql,
             exp.Substring: _substring_sql,
             exp.TimeFromParts: rename_func("MAKE_TIME"),
             exp.TimestampFromParts: rename_func("MAKE_TIMESTAMP"),
             exp.TimestampTrunc: timestamptrunc_sql,
             exp.TimeStrToTime: timestrtotime_sql,
-            exp.TimeToStr: lambda self, e: f"TO_CHAR({self.sql(e, 'this')}, {self.format_time(e)})",
+            exp.TimeToStr: lambda self, e: self.func("TO_CHAR", e.this, self.format_time(e)),
             exp.ToChar: lambda self, e: self.function_fallback_sql(e),
             exp.Trim: trim_sql,
             exp.TryCast: no_trycast_sql,
             exp.TsOrDsAdd: _date_add_sql("+"),
             exp.TsOrDsDiff: _date_diff_sql,
-            exp.UnixToTime: lambda self, e: f"TO_TIMESTAMP({self.sql(e, 'this')})",
+            exp.UnixToTime: lambda self, e: self.func("TO_TIMESTAMP", e.this),
             exp.VariancePop: rename_func("VAR_POP"),
             exp.Variance: rename_func("VAR_SAMP"),
             exp.Xor: bool_xor_sql,

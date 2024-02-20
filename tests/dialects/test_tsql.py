@@ -29,6 +29,14 @@ class TestTSQL(Validator):
         self.validate_identity("CAST(x AS int) OR y", "CAST(x AS INTEGER) <> 0 OR y <> 0")
 
         self.validate_all(
+            "SELECT IIF(cond <> 0, 'True', 'False')",
+            read={
+                "spark": "SELECT IF(cond, 'True', 'False')",
+                "sqlite": "SELECT IIF(cond, 'True', 'False')",
+                "tsql": "SELECT IIF(cond <> 0, 'True', 'False')",
+            },
+        )
+        self.validate_all(
             "SELECT TRIM(BOTH 'a' FROM a)",
             read={
                 "mysql": "SELECT TRIM(BOTH 'a' FROM a)",
@@ -912,28 +920,48 @@ WHERE
                 self.assertEqual(expr.sql(dialect="tsql"), expected_sql)
 
     def test_charindex(self):
+        self.validate_identity(
+            "SELECT CAST(SUBSTRING('ABCD~1234', CHARINDEX('~', 'ABCD~1234') + 1, LEN('ABCD~1234')) AS BIGINT)"
+        )
+
         self.validate_all(
             "CHARINDEX(x, y, 9)",
+            read={
+                "spark": "LOCATE(x, y, 9)",
+            },
             write={
                 "spark": "LOCATE(x, y, 9)",
+                "tsql": "CHARINDEX(x, y, 9)",
             },
         )
         self.validate_all(
             "CHARINDEX(x, y)",
+            read={
+                "spark": "LOCATE(x, y)",
+            },
             write={
                 "spark": "LOCATE(x, y)",
+                "tsql": "CHARINDEX(x, y)",
             },
         )
         self.validate_all(
             "CHARINDEX('sub', 'testsubstring', 3)",
+            read={
+                "spark": "LOCATE('sub', 'testsubstring', 3)",
+            },
             write={
                 "spark": "LOCATE('sub', 'testsubstring', 3)",
+                "tsql": "CHARINDEX('sub', 'testsubstring', 3)",
             },
         )
         self.validate_all(
             "CHARINDEX('sub', 'testsubstring')",
+            read={
+                "spark": "LOCATE('sub', 'testsubstring')",
+            },
             write={
                 "spark": "LOCATE('sub', 'testsubstring')",
+                "tsql": "CHARINDEX('sub', 'testsubstring')",
             },
         )
 
@@ -1299,20 +1327,6 @@ WHERE
                 "spark": "SELECT DATEDIFF(QUARTER, CAST('start' AS TIMESTAMP), CAST('end' AS TIMESTAMP))",
                 "spark2": "SELECT CAST(MONTHS_BETWEEN(CAST('end' AS TIMESTAMP), CAST('start' AS TIMESTAMP)) / 3 AS INT)",
                 "tsql": "SELECT DATEDIFF(QUARTER, CAST('start' AS DATETIME2), CAST('end' AS DATETIME2))",
-            },
-        )
-
-    def test_iif(self):
-        self.validate_identity(
-            "SELECT IF(cond, 'True', 'False')", "SELECT IIF(cond <> 0, 'True', 'False')"
-        )
-        self.validate_identity(
-            "SELECT IIF(cond, 'True', 'False')", "SELECT IIF(cond <> 0, 'True', 'False')"
-        )
-        self.validate_all(
-            "SELECT IIF(cond, 'True', 'False');",
-            write={
-                "spark": "SELECT IF(cond, 'True', 'False')",
             },
         )
 

@@ -554,11 +554,12 @@ FROM base""",
         self.validate(
             "WITH A(filter) AS (VALUES 1, 2, 3) SELECT * FROM A WHERE filter >= 2",
             "WITH A(filter) AS (VALUES (1), (2), (3)) SELECT * FROM A WHERE filter >= 2",
+            read="presto",
         )
         self.validate(
             "SELECT BOOL_OR(a > 10) FROM (VALUES 1, 2, 15) AS T(a)",
             "SELECT BOOL_OR(a > 10) FROM (VALUES (1), (2), (15)) AS T(a)",
-            write="presto",
+            read="presto",
         )
 
     def test_alter(self):
@@ -746,7 +747,6 @@ FROM base""",
             "ALTER SEQUENCE IF EXISTS baz RESTART WITH boo",
             "ALTER SESSION SET STATEMENT_TIMEOUT_IN_SECONDS=3",
             "ALTER TABLE integers DROP PRIMARY KEY",
-            "ALTER TABLE s_ut ADD CONSTRAINT s_ut_uq UNIQUE hajo",
             "ALTER TABLE table1 MODIFY COLUMN name1 SET TAG foo='bar'",
             "ALTER TABLE table1 RENAME COLUMN c1 AS c2",
             "ALTER TABLE table1 RENAME COLUMN c1 TO c2, c2 TO c3",

@@ -1,4 +1,4 @@
-from sqlglot import transpile
+from sqlglot import exp, parse_one, transpile
 from tests.dialects.test_dialect import Validator
 
 
@@ -306,6 +306,9 @@ class TestRedshift(Validator):
         self.validate_identity("SELECT APPROXIMATE AS y")
         self.validate_identity("CREATE TABLE t (c BIGINT IDENTITY(0, 1))")
         self.validate_identity(
+            """SELECT JSON_EXTRACT_PATH_TEXT('{"f2":{"f3":1},"f4":{"f5":99,"f6":"star"}', 'f4', 'f6', TRUE)"""
+        )
+        self.validate_identity(
             "SELECT CONCAT('abc', 'def')",
             "SELECT 'abc' || 'def'",
         )
@@ -378,8 +381,6 @@ class TestRedshift(Validator):
             "SELECT DATEADD(DAY, 1, DATE('2023-01-01'))",
         )
 
-        self.validate_identity("SELECT * FROM x AS a, a.b AS c, c.d.e AS f, f.g.h.i.j.k AS l")
-
         self.validate_identity(
             """SELECT
   c_name,
@@ -405,8 +406,9 @@ ORDER BY
         union_query = f"SELECT * FROM ({' UNION ALL '.join('SELECT ' + v for v in values)})"
         self.assertEqual(transpile(values_query, write="redshift")[0], union_query)
 
-        self.validate_identity(
-            "SELECT * FROM (VALUES (1), (2))",
+        values_sql = transpile("SELECT * FROM (VALUES (1), (2))", write="redshift", pretty=True)[0]
+        self.assertEqual(
+            values_sql,
             """SELECT
   *
 FROM (
@@ -416,81 +418,73 @@ FROM (
   SELECT
     2
 )""",
-            pretty=True,
         )
 
+        self.validate_identity("INSERT INTO t (a) VALUES (1), (2), (3)")
+        self.validate_identity("INSERT INTO t (a, b) VALUES (1, 2), (3, 4)")
+
         self.validate_all(
-            "SELECT * FROM (VALUES (1, 2)) AS t",
+            "SELECT * FROM (SELECT 1, 2) AS t",
+            read={
+                "": "SELECT * FROM (VALUES (1, 2)) AS t",
+            },
             write={
-                "redshift": "SELECT * FROM (SELECT 1, 2) AS t",
                 "mysql": "SELECT * FROM (SELECT 1, 2) AS t",
-                "presto": "SELECT * FROM (VALUES (1, 2)) AS t",
+                "presto": "SELECT * FROM (SELECT 1, 2) AS t",
             },
         )
         self.validate_all(
-            "SELECT * FROM (VALUES (1)) AS t1(id) CROSS JOIN (VALUES (1)) AS t2(id)",
-            write={
-                "redshift": "SELECT * FROM (SELECT 1 AS id) AS t1 CROSS JOIN (SELECT 1 AS id) AS t2",
+            "SELECT * FROM (SELECT 1 AS id) AS t1 CROSS JOIN (SELECT 1 AS id) AS t2",
+            read={
+                "": "SELECT * FROM (VALUES (1)) AS t1(id) CROSS JOIN (VALUES (1)) AS t2(id)",
             },
         )
         self.validate_all(
-            "SELECT a, b FROM (VALUES (1, 2)) AS t (a, b)",
-            write={
-                "redshift": "SELECT a, b FROM (SELECT 1 AS a, 2 AS b) AS t",
+            "SELECT a, b FROM (SELECT 1 AS a, 2 AS b) AS t",
+            read={
+                "": "SELECT a, b FROM (VALUES (1, 2)) AS t (a, b)",
             },
         )
         self.validate_all(
-            'SELECT a, b FROM (VALUES (1, 2), (3, 4)) AS "t" (a, b)',
-            write={
-                "redshift": 'SELECT a, b FROM (SELECT 1 AS a, 2 AS b UNION ALL SELECT 3, 4) AS "t"',
+            'SELECT a, b FROM (SELECT 1 AS a, 2 AS b UNION ALL SELECT 3, 4) AS "t"',
+            read={
+                "": 'SELECT a, b FROM (VALUES (1, 2), (3, 4)) AS "t" (a, b)',
             },
         )
         self.validate_all(
-            "SELECT a, b FROM (VALUES (1, 2), (3, 4), (5, 6), (7, 8)) AS t (a, b)",
-            write={
-                "redshift": "SELECT a, b FROM (SELECT 1 AS a, 2 AS b UNION ALL SELECT 3, 4 UNION ALL SELECT 5, 6 UNION ALL SELECT 7, 8) AS t",
+            "SELECT a, b FROM (SELECT 1 AS a, 2 AS b UNION ALL SELECT 3, 4 UNION ALL SELECT 5, 6 UNION ALL SELECT 7, 8) AS t",
+            read={
+                "": "SELECT a, b FROM (VALUES (1, 2), (3, 4), (5, 6), (7, 8)) AS t (a, b)",
             },
         )
         self.validate_all(
-            "INSERT INTO t(a) VALUES (1), (2), (3)",
-            write={
-                "redshift": "INSERT INTO t (a) VALUES (1), (2), (3)",
+            "INSERT INTO t (a, b) SELECT a, b FROM (SELECT 1 AS a, 2 AS b UNION ALL SELECT 3, 4) AS t",
+            read={
+                "": "INSERT INTO t(a, b) SELECT a, b FROM (VALUES (1, 2), (3, 4)) AS t (a, b)",
             },
-        )
-        self.validate_all(
-            "INSERT INTO t(a, b) SELECT a, b FROM (VALUES (1, 2), (3, 4)) AS t (a, b)",
-            write={
-                "redshift": "INSERT INTO t (a, b) SELECT a, b FROM (SELECT 1 AS a, 2 AS b UNION ALL SELECT 3, 4) AS t",
-            },
-        )
-        self.validate_all(
-            "INSERT INTO t(a, b) VALUES (1, 2), (3, 4)",
-            write={
-                "redshift": "INSERT INTO t (a, b) VALUES (1, 2), (3, 4)",
-            },
-        )
-        self.validate_identity(
-            'SELECT * FROM (VALUES (1)) AS "t"(a)',
-            '''SELECT
-  *
-FROM (
-  SELECT
-    1 AS a
-) AS "t"''',
-            pretty=True,
         )
 
     def test_create_table_like(self):
+        self.validate_identity(
+            "CREATE TABLE SOUP (LIKE other_table) DISTKEY(soup1) SORTKEY(soup2) DISTSTYLE ALL"
+        )
+
         self.validate_all(
-            "CREATE TABLE t1 LIKE t2",
+            "CREATE TABLE t1 (LIKE t2)",
             write={
+                "postgres": "CREATE TABLE t1 (LIKE t2)",
+                "presto": "CREATE TABLE t1 (LIKE t2)",
                 "redshift": "CREATE TABLE t1 (LIKE t2)",
+                "trino": "CREATE TABLE t1 (LIKE t2)",
             },
         )
         self.validate_all(
-            "CREATE TABLE SOUP (LIKE other_table) DISTKEY(soup1) SORTKEY(soup2) DISTSTYLE ALL",
+            "CREATE TABLE t1 (col VARCHAR, LIKE t2)",
             write={
-                "redshift": "CREATE TABLE SOUP (LIKE other_table) DISTKEY(soup1) SORTKEY(soup2) DISTSTYLE ALL",
+                "postgres": "CREATE TABLE t1 (col VARCHAR, LIKE t2)",
+                "presto": "CREATE TABLE t1 (col VARCHAR, LIKE t2)",
+                "redshift": "CREATE TABLE t1 (col VARCHAR, LIKE t2)",
+                "trino": "CREATE TABLE t1 (col VARCHAR, LIKE t2)",
             },
         )
 
@@ -518,4 +512,27 @@ FROM (
             write={
                 "redshift": "CREATE OR REPLACE VIEW v1 AS SELECT cola, colb FROM t1 WITH NO SCHEMA BINDING",
             },
+        )
+
+    def test_column_unnesting(self):
+        ast = parse_one("SELECT * FROM t.t JOIN t.c1 ON c1.c2 = t.c3", read="redshift")
+        ast.args["from"].this.assert_is(exp.Table)
+        ast.args["joins"][0].this.assert_is(exp.Table)
+        self.assertEqual(ast.sql("redshift"), "SELECT * FROM t.t JOIN t.c1 ON c1.c2 = t.c3")
+
+        ast = parse_one("SELECT * FROM t AS t CROSS JOIN t.c1", read="redshift")
+        ast.args["from"].this.assert_is(exp.Table)
+        ast.args["joins"][0].this.assert_is(exp.Column)
+        self.assertEqual(ast.sql("redshift"), "SELECT * FROM t AS t CROSS JOIN t.c1")
+
+        ast = parse_one(
+            "SELECT * FROM x AS a, a.b AS c, c.d.e AS f, f.g.h.i.j.k AS l", read="redshift"
+        )
+        joins = ast.args["joins"]
+        ast.args["from"].this.assert_is(exp.Table)
+        joins[0].this.this.assert_is(exp.Column)
+        joins[1].this.this.assert_is(exp.Column)
+        joins[2].this.this.assert_is(exp.Dot)
+        self.assertEqual(
+            ast.sql("redshift"), "SELECT * FROM x AS a, a.b AS c, c.d.e AS f, f.g.h.i.j.k AS l"
         )

@@ -49,7 +49,7 @@ class Schema(abc.ABC):
         only_visible: bool = False,
         dialect: DialectType = None,
         normalize: t.Optional[bool] = None,
-    ) -> t.List[str]:
+    ) -> t.Sequence[str]:
         """
         Get the column names for a table.
 
@@ -60,7 +60,7 @@ class Schema(abc.ABC):
             normalize: whether to normalize identifiers according to the dialect of interest.
 
         Returns:
-            The list of column names.
+            The sequence of column names.
         """
 
     @abc.abstractmethod
@@ -92,7 +92,7 @@ class Schema(abc.ABC):
         normalize: t.Optional[bool] = None,
     ) -> bool:
         """
-        Returns whether or not `column` appears in `table`'s schema.
+        Returns whether `column` appears in `table`'s schema.
 
         Args:
             table: the source table.
@@ -106,19 +106,6 @@ class Schema(abc.ABC):
         name = column if isinstance(column, str) else column.name
         return name in self.column_names(table, dialect=dialect, normalize=normalize)
 
-    @abc.abstractmethod
-    def find(self, table: exp.Table, raise_on_missing: bool = True) -> t.Optional[t.Any]:
-        """
-        Returns the schema of a given table.
-
-        Args:
-            table: the target table.
-            raise_on_missing: whether or not to raise in case the schema is not found.
-
-        Returns:
-            The schema of the target table.
-        """
-
     @property
     @abc.abstractmethod
     def supported_table_args(self) -> t.Tuple[str, ...]:
@@ -128,7 +115,7 @@ class Schema(abc.ABC):
 
     @property
     def empty(self) -> bool:
-        """Returns whether or not the schema is empty."""
+        """Returns whether the schema is empty."""
         return True
 
 
@@ -170,6 +157,16 @@ class AbstractMappingSchema:
         return [table.text(part) for part in exp.TABLE_PARTS if table.text(part)]
 
     def find(self, table: exp.Table, raise_on_missing: bool = True) -> t.Optional[t.Any]:
+        """
+        Returns the schema of a given table.
+
+        Args:
+            table: the target table.
+            raise_on_missing: whether to raise in case the schema is not found.
+
+        Returns:
+            The schema of the target table.
+        """
         parts = self.table_parts(table)[0 : len(self.supported_table_args)]
         value, trie = in_trie(self.mapping_trie, parts)
 

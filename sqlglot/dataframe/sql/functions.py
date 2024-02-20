@@ -148,7 +148,7 @@ def atanh(col: ColumnOrName) -> Column:
 
 
 def cbrt(col: ColumnOrName) -> Column:
-    return Column.invoke_anonymous_function(col, "CBRT")
+    return Column.invoke_expression_over_column(col, expression.Cbrt)
 
 
 def ceil(col: ColumnOrName) -> Column:
@@ -1030,7 +1030,7 @@ def posexplode_outer(col: ColumnOrName) -> Column:
 
 
 def get_json_object(col: ColumnOrName, path: str) -> Column:
-    return Column.invoke_expression_over_column(col, expression.JSONExtract, path=lit(path))
+    return Column.invoke_expression_over_column(col, expression.JSONExtract, expression=lit(path))
 
 
 def json_tuple(col: ColumnOrName, *fields: str) -> Column:
