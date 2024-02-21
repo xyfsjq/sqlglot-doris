@@ -693,7 +693,7 @@ class Doris(MySQL):
                     f"DISTRIBUTED BY HASH({pk_name}) BUCKETS AUTO "
                     f"PROPERTIES ("
                     f'"replication_allocation" = "tag.location.default: 1"'
-                    f");"
+                    f")"
                 )
             else:  # DUPLICATE模型
                 first_field_name = ""
@@ -706,7 +706,7 @@ class Doris(MySQL):
                     f"DISTRIBUTED BY HASH(`{first_field_name}`) BUCKETS AUTO "
                     f"PROPERTIES ("
                     f'"replication_allocation" = "tag.location.default: 1"'
-                    f");"
+                    f")"
                 )
 
         def createable_sql(self, expression: exp.Create, locations: t.DefaultDict) -> str:
