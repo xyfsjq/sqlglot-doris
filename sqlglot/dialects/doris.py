@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-
+import typing as t
 from sqlglot import exp, generator
 from sqlglot.dialects.dialect import (
     approx_count_distinct_sql,

@@ -386,7 +386,7 @@ class TestDialect(Validator):
                 "bigquery": "CREATE TABLE a LIKE b",
                 "clickhouse": "CREATE TABLE a AS b",
                 "databricks": "CREATE TABLE a LIKE b",
-                "doris": "CREATE TABLE a LIKE b",
+                "doris": 'CREATE TABLE a LIKE b DUPLICATE KEY(``) DISTRIBUTED BY HASH(``) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
                 "drill": "CREATE TABLE a AS SELECT * FROM b LIMIT 0",
                 "duckdb": "CREATE TABLE a AS SELECT * FROM b LIMIT 0",
                 "hive": "CREATE TABLE a LIKE b",
