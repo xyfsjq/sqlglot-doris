@@ -1088,6 +1088,7 @@ class Create(DDL):
         "begin": False,
         "end": False,
         "clone": False,
+        "dialect": False,
     }
 
 

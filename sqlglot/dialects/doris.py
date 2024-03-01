@@ -566,61 +566,28 @@ class Doris(MySQL):
             return self.binary(expression, "MATCH_PHRASE")
 
         def datatype_sql(self, expression: exp.DataType) -> str:
-            if expression.this in self.STRING_TYPE_MAPPING:
-                return "STRING"
-            elif expression.is_type(exp.DataType.Type.UDECIMAL):
-                precision_expression = expression.find(exp.DataTypeParam)
-                if precision_expression:
-                    # 如果p + 1 > 38, 将使用STRING类型
-                    precision = int(precision_expression.name) + 1
-                    if precision <= 38:
-                        precision_expression.this.set("this", precision)
-                    else:
-                        return "STRING"
-            # todo 对于mysql，CHAR和VARCHAR需要*3，但其他的数据库不需要，这里先不*3，后续讨论解决方法
-            # elif expression.is_type(exp.DataType.Type.CHAR):
-            #     size_expression = expression.find(exp.DataTypeParam)
-            #     if size_expression:
-            #         size = int(size_expression.name)
-            #         return "STRING" if size * 3 > 255 else f"CHAR({size * 3})"
-            # elif expression.is_type(exp.DataType.Type.VARCHAR):
-            #     size_expression = expression.find(exp.DataTypeParam)
-            #     if size_expression:
-            #         size = int(size_expression.name)
-            #         return "STRING" if size * 3 > 65533 else f"VARCHAR({size * 3})"
-            elif expression.is_type(exp.DataType.Type.BIT):
-                size_expression = expression.find(exp.DataTypeParam)
-                if size_expression:
-                    size = int(size_expression.name)
-                    return "BOOLEAN" if size == 1 else "STRING"
-            elif expression.this in (
-                exp.DataType.Type.DATETIME,
-                exp.DataType.Type.TIMESTAMP,
-                exp.DataType.Type.DATETIME64,
-            ):
-                size_expression = expression.find(exp.DataTypeParam)
-                if size_expression:
-                    size = int(size_expression.name)
-                    precision = 6 if size > 6 else size
-                    return f"DATETIME({precision})"
-            elif expression.is_type(exp.DataType.Type.NULLABLE):
-                # clickhouse有Nullable(xxx)类型，doris取xxx作为类型
-                expression = expression.expressions[0]
-            elif expression.is_type(exp.DataType.Type.STRUCT):
-                # todo STRUCT还需要考虑其他的数据库，这里先只实现clickhouse的
-                # clickhouse的STRUCT类型为STRUCT<String, String, Int>，而doris需要为STRUCT<cnt_1:String,cnt_2:String,cnt_3:Int>
-                col_list = []
-                for index, col in enumerate(expression.expressions, start=1):
-                    col_type = col.this.lower()
-                    col_list.append(
-                        f"col_{index}: {self.CLICKHOUSE_TYPE_MAPPING.get(col_type, col_type).upper()}"
-                    )
-                cols = ", ".join(col_list)
-                return f"STRUCT<{cols}>"
+            root_expression = expression
+            while root_expression.parent is not None:
+                root_expression = root_expression.parent
+
+            # 只对create table语句进行类型转换
+            if not isinstance(root_expression, exp.Create) or not root_expression.args["kind"] == "TABLE":
+                return generator.Generator.datatype_sql(self, expression)
+
+            dialect = root_expression.args["dialect"]
+            if dialect == "MYSQL":
+                return self.mysql_type_to_doris(expression)
+            elif dialect == "HIVE":
+                pass
+            elif dialect == "CLICKHOUSE":
+                return self.clickhouse_type_to_doris(expression)
+            elif dialect == "PRESTO":
+                pass
 
             return generator.Generator.datatype_sql(self, expression)
 
         def create_sql(self, expression: exp.Create) -> str:
+            # dialect = expression.args.get("dialect")
             pk_list = []
             col_def_list = []
             for e in expression.this.expressions:
@@ -629,6 +596,7 @@ class Doris(MySQL):
 
             # first column could not be float, double, string or array, struct, map, please use decimal or varchar instead.
             first_data_type = expression.find(exp.DataType)
+            # 如果是clickhouse的NULLABLE类型，去掉NULLABLE关键字
             if first_data_type and first_data_type.is_type(exp.DataType.Type.NULLABLE):
                 first_data_type = first_data_type.expressions[0]
             if first_data_type and first_data_type.this in (
@@ -716,3 +684,70 @@ class Doris(MySQL):
                 expressions.append(e)
 
             return createable_sql
+
+        def mysql_type_to_doris(self, expression: exp.DataType) -> str:
+            if expression.this in self.STRING_TYPE_MAPPING:
+                return "STRING"
+            elif expression.is_type(exp.DataType.Type.UDECIMAL):
+                precision_expression = expression.find(exp.DataTypeParam)
+                if precision_expression:
+                    # 如果p + 1 > 38, 将使用STRING类型
+                    precision = int(precision_expression.name) + 1
+                    if precision <= 38:
+                        precision_expression.this.set("this", precision)
+                    else:
+                        return "STRING"
+            elif expression.is_type(exp.DataType.Type.CHAR):
+                size_expression = expression.find(exp.DataTypeParam)
+                if size_expression:
+                    size = int(size_expression.name)
+                    return "STRING" if size * 3 > 255 else f"CHAR({size * 3})"
+            elif expression.is_type(exp.DataType.Type.VARCHAR):
+                size_expression = expression.find(exp.DataTypeParam)
+                if size_expression:
+                    size = int(size_expression.name)
+                    return "STRING" if size * 3 > 65533 else f"VARCHAR({size * 3})"
+            elif expression.is_type(exp.DataType.Type.BIT):
+                size_expression = expression.find(exp.DataTypeParam)
+                if size_expression:
+                    size = int(size_expression.name)
+                    return "BOOLEAN" if size == 1 else "STRING"
+            elif expression.this in (
+                    exp.DataType.Type.DATETIME,
+                    exp.DataType.Type.TIMESTAMP,
+            ):
+                size_expression = expression.find(exp.DataTypeParam)
+                if size_expression:
+                    size = int(size_expression.name)
+                    precision = 6 if size > 6 else size
+                    return f"DATETIME({precision})"
+
+            return generator.Generator.datatype_sql(self, expression)
+
+        def clickhouse_type_to_doris(self, expression: exp.DataType) -> str:
+            if expression.this in self.STRING_TYPE_MAPPING:
+                return "STRING"
+            elif expression.this in (
+                    exp.DataType.Type.DATETIME,
+                    exp.DataType.Type.DATETIME64,
+            ):
+                size_expression = expression.find(exp.DataTypeParam)
+                if size_expression:
+                    size = int(size_expression.name)
+                    precision = 6 if size > 6 else size
+                    return f"DATETIME({precision})"
+            elif expression.is_type(exp.DataType.Type.NULLABLE):
+                # clickhouse有Nullable(xxx)类型，doris取xxx作为类型
+                expression = expression.expressions[0]
+            elif expression.is_type(exp.DataType.Type.STRUCT):
+                # clickhouse的STRUCT类型为STRUCT<String, String, Int>，而doris需要为STRUCT<cnt_1:String,cnt_2:String,cnt_3:Int>
+                col_list = []
+                for index, col in enumerate(expression.expressions, start=1):
+                    col_type = col.this.lower()
+                    col_list.append(
+                        f"col_{index}: {self.CLICKHOUSE_TYPE_MAPPING.get(col_type, col_type).upper()}"
+                    )
+                cols = ", ".join(col_list)
+                return f"STRUCT<{cols}>"
+
+            return generator.Generator.datatype_sql(self, expression)

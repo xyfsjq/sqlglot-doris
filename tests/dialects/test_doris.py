@@ -878,116 +878,117 @@ class TestDoris(Validator):
 
     def test_mysql2doris_create(self):
         self.validate_all(
-            "CREATE TABLE IF NOT EXISTS z (a INT, b string) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARACTER SET=utf8 COLLATE=utf8_bin COMMENT='x'",
-            write={
-                "doris": 'CREATE TABLE IF NOT EXISTS z (a INT, b STRING) DUPLICATE KEY(`a`) DISTRIBUTED BY HASH(`a`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            'CREATE TABLE IF NOT EXISTS z (a INT, b STRING) DUPLICATE KEY(`a`) DISTRIBUTED BY HASH(`a`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            read={
+                "mysql": "CREATE TABLE IF NOT EXISTS z (a INT, b string) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARACTER SET=utf8 COLLATE=utf8_bin COMMENT='x'"
             },
         )
 
         self.validate_all(
-            "CREATE TABLE `x` (`username` VARCHAR(200), PRIMARY KEY (`username`(16))) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARACTER SET=utf8 COLLATE=utf8_bin COMMENT='x'",
-            write={
-                "doris": 'CREATE TABLE `x` (`username` VARCHAR(200)) UNIQUE KEY(`username`) DISTRIBUTED BY HASH(`username`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            'CREATE TABLE `x` (`username` VARCHAR(600)) UNIQUE KEY(`username`) DISTRIBUTED BY HASH(`username`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            read={
+                "mysql": "CREATE TABLE `x` (`username` VARCHAR(200), PRIMARY KEY (`username`(16))) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARACTER SET=utf8 COLLATE=utf8_bin COMMENT='x'"
             },
         )
 
         self.validate_all(
-            "CREATE TABLE `x` (`a` INT, `b` string, `c` varchar(20), PRIMARY KEY (`a`, `b`)) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARACTER SET=utf8 COLLATE=utf8_bin COMMENT='x'",
-            write={
-                "doris": 'CREATE TABLE `x` (`a` INT, `b` STRING, `c` VARCHAR(20)) UNIQUE KEY(`a`, `b`) DISTRIBUTED BY HASH(`a`, `b`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            'CREATE TABLE `x` (`a` INT, `b` STRING, `c` VARCHAR(60)) UNIQUE KEY(`a`, `b`) DISTRIBUTED BY HASH(`a`, `b`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            read={
+                "mysql": "CREATE TABLE `x` (`a` INT, `b` string, `c` varchar(20), PRIMARY KEY (`a`, `b`)) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARACTER SET=utf8 COLLATE=utf8_bin COMMENT='x'"
             },
         )
 
         self.validate_all(
-            "create table t1 (a int not null, b int, primary key(a), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b));",
-            write={
-                "doris": 'CREATE TABLE t1 (a INT NOT NULL, b INT) UNIQUE KEY(`a`) DISTRIBUTED BY HASH(`a`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            'CREATE TABLE t1 (a INT NOT NULL, b INT) UNIQUE KEY(`a`) DISTRIBUTED BY HASH(`a`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            read={
+                "mysql": "create table t1 (a int not null, b int, primary key(a), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b), key (b));"
             },
         )
 
         self.validate_all(
-            "create table t1 (`primary` int, index(`primary`));",
-            write={
-                "doris": 'CREATE TABLE t1 (`primary` INT) DUPLICATE KEY(`primary`) DISTRIBUTED BY HASH(`primary`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            'CREATE TABLE t1 (`primary` INT) DUPLICATE KEY(`primary`) DISTRIBUTED BY HASH(`primary`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            read={
+                "mysql": "create table t1 (`primary` int, index(`primary`));"
             },
         )
 
         self.validate_all(
-            "CREATE TABLE t1(id varchar(10) NOT NULL PRIMARY KEY, dsc longtext) ENGINE=InnoDB AUTO_INCREMENT=1;",
-            write={
-                "doris": 'CREATE TABLE t1 (id VARCHAR(10) NOT NULL, dsc STRING) UNIQUE KEY(`id`) DISTRIBUTED BY HASH(`id`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            'CREATE TABLE t1 (id VARCHAR(30) NOT NULL, dsc STRING) UNIQUE KEY(`id`) DISTRIBUTED BY HASH(`id`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            read={
+                "mysql": "CREATE TABLE t1(id varchar(10) NOT NULL PRIMARY KEY, dsc longtext) ENGINE=InnoDB AUTO_INCREMENT=1;"
             },
         )
 
         self.validate_all(
-            "CREATE TABLE x (id int not null auto_increment PRIMARY KEY, primary key(id))",
-            write={
-                "doris": 'CREATE TABLE x (id INT NOT NULL) UNIQUE KEY(`id`) DISTRIBUTED BY HASH(`id`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            'CREATE TABLE x (id INT NOT NULL) UNIQUE KEY(`id`) DISTRIBUTED BY HASH(`id`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            read={
+                "mysql": "CREATE TABLE x (id int not null auto_increment PRIMARY KEY, primary key(id))"
             },
         )
 
         self.validate_all(
-            "CREATE TABLE IF NOT EXISTS t2 (a INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY)",
-            write={
-                "doris": 'CREATE TABLE IF NOT EXISTS t2 (a INT NOT NULL) UNIQUE KEY(`a`) DISTRIBUTED BY HASH(`a`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            'CREATE TABLE IF NOT EXISTS t2 (a INT NOT NULL) UNIQUE KEY(`a`) DISTRIBUTED BY HASH(`a`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            read={
+                "mysql": "CREATE TABLE IF NOT EXISTS t2 (a INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY)"
             },
         )
 
         self.validate_all(
-            "CREATE TABLE B (pk INTEGER AUTO_INCREMENT, int_key INTEGER NOT NULL, PRIMARY KEY (pk), KEY (int_key));",
-            write={
-                "doris": 'CREATE TABLE B (pk INT, int_key INT NOT NULL) UNIQUE KEY(`pk`) DISTRIBUTED BY HASH(`pk`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            'CREATE TABLE B (pk INT, int_key INT NOT NULL) UNIQUE KEY(`pk`) DISTRIBUTED BY HASH(`pk`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            read={
+                "mysql": "CREATE TABLE B (pk INTEGER AUTO_INCREMENT, int_key INTEGER NOT NULL, PRIMARY KEY (pk), KEY (int_key));"
             },
         )
 
         self.validate_all(
-            "create table t2 (a int unique key);",
-            write={
-                "doris": 'CREATE TABLE t2 (a INT) DUPLICATE KEY(`a`) DISTRIBUTED BY HASH(`a`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            'CREATE TABLE t2 (a INT) DUPLICATE KEY(`a`) DISTRIBUTED BY HASH(`a`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            read={
+                "mysql": "create table t2 (a int unique key);"
             },
         )
 
         self.validate_all(
-            "create table t1 (a INT, b SMALLINT, c MEDIUMINT, d BOOLEAN, e TINYINT UNSIGNED, f MEDIUMINT UNSIGNED, "
-            "g INT UNSIGNED, h BIGINT UNSIGNED, i DECIMAL(20, 10), j DECIMAL(32, 10) UNSIGNED, k TIMESTAMP(6), "
-            "l YEAR, m TIME, n CHAR, o VARCHAR(10), p SET, q BIT(1),"
-            "u TINYTEXT, v TEXT, w MEDIUMTEXT, x LONGTEXT, y BLOB, z MEDIUMBLOB, aa LONGBLOB, bb TINYBLOB, cc STRING, "
-            "ff BINARY, gg VARBINARY, hh DECIMAL(38, 10) UNSIGNED, ii BIT(2), PRIMARY KEY (a));",
-            write={
-                "doris": "CREATE TABLE t1 (a INT, b SMALLINT, c INT, d BOOLEAN, e SMALLINT, f INT, "
-                "g BIGINT, h LARGEINT, i DECIMAL(20, 10), j DECIMAL(33, 10), k DATETIME(6), "
-                "l SMALLINT, m STRING, n CHAR, o VARCHAR(10), p STRING, q BOOLEAN, "
+            "CREATE TABLE t1 (a INT, b SMALLINT, c INT, d BOOLEAN, e SMALLINT, f INT, "
+                "g BIGINT, i DECIMAL(20, 10), j DECIMAL(33, 10), k DATETIME(6), "
+                "l SMALLINT, m STRING, n CHAR, o VARCHAR(30), p STRING, q BOOLEAN, "
                 "u STRING, v STRING, w STRING, x STRING, y STRING, z STRING, aa STRING, bb STRING, cc STRING, "
                 "ff STRING, gg STRING, hh STRING, ii STRING) "
                 "UNIQUE KEY(`a`) DISTRIBUTED BY HASH(`a`) BUCKETS AUTO PROPERTIES "
                 '("replication_allocation" = "tag.location.default: 1")',
+            read={
+                "mysql": "create table t1 (a INT, b SMALLINT, c MEDIUMINT, d BOOLEAN, e TINYINT UNSIGNED, f MEDIUMINT UNSIGNED, "
+                "g INT UNSIGNED, i DECIMAL(20, 10), j DECIMAL(32, 10) UNSIGNED, k TIMESTAMP(6), "
+                "l YEAR, m TIME, n CHAR, o VARCHAR(10), p SET, q BIT(1),"
+                "u TINYTEXT, v TEXT, w MEDIUMTEXT, x LONGTEXT, y BLOB, z MEDIUMBLOB, aa LONGBLOB, bb TINYBLOB, cc STRING, "
+                "ff BINARY, gg VARBINARY, hh DECIMAL(38, 10) UNSIGNED, ii BIT(2), PRIMARY KEY (a));"
             },
         )
 
         self.validate_all(
-            "create table t2 (a int, b bit, c timestamp, d decimal, e decimal UNSIGNED);",
-            write={
-                "doris": 'CREATE TABLE t2 (a INT, b BOOLEAN, c DATETIME, d DECIMAL, e DECIMAL) DUPLICATE KEY(`a`) DISTRIBUTED BY HASH(`a`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            'CREATE TABLE t2 (a INT, b BOOLEAN, c DATETIME, d DECIMAL, e DECIMAL) DUPLICATE KEY(`a`) DISTRIBUTED BY HASH(`a`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            read={
+                "mysql": "create table t2 (a int, b bit, c timestamp, d decimal, e decimal UNSIGNED);"
             },
         )
 
     def test_clickhouse2doris_create(self):
-        import sqlglot
-
-        sql = "CREATE TABLE kdwtemp.top300song (`songid` String, `room_cnt` Array(Tuple(String, String, Int32)), `max_cnt` Int32) ENGINE = MergeTree ORDER BY songid SETTINGS index_granularity = 8192;"
-        self.assertEqual(
-            sqlglot.transpile(sql, read="clickhouse", write="doris")[0],
-            'CREATE TABLE kdwtemp.top300song (`songid` VARCHAR, `room_cnt` ARRAY<STRUCT<col_1: STRING, col_2: STRING, col_3: INT>>, `max_cnt` INT) DUPLICATE KEY(`songid`) DISTRIBUTED BY HASH(`songid`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+        self.validate_all(
+            'CREATE TABLE kdwtemp.top300song (`songid` VARCHAR, `room_cnt` ARRAY<STRUCT<col_1: STRING, col_2: DECIMAL, col_3: INT>>, `max_cnt` INT) DUPLICATE KEY(`songid`) DISTRIBUTED BY HASH(`songid`) BUCKETS AUTO PROPERTIES ("replication_allocation" = "tag.location.default: 1")',
+            read={
+                "clickhouse": "CREATE TABLE kdwtemp.top300song (`songid` String, `room_cnt` Array(Tuple(String, Decimal(32,8), Int32)), `max_cnt` Int32) ENGINE = MergeTree ORDER BY songid SETTINGS index_granularity = 8192;"
+            },
         )
 
-        sql = "CREATE TABLE block_chain.bc_playrecord_month_analysis_local (`companycode` int64 COMMENT '商家号', `encryptcode` String COMMENT '加密商家号', `songid` String COMMENT '歌曲id', `playnum` UInt8 COMMENT '点播次数', `hashdir` String COMMENT 'hash地址', `playmonth` Date COMMENT '日期分区键') ENGINE = MergeTree PARTITION BY toYYYYMM(playmonth) ORDER BY (companycode, songid, playmonth) TTL playmonth + toIntervalYear(1) SETTINGS index_granularity = 8192"
-        self.assertEqual(
-            sqlglot.transpile(sql, read="clickhouse", write="doris")[0],
+        self.validate_all(
             "CREATE TABLE block_chain.bc_playrecord_month_analysis_local (`companycode` BIGINT COMMENT '商家号', `encryptcode` STRING COMMENT '加密商家号', `songid` STRING COMMENT '歌曲id', `playnum` SMALLINT COMMENT '点播次数', `hashdir` STRING COMMENT 'hash地址', `playmonth` DATE COMMENT '日期分区键') DUPLICATE KEY(`companycode`) DISTRIBUTED BY HASH(`companycode`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\")",
+            read={
+                "clickhouse": "CREATE TABLE block_chain.bc_playrecord_month_analysis_local (`companycode` int64 COMMENT '商家号', `encryptcode` String COMMENT '加密商家号', `songid` String COMMENT '歌曲id', `playnum` UInt8 COMMENT '点播次数', `hashdir` String COMMENT 'hash地址', `playmonth` Date COMMENT '日期分区键') ENGINE = MergeTree PARTITION BY toYYYYMM(playmonth) ORDER BY (companycode, songid, playmonth) TTL playmonth + toIntervalYear(1) SETTINGS index_granularity = 8192"
+            },
         )
 
-        sql = "CREATE TABLE kdwuser.km_tbl_active_user_event_comp_bitmap (`p_ds` Date COMMENT '快照日期', `event_id` String COMMENT '事件id', `company_code` String COMMENT '商家编码', `openid_bit` AggregateFunction(groupBitmap, UInt64) COMMENT '位图数据', `crossopenid_bit` AggregateFunction(groupBitmap, UInt64) COMMENT 'crosspenid位图数据') ENGINE = Distributed('ktvme_ck_cluster', 'kdwuser', 'km_tbl_active_user_event_comp_bitmap_local', rand())"
-        self.assertEqual(
-            sqlglot.transpile(sql, read="clickhouse", write="doris")[0],
+        self.validate_all(
             "CREATE TABLE kdwuser.km_tbl_active_user_event_comp_bitmap (`p_ds` DATE COMMENT '快照日期', `event_id` STRING COMMENT '事件id', `company_code` STRING COMMENT '商家编码', `openid_bit` STRING COMMENT '位图数据', `crossopenid_bit` STRING COMMENT 'crosspenid位图数据') DUPLICATE KEY(`p_ds`) DISTRIBUTED BY HASH(`p_ds`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\")",
+            read={
+                "clickhouse": "CREATE TABLE kdwuser.km_tbl_active_user_event_comp_bitmap (`p_ds` Date COMMENT '快照日期', `event_id` String COMMENT '事件id', `company_code` String COMMENT '商家编码', `openid_bit` AggregateFunction(groupBitmap, UInt64) COMMENT '位图数据', `crossopenid_bit` AggregateFunction(groupBitmap, UInt64) COMMENT 'crosspenid位图数据') ENGINE = Distributed('ktvme_ck_cluster', 'kdwuser', 'km_tbl_active_user_event_comp_bitmap_local', rand())"
+            },
         )
