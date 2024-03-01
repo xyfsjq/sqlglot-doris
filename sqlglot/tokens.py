@@ -57,6 +57,8 @@ class TokenType(AutoName):
     AMP = auto()
     DPIPE = auto()
     PIPE = auto()
+    PIPE_SLASH = auto()
+    DPIPE_SLASH = auto()
     CARET = auto()
     TILDA = auto()
     ARROW = auto()
@@ -125,6 +127,7 @@ class TokenType(AutoName):
     NCHAR = auto()
     VARCHAR = auto()
     NVARCHAR = auto()
+    BPCHAR = auto()
     TEXT = auto()
     MEDIUMTEXT = auto()
     LONGTEXT = auto()
@@ -343,6 +346,7 @@ class TokenType(AutoName):
     SOME = auto()
     SORT_BY = auto()
     START_WITH = auto()
+    STORAGE_INTEGRATION = auto()
     STRUCT = auto()
     TABLE_SAMPLE = auto()
     TEMPORARY = auto()
@@ -507,6 +511,7 @@ class _Tokenizer(type):
                 command_prefix_tokens={
                     _TOKEN_TYPE_TO_INDEX[v] for v in klass.COMMAND_PREFIX_TOKENS
                 },
+                heredoc_tag_is_identifier=klass.HEREDOC_TAG_IS_IDENTIFIER,
             )
             token_types = RsTokenTypeSettings(
                 bit_string=_TOKEN_TYPE_TO_INDEX[TokenType.BIT_STRING],
@@ -520,6 +525,7 @@ class _Tokenizer(type):
                 semicolon=_TOKEN_TYPE_TO_INDEX[TokenType.SEMICOLON],
                 string=_TOKEN_TYPE_TO_INDEX[TokenType.STRING],
                 var=_TOKEN_TYPE_TO_INDEX[TokenType.VAR],
+                heredoc_string_alternative=_TOKEN_TYPE_TO_INDEX[klass.HEREDOC_STRING_ALTERNATIVE],
             )
             klass._RS_TOKENIZER = RsTokenizer(settings, token_types)
         else:
@@ -575,6 +581,12 @@ class Tokenizer(metaclass=_Tokenizer):
     QUOTES: t.List[t.Tuple[str, str] | str] = ["'"]
     STRING_ESCAPES = ["'"]
     VAR_SINGLE_TOKENS: t.Set[str] = set()
+
+    # Whether the heredoc tags follow the same lexical rules as unquoted identifiers
+    HEREDOC_TAG_IS_IDENTIFIER = False
+
+    # Token that we'll generate as a fallback if the heredoc prefix doesn't correspond to a heredoc
+    HEREDOC_STRING_ALTERNATIVE = TokenType.VAR
 
     # Autofilled
     _COMMENTS: t.Dict[str, str] = {}
@@ -805,6 +817,7 @@ class Tokenizer(metaclass=_Tokenizer):
         "VARCHAR2": TokenType.VARCHAR,
         "NVARCHAR": TokenType.NVARCHAR,
         "NVARCHAR2": TokenType.NVARCHAR,
+        "BPCHAR": TokenType.BPCHAR,
         "STR": TokenType.TEXT,
         "STRING": TokenType.TEXT,
         "TEXT": TokenType.TEXT,
@@ -1255,6 +1268,18 @@ class Tokenizer(metaclass=_Tokenizer):
             elif token_type == TokenType.BIT_STRING:
                 base = 2
             elif token_type == TokenType.HEREDOC_STRING:
+                if (
+                    self.HEREDOC_TAG_IS_IDENTIFIER
+                    and not self._peek.isidentifier()
+                    and not self._peek == end
+                ):
+                    if self.HEREDOC_STRING_ALTERNATIVE != token_type.VAR:
+                        self._add(self.HEREDOC_STRING_ALTERNATIVE)
+                    else:
+                        self._scan_var()
+
+                    return True
+
                 self._advance()
                 tag = "" if self._char == end else self._extract_string(end)
                 end = f"{start}{tag}{end}"

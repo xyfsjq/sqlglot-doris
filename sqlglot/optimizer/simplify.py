@@ -41,7 +41,7 @@ def simplify(
 
     Args:
         expression (sqlglot.Expression): expression to simplify
-        constant_propagation: whether or not the constant propagation rule should be used
+        constant_propagation: whether the constant propagation rule should be used
 
     Returns:
         sqlglot.Expression: simplified expression
@@ -104,7 +104,6 @@ def simplify(
 
         if root:
             expression.replace(node)
-
         return node
 
     expression = while_changing(expression, _simplify)
@@ -174,16 +173,20 @@ def simplify_not(expression):
         if isinstance(this, exp.Paren):
             condition = this.unnest()
             if isinstance(condition, exp.And):
-                return exp.or_(
-                    exp.not_(condition.left, copy=False),
-                    exp.not_(condition.right, copy=False),
-                    copy=False,
+                return exp.paren(
+                    exp.or_(
+                        exp.not_(condition.left, copy=False),
+                        exp.not_(condition.right, copy=False),
+                        copy=False,
+                    )
                 )
             if isinstance(condition, exp.Or):
-                return exp.and_(
-                    exp.not_(condition.left, copy=False),
-                    exp.not_(condition.right, copy=False),
-                    copy=False,
+                return exp.paren(
+                    exp.and_(
+                        exp.not_(condition.left, copy=False),
+                        exp.not_(condition.right, copy=False),
+                        copy=False,
+                    )
                 )
             if is_null(condition):
                 return exp.null()

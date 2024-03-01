@@ -41,6 +41,7 @@ class TestDuckDB(Validator):
         )
         self.validate_identity("SELECT 1 WHERE x > $1")
         self.validate_identity("SELECT 1 WHERE x > $name")
+        self.validate_identity("""SELECT '{"x": 1}' -> c FROM t""")
 
         self.assertEqual(
             parse_one("select * from t limit (select 5)").sql(dialect="duckdb"),
@@ -101,14 +102,14 @@ class TestDuckDB(Validator):
             """SELECT JSON('{"fruit":"banana"}') -> 'fruit'""",
             write={
                 "duckdb": """SELECT JSON('{"fruit":"banana"}') -> '$.fruit'""",
-                "snowflake": """SELECT PARSE_JSON('{"fruit":"banana"}')['fruit']""",
+                "snowflake": """SELECT GET_PATH(PARSE_JSON('{"fruit":"banana"}'), 'fruit')""",
             },
         )
         self.validate_all(
             """SELECT JSON('{"fruit": {"foo": "banana"}}') -> 'fruit' -> 'foo'""",
             write={
                 "duckdb": """SELECT JSON('{"fruit": {"foo": "banana"}}') -> '$.fruit' -> '$.foo'""",
-                "snowflake": """SELECT PARSE_JSON('{"fruit": {"foo": "banana"}}')['fruit']['foo']""",
+                "snowflake": """SELECT GET_PATH(GET_PATH(PARSE_JSON('{"fruit": {"foo": "banana"}}'), 'fruit'), 'foo')""",
             },
         )
         self.validate_all(
@@ -992,4 +993,11 @@ class TestDuckDB(Validator):
             "ISINF(x)",
             read={"bigquery": "IS_INF(x)"},
             write={"bigquery": "IS_INF(x)", "duckdb": "ISINF(x)"},
+        )
+
+    def test_parameter_token(self):
+        self.validate_all(
+            "SELECT $foo",
+            read={"bigquery": "SELECT @foo"},
+            write={"bigquery": "SELECT @foo", "duckdb": "SELECT $foo"},
         )

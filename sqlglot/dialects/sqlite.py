@@ -90,9 +90,10 @@ class SQLite(Dialect):
         TABLE_HINTS = False
         QUERY_HINTS = False
         NVL2_SUPPORTED = False
+        JSON_PATH_BRACKETED_KEY_SUPPORTED = False
+        SUPPORTS_CREATE_TABLE_LIKE = False
 
         SUPPORTED_JSON_PATH_PARTS = {
-            exp.JSONPathChild,
             exp.JSONPathKey,
             exp.JSONPathRoot,
             exp.JSONPathSubscript,
@@ -131,6 +132,7 @@ class SQLite(Dialect):
             exp.CurrentTimestamp: lambda *_: "CURRENT_TIMESTAMP",
             exp.DateAdd: _date_add_sql,
             exp.DateStrToDate: lambda self, e: self.sql(e, "this"),
+            exp.If: rename_func("IIF"),
             exp.ILike: no_ilike_sql,
             exp.JSONExtract: _json_extract_sql,
             exp.JSONExtractScalar: arrow_json_extract_sql,
@@ -151,10 +153,17 @@ class SQLite(Dialect):
             exp.TryCast: no_trycast_sql,
         }
 
+        # SQLite doesn't generally support CREATE TABLE .. properties
+        # https://www.sqlite.org/lang_createtable.html
         PROPERTIES_LOCATION = {
-            k: exp.Properties.Location.UNSUPPORTED
-            for k, v in generator.Generator.PROPERTIES_LOCATION.items()
+            prop: exp.Properties.Location.UNSUPPORTED
+            for prop in generator.Generator.PROPERTIES_LOCATION
         }
+
+        # There are a few exceptions (e.g. temporary tables) which are supported or
+        # can be transpiled to SQLite, so we explicitly override them accordingly
+        PROPERTIES_LOCATION[exp.LikeProperty] = exp.Properties.Location.POST_SCHEMA
+        PROPERTIES_LOCATION[exp.TemporaryProperty] = exp.Properties.Location.POST_CREATE
 
         LIMIT_FETCH = "LIMIT"
 

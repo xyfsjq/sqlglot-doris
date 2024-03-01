@@ -8,14 +8,15 @@ from sqlglot.dialects.dialect import (
     arg_max_or_min_no_count,
     date_delta_sql,
     inline_array_sql,
+    json_extract_segments,
+    json_path_key_only_name,
     no_pivot_sql,
-    parse_json_extract_string,
+    build_json_extract_path,
     rename_func,
     var_map_sql,
 )
 from sqlglot.errors import ParseError
-from sqlglot.helper import seq_get
-from sqlglot.parser import parse_var_map
+from sqlglot.helper import is_int, seq_get
 from sqlglot.tokens import Token, TokenType
 
 
@@ -24,9 +25,9 @@ def _lower_func(sql: str) -> str:
     return sql[:index].lower() + sql[index:]
 
 
-def _quantile_sql(self: ClickHouse.Generator, e: exp.Quantile) -> str:
-    quantile = e.args["quantile"]
-    args = f"({self.sql(e, 'this')})"
+def _quantile_sql(self: ClickHouse.Generator, expression: exp.Quantile) -> str:
+    quantile = expression.args["quantile"]
+    args = f"({self.sql(expression, 'this')})"
 
     if isinstance(quantile, exp.Array):
         func = self.func("quantiles", *quantile)
@@ -36,7 +37,7 @@ def _quantile_sql(self: ClickHouse.Generator, e: exp.Quantile) -> str:
     return func + args
 
 
-def _parse_count_if(args: t.List) -> exp.CountIf | exp.CombinedAggFunc:
+def _build_count_if(args: t.List) -> exp.CountIf | exp.CombinedAggFunc:
     if len(args) == 1:
         return exp.CountIf(this=seq_get(args, 0))
 
@@ -91,6 +92,7 @@ class ClickHouse(Dialect):
             "IPV6": TokenType.IPV6,
             "AGGREGATEFUNCTION": TokenType.AGGREGATEFUNCTION,
             "SIMPLEAGGREGATEFUNCTION": TokenType.SIMPLEAGGREGATEFUNCTION,
+            "SYSTEM": TokenType.COMMAND,
         }
 
         SINGLE_TOKENS = {
@@ -157,7 +159,7 @@ class ClickHouse(Dialect):
             "BITMAPHASALL": exp.BitmapHasAll.from_arg_list,
             "BITMAPHASANY": exp.BitmapHasAny.from_arg_list,
             "BITMAPTOARRAY": exp.BitmapToArray.from_arg_list,
-            "COUNTIF": _parse_count_if,
+            "COUNTIF": _build_count_if,
             "BASE64ENCODE": exp.ToBase64.from_arg_list,
             "BASE64DECODE": exp.FromBase64.from_arg_list,
             "DATE_ADD": lambda args: exp.DateAdd(
@@ -198,12 +200,18 @@ class ClickHouse(Dialect):
             "IPV6STRINGTONUMORDEFAULT": exp.Ipv6StringToNumOrDefault.from_arg_list,
             "ISIPV4STRING": exp.IsIpv4String.from_arg_list,
             "ISIPV6STRING": exp.IsIpv6String.from_arg_list,
-            "JSONEXTRACTINT": parse_json_extract_string(exp.JSONExtract),
-            "JSONEXTRACTRAW": parse_json_extract_string(exp.JSONExtract),
-            "JSONEXTRACTSTRING": parse_json_extract_string(exp.JSONExtract),
+            "JSONEXTRACTINT": build_json_extract_path(
+                exp.JSONExtractScalar, zero_based_indexing=False
+            ),
+            "JSONEXTRACTRAW": build_json_extract_path(
+                exp.JSONExtractScalar, zero_based_indexing=False
+            ),
+            "JSONEXTRACTSTRING": build_json_extract_path(
+                exp.JSONExtractScalar, zero_based_indexing=False
+            ),
             "LENGTHUTF8": exp.CharLength.from_arg_list,
             "LOWERUTF8": exp.Lower.from_arg_list,
-            "MAP": parse_var_map,
+            "MAP": parser.build_var_map,
             "MATCH": exp.RegexpLike.from_arg_list,
             "MID": exp.Substring.from_arg_list,
             "MULTIMATCHANY": exp.MultiMatchAny.from_arg_list,
@@ -494,9 +502,14 @@ class ClickHouse(Dialect):
             joins: bool = False,
             alias_tokens: t.Optional[t.Collection[TokenType]] = None,
             parse_bracket: bool = False,
+            is_db_reference: bool = False,
         ) -> t.Optional[exp.Expression]:
             this = super()._parse_table(
-                schema=schema, joins=joins, alias_tokens=alias_tokens, parse_bracket=parse_bracket
+                schema=schema,
+                joins=joins,
+                alias_tokens=alias_tokens,
+                parse_bracket=parse_bracket,
+                is_db_reference=is_db_reference,
             )
 
             if self._match(TokenType.FINAL):
@@ -545,9 +558,9 @@ class ClickHouse(Dialect):
             self, skip_join_token: bool = False, parse_bracket: bool = False
         ) -> t.Optional[exp.Join]:
             join = super()._parse_join(skip_join_token=skip_join_token, parse_bracket=True)
-
             if join:
                 join.set("global", join.args.pop("method", None))
+
             return join
 
         def _parse_function(
@@ -644,6 +657,7 @@ class ClickHouse(Dialect):
         TABLESAMPLE_SIZE_IS_ROWS = False
         TABLESAMPLE_KEYWORDS = "SAMPLE"
         LAST_DAY_SUPPORTS_DATE_PART = False
+        CAN_IMPLEMENT_ARRAY_ANY = True
 
         STRING_TYPE_MAPPING = {
             exp.DataType.Type.CHAR: "String",
@@ -656,6 +670,12 @@ class ClickHouse(Dialect):
             exp.DataType.Type.TEXT: "String",
             exp.DataType.Type.VARBINARY: "String",
             exp.DataType.Type.VARCHAR: "String",
+        }
+
+        SUPPORTED_JSON_PATH_PARTS = {
+            exp.JSONPathKey,
+            exp.JSONPathRoot,
+            exp.JSONPathSubscript,
         }
 
         TYPE_MAPPING = {
@@ -698,6 +718,8 @@ class ClickHouse(Dialect):
             **generator.Generator.TRANSFORMS,
             exp.AnyValue: rename_func("any"),
             exp.ApproxDistinct: rename_func("uniq"),
+            exp.ArrayFilter: lambda self, e: self.func("arrayFilter", e.expression, e.this),
+            exp.ArraySize: rename_func("LENGTH"),
             exp.ArraySum: rename_func("arraySum"),
             exp.ArgMax: arg_max_or_min_no_count("argMax"),
             exp.ArgMin: arg_max_or_min_no_count("argMin"),
@@ -710,17 +732,22 @@ class ClickHouse(Dialect):
             exp.Explode: rename_func("arrayJoin"),
             exp.Final: lambda self, e: f"{self.sql(e, 'this')} FINAL",
             exp.IsNan: rename_func("isNaN"),
+            exp.JSONExtract: json_extract_segments("JSONExtractString", quoted_index=False),
+            exp.JSONExtractScalar: json_extract_segments("JSONExtractString", quoted_index=False),
+            exp.JSONPathKey: json_path_key_only_name,
+            exp.JSONPathRoot: lambda *_: "",
             exp.Map: lambda self, e: _lower_func(var_map_sql(self, e)),
             exp.Nullif: rename_func("nullIf"),
             exp.PartitionedByProperty: lambda self, e: f"PARTITION BY {self.sql(e, 'this')}",
             exp.Pivot: no_pivot_sql,
             exp.Quantile: _quantile_sql,
-            exp.RegexpLike: lambda self, e: f"match({self.format_args(e.this, e.expression)})",
+            exp.RegexpLike: lambda self, e: self.func("match", e.this, e.expression),
             exp.Rand: rename_func("randCanonical"),
             exp.Select: transforms.preprocess([transforms.eliminate_qualify]),
             exp.StartsWith: rename_func("startsWith"),
-            exp.StrPosition: lambda self,
-            e: f"position({self.format_args(e.this, e.args.get('substr'), e.args.get('position'))})",
+            exp.StrPosition: lambda self, e: self.func(
+                "position", e.this, e.args.get("substr"), e.args.get("position")
+            ),
             exp.VarMap: lambda self, e: _lower_func(var_map_sql(self, e)),
             exp.Xor: lambda self, e: self.func("xor", e.this, e.expression, *e.expressions),
         }
@@ -749,6 +776,13 @@ class ClickHouse(Dialect):
             "NAMED COLLECTION",
         }
 
+        def _jsonpathsubscript_sql(self, expression: exp.JSONPathSubscript) -> str:
+            this = self.json_path_part(expression.this)
+            return str(int(this) + 1) if is_int(this) else this
+
+        def likeproperty_sql(self, expression: exp.LikeProperty) -> str:
+            return f"AS {self.sql(expression, 'this')}"
+
         def _any_to_has(
             self,
             expression: exp.EQ | exp.NEQ,
@@ -763,6 +797,7 @@ class ClickHouse(Dialect):
                 this = expression.left
             else:
                 return default(expression)
+
             return prefix + self.func("has", arr.this.unnest(), this)
 
         def eq_sql(self, expression: exp.EQ) -> str:
@@ -774,7 +809,7 @@ class ClickHouse(Dialect):
         def regexpilike_sql(self, expression: exp.RegexpILike) -> str:
             # Manually add a flag to make the search case-insensitive
             regex = self.func("CONCAT", "'(?i)'", expression.expression)
-            return f"match({self.format_args(expression.this, regex)})"
+            return self.func("match", expression.this, regex)
 
         def datatype_sql(self, expression: exp.DataType) -> str:
             # String is the standard ClickHouse type, every other variant is just an alias.
@@ -828,8 +863,9 @@ class ClickHouse(Dialect):
             return f"ON CLUSTER {self.sql(expression, 'this')}"
 
         def createable_sql(self, expression: exp.Create, locations: t.DefaultDict) -> str:
-            kind = self.sql(expression, "kind").upper()
-            if kind in self.ON_CLUSTER_TARGETS and locations.get(exp.Properties.Location.POST_NAME):
+            if expression.kind in self.ON_CLUSTER_TARGETS and locations.get(
+                exp.Properties.Location.POST_NAME
+            ):
                 this_name = self.sql(expression.this, "this")
                 this_properties = " ".join(
                     [self.sql(prop) for prop in locations[exp.Properties.Location.POST_NAME]]

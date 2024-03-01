@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import re
 import typing as t
-
 from sqlglot import exp, generator
 from sqlglot.dialects.dialect import (
     approx_count_distinct_sql,
+    build_timestamp_trunc,
     count_if_to_sum,
-    parse_timestamp_trunc,
-    prepend_dollar_to_path,
     rename_func,
     time_format,
 )
@@ -157,18 +155,42 @@ def _string_agg_sql(self: Doris.Generator, expression: exp.GroupConcat) -> str:
     return f"GROUP_CONCAT({self.format_args(this, separator)}{order})"
 
 
+def handle_range(self, expression: exp.GenerateSeries) -> str:
+    start = self.sql(expression, "start")
+    end = str(int(self.sql(expression, "end")) + 1)
+    step = self.sql(expression, "step")
+
+    if step == "":
+        return self.func("Array_Range", start, end)
+
+    return self.func("Array_Range", start, end, step)
+
+
 def handle_regexp_extract(self, expr: exp.RegexpExtract) -> str:
     this = self.sql(expr, "this")
     expression = self.sql(expr, "expression")
-    position = self.sql(expr, "position")
-    if position == "":
+    occurrence = self.sql(expr, "occurrence")
+    if occurrence == "":
         return f"REGEXP_EXTRACT_ALL({this}, '({expression[1:-1]})')"
-    return f"REGEXP_EXTRACT({this}, '({expression[1:-1]})', {position})"
+
+    return f"REGEXP_EXTRACT({this}, '({expression[1:-1]})', {occurrence})"
 
 
-def handle_to_date(self: Doris.Generator, expression: exp.TsOrDsToDate) -> str:
+def handle_to_date(self: Doris.Generator, expression: exp.TsOrDsToDate | exp.StrToTime) -> str:
     this = self.sql(expression, "this")
     time_format = self.format_time(expression)
+    # Handle special formats
+    #  Replace mi with %m
+    if time_format is not None and "mi" in time_format:
+        time_format = time_format.replace("mi", "%i")
+    # Replace both hh24 and HH24 with HH, case-insensitively
+    if time_format is not None:
+        time_format = re.sub("hh24", "%H", time_format, flags=re.IGNORECASE)
+
+    # remove  all digits from the time_format
+    if time_format is not None:
+        time_format = re.sub(r"\d", "", time_format)
+
     if time_format and time_format not in (Doris.TIME_FORMAT, Doris.DATE_FORMAT):
         return f"DATE_FORMAT({this}, {time_format})"
     if isinstance(expression.this, exp.TsOrDsToDate):
@@ -266,15 +288,6 @@ def _json_extract_sql(
     )
 
 
-def path_to_jsonpath(
-    name: str = "JSONB_EXTRACT",
-) -> t.Callable[[generator.Generator, exp.GetPath], str]:
-    def _transform(self: generator.Generator, expression: exp.GetPath) -> str:
-        return rename_func(name)(self, prepend_dollar_to_path(expression))
-
-    return _transform
-
-
 class Doris(MySQL):
     INDEX_OFFSET = 1
     DATE_FORMAT = "'yyyy-MM-dd'"
@@ -288,8 +301,6 @@ class Doris(MySQL):
         "%m": "MM",
         "%d": "dd",
         "%s": "ss",
-        # "%H": "HH24",
-        # "%H": "hh24",  # oracle to_date('2005-01-01 13:14:20','yyyy-MM-dd hh24:mm:ss')
         "%H": "HH",
         "%i": "mm",
     }
@@ -308,8 +319,7 @@ class Doris(MySQL):
             "ARRAY_SORT": exp.SortArray.from_arg_list,
             "COLLECT_LIST": exp.ArrayAgg.from_arg_list,
             "COLLECT_SET": exp.ArrayUniqueAgg.from_arg_list,
-            "TRUNCATE": exp.Truncate.from_arg_list,
-            "DATE_TRUNC": parse_timestamp_trunc,
+            "DATE_TRUNC": build_timestamp_trunc,
             "DATE_ADD": exp.DateAdd.from_arg_list,
             "DATE_SUB": exp.DateSub.from_arg_list,
             "DATEDIFF": exp.DateDiff.from_arg_list,
@@ -321,6 +331,7 @@ class Doris(MySQL):
             "SIZE": exp.ArraySize.from_arg_list,
             "SPLIT_BY_STRING": exp.RegexpSplit.from_arg_list,
             "TO_DATE": exp.TsOrDsToDate.from_arg_list,
+            "TRUNCATE": exp.Truncate.from_arg_list,
         }
 
         FUNCTION_PARSERS = {
@@ -471,9 +482,8 @@ class Doris(MySQL):
             exp.DateTrunc: handle_date_trunc,
             exp.Empty: rename_func("NULL_OR_EMPTY"),
             exp.Filter: handle_filter,
-            exp.GenerateSeries: rename_func("ARRAY_RANGE"),
+            exp.GenerateSeries: handle_range,
             exp.GroupConcat: _string_agg_sql,
-            exp.GetPath: path_to_jsonpath(),
             exp.JSONExtractScalar: _json_extract_sql,
             exp.JSONExtract: _json_extract_sql,
             exp.JSONBExtract: _json_extract_sql,

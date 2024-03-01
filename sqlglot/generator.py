@@ -9,10 +9,7 @@ from functools import reduce
 from sqlglot import exp
 from sqlglot.errors import ErrorLevel, UnsupportedError, concat_messages
 from sqlglot.helper import apply_index_offset, csv, seq_get
-from sqlglot.jsonpath import (
-    MAPPING as JSON_PATH_MAPPING,
-    generate as generate_json_path,
-)
+from sqlglot.jsonpath import ALL_JSON_PATH_PARTS, JSON_PATH_PART_TRANSFORMS
 from sqlglot.time import format_time
 from sqlglot.tokens import TokenType
 
@@ -29,14 +26,9 @@ class _Generator(type):
     def __new__(cls, clsname, bases, attrs):
         klass = super().__new__(cls, clsname, bases, attrs)
 
-        # Fill in default implementations for every non-overridden supported JSONPathPart
-        klass._JSON_PATH_MAPPING = {
-            **{
-                expr_type: JSON_PATH_MAPPING[expr_type]
-                for expr_type in klass.SUPPORTED_JSON_PATH_PARTS
-            },
-            **(klass.JSON_PATH_MAPPING or {}),
-        }
+        # Remove transforms that correspond to unsupported JSONPathPart expressions
+        for part in ALL_JSON_PATH_PARTS - klass.SUPPORTED_JSON_PATH_PARTS:
+            klass.TRANSFORMS.pop(part, None)
 
         return klass
 
@@ -46,19 +38,19 @@ class Generator(metaclass=_Generator):
     Generator converts a given syntax tree to the corresponding SQL string.
 
     Args:
-        pretty: Whether or not to format the produced SQL string.
+        pretty: Whether to format the produced SQL string.
             Default: False.
         identify: Determines when an identifier should be quoted. Possible values are:
             False (default): Never quote, except in cases where it's mandatory by the dialect.
             True or 'always': Always quote.
             'safe': Only quote identifiers that are case insensitive.
-        normalize: Whether or not to normalize identifiers to lowercase.
+        normalize: Whether to normalize identifiers to lowercase.
             Default: False.
-        pad: Determines the pad size in a formatted string.
+        pad: The pad size in a formatted string.
             Default: 2.
-        indent: Determines the indentation size in a formatted string.
+        indent: The indentation size in a formatted string.
             Default: 2.
-        normalize_functions: Whether or not to normalize all function names. Possible values are:
+        normalize_functions: How to normalize function names. Possible values are:
             "upper" or True (default): Convert names to uppercase.
             "lower": Convert names to lowercase.
             False: Disables function name normalization.
@@ -67,39 +59,33 @@ class Generator(metaclass=_Generator):
         max_unsupported: Maximum number of unsupported messages to include in a raised UnsupportedError.
             This is only relevant if unsupported_level is ErrorLevel.RAISE.
             Default: 3
-        leading_comma: Determines whether or not the comma is leading or trailing in select expressions.
+        leading_comma: Whether the comma is leading or trailing in select expressions.
             This is only relevant when generating in pretty mode.
             Default: False
         max_text_width: The max number of characters in a segment before creating new lines in pretty mode.
             The default is on the smaller end because the length only represents a segment and not the true
             line length.
             Default: 80
-        comments: Whether or not to preserve comments in the output SQL code.
+        comments: Whether to preserve comments in the output SQL code.
             Default: True
     """
 
     TRANSFORMS: t.Dict[t.Type[exp.Expression], t.Callable[..., str]] = {
-        **{
-            expr_type: lambda self, e: generate_json_path(
-                e, mapping=self._JSON_PATH_MAPPING, unsupported_callback=self.unsupported
-            )
-            for expr_type in exp.JSON_PATH_PARTS
-        },
-        exp.DateAdd: lambda self, e: self.func(
-            "DATE_ADD", e.this, e.expression, exp.Literal.string(e.text("unit"))
-        ),
+        **JSON_PATH_PART_TRANSFORMS,
+        exp.AutoRefreshProperty: lambda self, e: f"AUTO REFRESH {self.sql(e, 'this')}",
         exp.CaseSpecificColumnConstraint: lambda self,
         e: f"{'NOT ' if e.args.get('not_') else ''}CASESPECIFIC",
         exp.CharacterSetColumnConstraint: lambda self, e: f"CHARACTER SET {self.sql(e, 'this')}",
         exp.CharacterSetProperty: lambda self,
         e: f"{'DEFAULT ' if e.args.get('default') else ''}CHARACTER SET={self.sql(e, 'this')}",
-        exp.CheckColumnConstraint: lambda self, e: f"CHECK ({self.sql(e, 'this')})",
         exp.ClusteredColumnConstraint: lambda self,
         e: f"CLUSTERED ({self.expressions(e, 'this', indent=False)})",
         exp.CollateColumnConstraint: lambda self, e: f"COLLATE {self.sql(e, 'this')}",
-        exp.AutoRefreshProperty: lambda self, e: f"AUTO REFRESH {self.sql(e, 'this')}",
-        exp.CopyGrantsProperty: lambda self, e: "COPY GRANTS",
         exp.CommentColumnConstraint: lambda self, e: f"COMMENT {self.sql(e, 'this')}",
+        exp.CopyGrantsProperty: lambda self, e: "COPY GRANTS",
+        exp.DateAdd: lambda self, e: self.func(
+            "DATE_ADD", e.this, e.expression, exp.Literal.string(e.text("unit"))
+        ),
         exp.DateFormatColumnConstraint: lambda self, e: f"FORMAT {self.sql(e, 'this')}",
         exp.DefaultColumnConstraint: lambda self, e: f"DEFAULT {self.sql(e, 'this')}",
         exp.EncodeColumnConstraint: lambda self, e: f"ENCODE {self.sql(e, 'this')}",
@@ -110,13 +96,19 @@ class Generator(metaclass=_Generator):
         exp.InlineLengthColumnConstraint: lambda self, e: f"INLINE LENGTH {self.sql(e, 'this')}",
         exp.InputModelProperty: lambda self, e: f"INPUT{self.sql(e, 'this')}",
         exp.IntervalSpan: lambda self, e: f"{self.sql(e, 'this')} TO {self.sql(e, 'expression')}",
+        exp.JSONExtract: lambda self, e: self.func(
+            "JSON_EXTRACT", e.this, e.expression, *e.expressions
+        ),
+        exp.JSONExtractScalar: lambda self, e: self.func(
+            "JSON_EXTRACT_SCALAR", e.this, e.expression, *e.expressions
+        ),
         exp.LanguageProperty: lambda self, e: self.naked_property(e),
         exp.LocationProperty: lambda self, e: self.naked_property(e),
         exp.LogProperty: lambda self, e: f"{'NO ' if e.args.get('no') else ''}LOG",
         exp.MaterializedProperty: lambda self, e: "MATERIALIZED",
-        exp.NoPrimaryIndexProperty: lambda self, e: "NO PRIMARY INDEX",
         exp.NonClusteredColumnConstraint: lambda self,
         e: f"NONCLUSTERED ({self.expressions(e, 'this', indent=False)})",
+        exp.NoPrimaryIndexProperty: lambda self, e: "NO PRIMARY INDEX",
         exp.NotForReplicationColumnConstraint: lambda self, e: "NOT FOR REPLICATION",
         exp.OnCommitProperty: lambda self,
         e: f"ON COMMIT {'DELETE' if e.args.get('delete') else 'PRESERVE'} ROWS",
@@ -128,33 +120,34 @@ class Generator(metaclass=_Generator):
         e: f"REMOTE WITH CONNECTION {self.sql(e, 'this')}",
         exp.ReturnsProperty: lambda self, e: self.naked_property(e),
         exp.SampleProperty: lambda self, e: f"SAMPLE BY {self.sql(e, 'this')}",
-        exp.SetProperty: lambda self, e: f"{'MULTI' if e.args.get('multi') else ''}SET",
         exp.SetConfigProperty: lambda self, e: self.sql(e, "this"),
+        exp.SetProperty: lambda self, e: f"{'MULTI' if e.args.get('multi') else ''}SET",
         exp.SettingsProperty: lambda self, e: f"SETTINGS{self.seg('')}{(self.expressions(e))}",
         exp.SqlReadWriteProperty: lambda self, e: e.name,
         exp.SqlSecurityProperty: lambda self,
         e: f"SQL SECURITY {'DEFINER' if e.args.get('definer') else 'INVOKER'}",
         exp.StabilityProperty: lambda self, e: e.name,
         exp.TemporaryProperty: lambda self, e: "TEMPORARY",
-        exp.ToTableProperty: lambda self, e: f"TO {self.sql(e.this)}",
-        exp.TransientProperty: lambda self, e: "TRANSIENT",
-        exp.TransformModelProperty: lambda self, e: self.func("TRANSFORM", *e.expressions),
         exp.TitleColumnConstraint: lambda self, e: f"TITLE {self.sql(e, 'this')}",
+        exp.Timestamp: lambda self, e: self.func("TIMESTAMP", e.this, e.expression),
+        exp.ToTableProperty: lambda self, e: f"TO {self.sql(e.this)}",
+        exp.TransformModelProperty: lambda self, e: self.func("TRANSFORM", *e.expressions),
+        exp.TransientProperty: lambda self, e: "TRANSIENT",
         exp.UppercaseColumnConstraint: lambda self, e: "UPPERCASE",
         exp.VarMap: lambda self, e: self.func("MAP", e.args["keys"], e.args["values"]),
         exp.VolatileProperty: lambda self, e: "VOLATILE",
         exp.WithJournalTableProperty: lambda self, e: f"WITH JOURNAL TABLE={self.sql(e, 'this')}",
     }
 
-    # Whether or not null ordering is supported in order by
+    # Whether null ordering is supported in order by
     # True: Full Support, None: No support, False: No support in window specifications
     NULL_ORDERING_SUPPORTED: t.Optional[bool] = True
 
-    # Whether or not ignore nulls is inside the agg or outside.
+    # Whether ignore nulls is inside the agg or outside.
     # FIRST(x IGNORE NULLS) OVER vs FIRST (x) IGNORE NULLS OVER
     IGNORE_NULLS_IN_FUNC = False
 
-    # Whether or not locking reads (i.e. SELECT ... FOR UPDATE/SHARE) are supported
+    # Whether locking reads (i.e. SELECT ... FOR UPDATE/SHARE) are supported
     LOCKING_READS_SUPPORTED = False
 
     # Always do union distinct or union all
@@ -163,25 +156,25 @@ class Generator(metaclass=_Generator):
     # Wrap derived values in parens, usually standard but spark doesn't support it
     WRAP_DERIVED_VALUES = True
 
-    # Whether or not create function uses an AS before the RETURN
+    # Whether create function uses an AS before the RETURN
     CREATE_FUNCTION_RETURN_AS = True
 
-    # Whether or not MERGE ... WHEN MATCHED BY SOURCE is allowed
+    # Whether MERGE ... WHEN MATCHED BY SOURCE is allowed
     MATCHED_BY_SOURCE = True
 
-    # Whether or not the INTERVAL expression works only with values like '1 day'
+    # Whether the INTERVAL expression works only with values like '1 day'
     SINGLE_STRING_INTERVAL = False
 
-    # Whether or not the plural form of date parts like day (i.e. "days") is supported in INTERVALs
+    # Whether the plural form of date parts like day (i.e. "days") is supported in INTERVALs
     INTERVAL_ALLOWS_PLURAL_FORM = True
 
-    # Whether or not limit and fetch are supported (possible values: "ALL", "LIMIT", "FETCH")
+    # Whether limit and fetch are supported (possible values: "ALL", "LIMIT", "FETCH")
     LIMIT_FETCH = "ALL"
 
-    # Whether or not limit and fetch allows expresions or just limits
+    # Whether limit and fetch allows expresions or just limits
     LIMIT_ONLY_LITERALS = False
 
-    # Whether or not a table is allowed to be renamed with a db
+    # Whether a table is allowed to be renamed with a db
     RENAME_TABLE_WITH_DB = True
 
     # The separator for grouping sets and rollups
@@ -190,105 +183,105 @@ class Generator(metaclass=_Generator):
     # The string used for creating an index on a table
     INDEX_ON = "ON"
 
-    # Whether or not join hints should be generated
+    # Whether join hints should be generated
     JOIN_HINTS = True
 
-    # Whether or not table hints should be generated
+    # Whether table hints should be generated
     TABLE_HINTS = True
 
-    # Whether or not query hints should be generated
+    # Whether query hints should be generated
     QUERY_HINTS = True
 
     # What kind of separator to use for query hints
     QUERY_HINT_SEP = ", "
 
-    # Whether or not comparing against booleans (e.g. x IS TRUE) is supported
+    # Whether comparing against booleans (e.g. x IS TRUE) is supported
     IS_BOOL_ALLOWED = True
 
-    # Whether or not to include the "SET" keyword in the "INSERT ... ON DUPLICATE KEY UPDATE" statement
+    # Whether to include the "SET" keyword in the "INSERT ... ON DUPLICATE KEY UPDATE" statement
     DUPLICATE_KEY_UPDATE_WITH_SET = True
 
-    # Whether or not to generate the limit as TOP <value> instead of LIMIT <value>
+    # Whether to generate the limit as TOP <value> instead of LIMIT <value>
     LIMIT_IS_TOP = False
 
-    # Whether or not to generate INSERT INTO ... RETURNING or INSERT INTO RETURNING ...
+    # Whether to generate INSERT INTO ... RETURNING or INSERT INTO RETURNING ...
     RETURNING_END = True
 
-    # Whether or not to generate the (+) suffix for columns used in old-style join conditions
+    # Whether to generate the (+) suffix for columns used in old-style join conditions
     COLUMN_JOIN_MARKS_SUPPORTED = False
 
-    # Whether or not to generate an unquoted value for EXTRACT's date part argument
+    # Whether to generate an unquoted value for EXTRACT's date part argument
     EXTRACT_ALLOWS_QUOTES = True
 
-    # Whether or not TIMETZ / TIMESTAMPTZ will be generated using the "WITH TIME ZONE" syntax
+    # Whether TIMETZ / TIMESTAMPTZ will be generated using the "WITH TIME ZONE" syntax
     TZ_TO_WITH_TIME_ZONE = False
 
-    # Whether or not the NVL2 function is supported
+    # Whether the NVL2 function is supported
     NVL2_SUPPORTED = True
 
     # https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax
     SELECT_KINDS: t.Tuple[str, ...] = ("STRUCT", "VALUE")
 
-    # Whether or not VALUES statements can be used as derived tables.
+    # Whether VALUES statements can be used as derived tables.
     # MySQL 5 and Redshift do not allow this, so when False, it will convert
     # SELECT * VALUES into SELECT UNION
     VALUES_AS_TABLE = True
 
-    # Whether or not the word COLUMN is included when adding a column with ALTER TABLE
+    # Whether the word COLUMN is included when adding a column with ALTER TABLE
     ALTER_TABLE_INCLUDE_COLUMN_KEYWORD = True
 
     # UNNEST WITH ORDINALITY (presto) instead of UNNEST WITH OFFSET (bigquery)
     UNNEST_WITH_ORDINALITY = True
 
-    # Whether or not FILTER (WHERE cond) can be used for conditional aggregation
+    # Whether FILTER (WHERE cond) can be used for conditional aggregation
     AGGREGATE_FILTER_SUPPORTED = True
 
-    # Whether or not JOIN sides (LEFT, RIGHT) are supported in conjunction with SEMI/ANTI join kinds
+    # Whether JOIN sides (LEFT, RIGHT) are supported in conjunction with SEMI/ANTI join kinds
     SEMI_ANTI_JOIN_WITH_SIDE = True
 
-    # Whether or not to include the type of a computed column in the CREATE DDL
+    # Whether to include the type of a computed column in the CREATE DDL
     COMPUTED_COLUMN_WITH_TYPE = True
 
-    # Whether or not CREATE TABLE .. COPY .. is supported. False means we'll generate CLONE instead of COPY
+    # Whether CREATE TABLE .. COPY .. is supported. False means we'll generate CLONE instead of COPY
     SUPPORTS_TABLE_COPY = True
 
-    # Whether or not parentheses are required around the table sample's expression
+    # Whether parentheses are required around the table sample's expression
     TABLESAMPLE_REQUIRES_PARENS = True
 
-    # Whether or not a table sample clause's size needs to be followed by the ROWS keyword
+    # Whether a table sample clause's size needs to be followed by the ROWS keyword
     TABLESAMPLE_SIZE_IS_ROWS = True
 
     # The keyword(s) to use when generating a sample clause
     TABLESAMPLE_KEYWORDS = "TABLESAMPLE"
 
-    # Whether or not the TABLESAMPLE clause supports a method name, like BERNOULLI
+    # Whether the TABLESAMPLE clause supports a method name, like BERNOULLI
     TABLESAMPLE_WITH_METHOD = True
 
     # The keyword to use when specifying the seed of a sample clause
     TABLESAMPLE_SEED_KEYWORD = "SEED"
 
-    # Whether or not COLLATE is a function instead of a binary operator
+    # Whether COLLATE is a function instead of a binary operator
     COLLATE_IS_FUNC = False
 
-    # Whether or not data types support additional specifiers like e.g. CHAR or BYTE (oracle)
+    # Whether data types support additional specifiers like e.g. CHAR or BYTE (oracle)
     DATA_TYPE_SPECIFIERS_ALLOWED = False
 
-    # Whether or not conditions require booleans WHERE x = 0 vs WHERE x
+    # Whether conditions require booleans WHERE x = 0 vs WHERE x
     ENSURE_BOOLS = False
 
-    # Whether or not the "RECURSIVE" keyword is required when defining recursive CTEs
+    # Whether the "RECURSIVE" keyword is required when defining recursive CTEs
     CTE_RECURSIVE_KEYWORD_REQUIRED = True
 
-    # Whether or not CONCAT requires >1 arguments
+    # Whether CONCAT requires >1 arguments
     SUPPORTS_SINGLE_ARG_CONCAT = True
 
-    # Whether or not LAST_DAY function supports a date part argument
+    # Whether LAST_DAY function supports a date part argument
     LAST_DAY_SUPPORTS_DATE_PART = True
 
-    # Whether or not named columns are allowed in table aliases
+    # Whether named columns are allowed in table aliases
     SUPPORTS_TABLE_ALIAS_COLUMNS = True
 
-    # Whether or not UNPIVOT aliases are Identifiers (False means they're Literals)
+    # Whether UNPIVOT aliases are Identifiers (False means they're Literals)
     UNPIVOT_ALIASES_ARE_IDENTIFIERS = True
 
     # What delimiter to use for separating JSON key/value pairs
@@ -297,24 +290,36 @@ class Generator(metaclass=_Generator):
     # INSERT OVERWRITE TABLE x override
     INSERT_OVERWRITE = " OVERWRITE TABLE"
 
-    # Whether or not the SELECT .. INTO syntax is used instead of CTAS
+    # Whether the SELECT .. INTO syntax is used instead of CTAS
     SUPPORTS_SELECT_INTO = False
 
-    # Whether or not UNLOGGED tables can be created
+    # Whether UNLOGGED tables can be created
     SUPPORTS_UNLOGGED_TABLES = False
 
-    # Whether or not the JSON extraction operators expect a value of type JSON
+    # Whether the CREATE TABLE LIKE statement is supported
+    SUPPORTS_CREATE_TABLE_LIKE = True
+
+    # Whether the LikeProperty needs to be specified inside of the schema clause
+    LIKE_PROPERTY_INSIDE_SCHEMA = False
+
+    # Whether DISTINCT can be followed by multiple args in an AggFunc. If not, it will be
+    # transpiled into a series of CASE-WHEN-ELSE, ultimately using a tuple conseisting of the args
+    MULTI_ARG_DISTINCT = True
+
+    # Whether the JSON extraction operators expect a value of type JSON
     JSON_TYPE_REQUIRED_FOR_EXTRACTION = False
 
-    # The JSONPathPart expressions supported by this dialect
-    SUPPORTED_JSON_PATH_PARTS: t.Set[t.Type[exp.JSONPathPart]] = set(JSON_PATH_MAPPING)
+    # Whether bracketed keys like ["foo"] are supported in JSON paths
+    JSON_PATH_BRACKETED_KEY_SUPPORTED = True
 
-    # Mapping that specifies how each JSONPathPart supported by this dialect should be generated.
-    # This is populated based on SUPPORTED_JSON_PATH_PARTS and the default MAPPING in jsonpath.py,
-    # but it's possible to override specific entries as well
-    JSON_PATH_MAPPING: t.Optional[
-        t.Dict[t.Type[exp.JSONPathPart], t.Callable[[exp.JSONPathPart], str]]
-    ] = None
+    # Whether to escape keys using single quotes in JSON paths
+    JSON_PATH_SINGLE_QUOTE_ESCAPE = False
+
+    # The JSONPathPart expressions supported by this dialect
+    SUPPORTED_JSON_PATH_PARTS = ALL_JSON_PATH_PARTS.copy()
+
+    # Whether any(f(x) for x in array) can be implemented by this dialect
+    CAN_IMPLEMENT_ARRAY_ANY = False
 
     TYPE_MAPPING = {
         exp.DataType.Type.NCHAR: "CHAR",
@@ -350,6 +355,7 @@ class Generator(metaclass=_Generator):
     STRUCT_DELIMITER = ("<", ">")
 
     PARAMETER_TOKEN = "@"
+    NAMED_PLACEHOLDER_TOKEN = ":"
 
     PROPERTIES_LOCATION = {
         exp.AlgorithmProperty: exp.Properties.Location.POST_CREATE,
@@ -456,14 +462,9 @@ class Generator(metaclass=_Generator):
     # Expressions that need to have all CTEs under them bubbled up to them
     EXPRESSIONS_WITHOUT_NESTED_CTES: t.Set[t.Type[exp.Expression]] = set()
 
-    KEY_VALUE_DEFINITIONS = (exp.Bracket, exp.EQ, exp.PropertyEQ, exp.Slice)
+    KEY_VALUE_DEFINITIONS = (exp.EQ, exp.PropertyEQ, exp.Slice)
 
     SENTINEL_LINE_BREAK = "__SQLGLOT__LB__"
-
-    # Autofilled
-    _JSON_PATH_MAPPING: t.Optional[
-        t.Dict[t.Type[exp.JSONPathPart], t.Callable[[exp.JSONPathPart], str]]
-    ] = None
 
     __slots__ = (
         "pretty",
@@ -532,7 +533,7 @@ class Generator(metaclass=_Generator):
 
         Args:
             expression: The syntax tree.
-            copy: Whether or not to copy the expression. The generator performs mutations so
+            copy: Whether to copy the expression. The generator performs mutations so
                 it is safer to copy.
 
         Returns:
@@ -696,8 +697,6 @@ class Generator(metaclass=_Generator):
 
         if callable(transform):
             sql = transform(self, expression)
-        elif transform:
-            sql = transform
         elif isinstance(expression, exp.Expression):
             exp_handler_name = f"{expression.key}_sql"
 
@@ -1273,9 +1272,21 @@ class Generator(metaclass=_Generator):
         return f"{property_name}={self.sql(expression, 'this')}"
 
     def likeproperty_sql(self, expression: exp.LikeProperty) -> str:
-        options = " ".join(f"{e.name} {self.sql(e, 'value')}" for e in expression.expressions)
-        options = f" {options}" if options else ""
-        return f"LIKE {self.sql(expression, 'this')}{options}"
+        if self.SUPPORTS_CREATE_TABLE_LIKE:
+            options = " ".join(f"{e.name} {self.sql(e, 'value')}" for e in expression.expressions)
+            options = f" {options}" if options else ""
+
+            like = f"LIKE {self.sql(expression, 'this')}{options}"
+            if self.LIKE_PROPERTY_INSIDE_SCHEMA and not isinstance(expression.parent, exp.Schema):
+                like = f"({like})"
+
+            return like
+
+        if expression.expressions:
+            self.unsupported("Transpilation of LIKE property options is unsupported")
+
+        select = exp.select("*").from_(expression.this).limit(0)
+        return f"AS {self.sql(select)}"
 
     def fallbackproperty_sql(self, expression: exp.FallbackProperty) -> str:
         no = "NO " if expression.args.get("no") else ""
@@ -1849,15 +1860,18 @@ class Generator(metaclass=_Generator):
 
         args_sql = ", ".join(self.sql(e) for e in args)
         args_sql = f"({args_sql})" if any(top and not e.is_number for e in args) else args_sql
-        return f"{this}{self.seg('TOP' if top else 'LIMIT')} {args_sql}"
+        expressions = self.expressions(expression, flat=True)
+        expressions = f" BY {expressions}" if expressions else ""
+
+        return f"{this}{self.seg('TOP' if top else 'LIMIT')} {args_sql}{expressions}"
 
     def offset_sql(self, expression: exp.Offset) -> str:
         this = self.sql(expression, "this")
-        expression = expression.expression
-        expression = (
-            self._simplify_unless_literal(expression) if self.LIMIT_ONLY_LITERALS else expression
-        )
-        return f"{this}{self.seg('OFFSET')} {self.sql(expression)}"
+        value = expression.expression
+        value = self._simplify_unless_literal(value) if self.LIMIT_ONLY_LITERALS else value
+        expressions = self.expressions(expression, flat=True)
+        expressions = f" BY {expressions}" if expressions else ""
+        return f"{this}{self.seg('OFFSET')} {self.sql(value)}{expressions}"
 
     def setitem_sql(self, expression: exp.SetItem) -> str:
         kind = self.sql(expression, "kind")
@@ -2195,7 +2209,7 @@ class Generator(metaclass=_Generator):
         return f"@@{kind}{this}"
 
     def placeholder_sql(self, expression: exp.Placeholder) -> str:
-        return f":{expression.name}" if expression.name else "?"
+        return f"{self.NAMED_PLACEHOLDER_TOKEN}{expression.name}" if expression.name else "?"
 
     def subquery_sql(self, expression: exp.Subquery, sep: str = " AS ") -> str:
         alias = self.sql(expression, "alias")
@@ -2428,12 +2442,29 @@ class Generator(metaclass=_Generator):
         return f"{self.sql(expression, 'this')}{self.JSON_KEY_VALUE_PAIR_SEP} {self.sql(expression, 'expression')}"
 
     def jsonpath_sql(self, expression: exp.JSONPath) -> str:
-        path = generate_json_path(
-            expression.expressions,
-            mapping=self._JSON_PATH_MAPPING,
-            unsupported_callback=self.unsupported,
-        )
-        return f"{self.dialect.QUOTE_START}{path.lstrip('.')}{self.dialect.QUOTE_END}"
+        path = self.expressions(expression, sep="", flat=True).lstrip(".")
+        return f"{self.dialect.QUOTE_START}{path}{self.dialect.QUOTE_END}"
+
+    def json_path_part(self, expression: int | str | exp.JSONPathPart) -> str:
+        if isinstance(expression, exp.JSONPathPart):
+            transform = self.TRANSFORMS.get(expression.__class__)
+            if not callable(transform):
+                self.unsupported(f"Unsupported JSONPathPart type {expression.__class__.__name__}")
+                return ""
+
+            return transform(self, expression)
+
+        if isinstance(expression, int):
+            return str(expression)
+
+        if self.JSON_PATH_SINGLE_QUOTE_ESCAPE:
+            escaped = expression.replace("'", "\\'")
+            escaped = f"\\'{expression}\\'"
+        else:
+            escaped = expression.replace('"', '\\"')
+            escaped = f'"{escaped}"'
+
+        return escaped
 
     def formatjson_sql(self, expression: exp.FormatJson) -> str:
         return f"{self.sql(expression, 'this')} FORMAT JSON"
@@ -2813,18 +2844,17 @@ class Generator(metaclass=_Generator):
         return f"DROP{exists}{expressions}"
 
     def addconstraint_sql(self, expression: exp.AddConstraint) -> str:
-        this = self.sql(expression, "this")
-        expression_ = self.sql(expression, "expression")
-        add_constraint = f"ADD CONSTRAINT {this}" if this else "ADD"
-
-        enforced = expression.args.get("enforced")
-        if enforced is not None:
-            return f"{add_constraint} CHECK ({expression_}){' ENFORCED' if enforced else ''}"
-
-        return f"{add_constraint} {expression_}"
+        return f"ADD {self.expressions(expression)}"
 
     def distinct_sql(self, expression: exp.Distinct) -> str:
         this = self.expressions(expression, flat=True)
+
+        if not self.MULTI_ARG_DISTINCT and len(expression.expressions) > 1:
+            case = exp.case()
+            for arg in expression.expressions:
+                case = case.when(arg.is_(exp.null()), exp.null())
+            this = self.sql(case.else_(f"({this})"))
+
         this = f" {this}" if this else ""
 
         on = self.sql(expression, "on")
@@ -2837,13 +2867,33 @@ class Generator(metaclass=_Generator):
     def respectnulls_sql(self, expression: exp.RespectNulls) -> str:
         return self._embed_ignore_nulls(expression, "RESPECT NULLS")
 
+    def havingmax_sql(self, expression: exp.HavingMax) -> str:
+        this_sql = self.sql(expression, "this")
+        expression_sql = self.sql(expression, "expression")
+        kind = "MAX" if expression.args.get("max") else "MIN"
+        return f"{this_sql} HAVING {kind} {expression_sql}"
+
     def _embed_ignore_nulls(self, expression: exp.IgnoreNulls | exp.RespectNulls, text: str) -> str:
-        if self.IGNORE_NULLS_IN_FUNC:
-            this = expression.find(exp.AggFunc)
-            if this:
-                sql = self.sql(this)
-                sql = sql[:-1] + f" {text})"
-                return sql
+        if self.IGNORE_NULLS_IN_FUNC and not expression.meta.get("inline"):
+            # The first modifier here will be the one closest to the AggFunc's arg
+            mods = sorted(
+                expression.find_all(exp.HavingMax, exp.Order, exp.Limit),
+                key=lambda x: 0
+                if isinstance(x, exp.HavingMax)
+                else (1 if isinstance(x, exp.Order) else 2),
+            )
+
+            if mods:
+                mod = mods[0]
+                this = expression.__class__(this=mod.this.copy())
+                this.meta["inline"] = True
+                mod.this.replace(this)
+                return self.sql(expression.this)
+
+            agg_func = expression.find(exp.AggFunc)
+
+            if agg_func:
+                return self.sql(agg_func)[:-1] + f" {text})"
 
         return f"{self.sql(expression, 'this')} {text}"
 
@@ -3243,6 +3293,10 @@ class Generator(metaclass=_Generator):
         self.unsupported("Unsupported index constraint option.")
         return ""
 
+    def checkcolumnconstraint_sql(self, expression: exp.CheckColumnConstraint) -> str:
+        enforced = " ENFORCED" if expression.args.get("enforced") else ""
+        return f"CHECK ({self.sql(expression, 'this')}){enforced}"
+
     def indexcolumnconstraint_sql(self, expression: exp.IndexColumnConstraint) -> str:
         kind = self.sql(expression, "kind")
         kind = f"{kind} INDEX" if kind else "INDEX"
@@ -3317,7 +3371,7 @@ class Generator(metaclass=_Generator):
             return self.sql(arg)
 
         cond_for_null = arg.is_(exp.null())
-        return self.sql(exp.func("IF", cond_for_null, exp.null(), exp.Array(expressions=[arg])))
+        return self.sql(exp.func("IF", cond_for_null, exp.null(), exp.array(arg, copy=False)))
 
     def tsordstotime_sql(self, expression: exp.TsOrDsToTime) -> str:
         this = expression.this
@@ -3359,6 +3413,37 @@ class Generator(metaclass=_Generator):
             self.unsupported("Date parts are not supported in LAST_DAY.")
 
         return self.func("LAST_DAY", expression.this)
+
+    def arrayany_sql(self, expression: exp.ArrayAny) -> str:
+        if self.CAN_IMPLEMENT_ARRAY_ANY:
+            filtered = exp.ArrayFilter(this=expression.this, expression=expression.expression)
+            filtered_not_empty = exp.ArraySize(this=filtered).neq(0)
+            original_is_empty = exp.ArraySize(this=expression.this).eq(0)
+            return self.sql(exp.paren(original_is_empty.or_(filtered_not_empty)))
+
+        from sqlglot.dialects import Dialect
+
+        # SQLGlot's executor supports ARRAY_ANY, so we don't wanna warn for the SQLGlot dialect
+        if self.dialect.__class__ != Dialect:
+            self.unsupported("ARRAY_ANY is unsupported")
+
+        return self.function_fallback_sql(expression)
+
+    def _jsonpathkey_sql(self, expression: exp.JSONPathKey) -> str:
+        this = expression.this
+        if isinstance(this, exp.JSONPathWildcard):
+            this = self.json_path_part(this)
+            return f".{this}" if this else ""
+
+        if exp.SAFE_IDENTIFIER_RE.match(this):
+            return f".{this}"
+
+        this = self.json_path_part(this)
+        return f"[{this}]" if self.JSON_PATH_BRACKETED_KEY_SUPPORTED else f".{this}"
+
+    def _jsonpathsubscript_sql(self, expression: exp.JSONPathSubscript) -> str:
+        this = self.json_path_part(expression.this)
+        return f"[{this}]" if this else ""
 
     def _simplify_unless_literal(self, expression: E) -> E:
         if not isinstance(expression, exp.Literal):
