@@ -1001,7 +1001,7 @@ class TestDoris(Validator):
         self.validate_all(
             "CREATE TABLE kdwuser.km_tbl_active_user_event_comp_bitmap (`p_ds` DATE COMMENT '快照日期', `event_id` STRING COMMENT '事件id', `company_code` STRING COMMENT '商家编码', `openid_bit` STRING COMMENT '位图数据', `crossopenid_bit` STRING COMMENT 'crosspenid位图数据') DUPLICATE KEY(`p_ds`) DISTRIBUTED BY HASH(`p_ds`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\")",
             read={
-                "clickhouse": "CREATE TABLE kdwuser.km_tbl_active_user_event_comp_bitmap (`p_ds` Date COMMENT '快照日期', `event_id` String COMMENT '事件id', `company_code` String COMMENT '商家编码', `openid_bit` AggregateFunction(groupBitmap, UInt64) COMMENT '位图数据', `crossopenid_bit` AggregateFunction(groupBitmap, UInt64) COMMENT 'crosspenid位图数据') ENGINE = Distributed('ktvme_ck_cluster', 'kdwuser', 'km_tbl_active_user_event_comp_bitmap_local', rand())"
+                "clickhouse": "CREATE TABLE kdwuser.km_tbl_active_user_event_comp_bitmap (`p_ds` Date COMMENT '快照日期', `event_id` String COMMENT '事件id', `company_code` String COMMENT '商家编码', `openid_bit` String COMMENT '位图数据', `crossopenid_bit` String COMMENT 'crosspenid位图数据') ENGINE = Distributed('ktvme_ck_cluster', 'kdwuser', 'km_tbl_active_user_event_comp_bitmap_local', rand())"
             },
         )
 

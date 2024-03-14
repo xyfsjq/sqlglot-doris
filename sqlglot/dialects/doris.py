@@ -382,13 +382,9 @@ class Doris(MySQL):
             exp.DataType.Type.ENUM16: "STRING",
             exp.DataType.Type.IPV4: "STRING",
             exp.DataType.Type.IPV6: "STRING",
-            exp.DataType.Type.FIXEDSTRING: "STRING",
             exp.DataType.Type.INT256: "STRING",
             exp.DataType.Type.UINT128: "STRING",
             exp.DataType.Type.UINT256: "STRING",
-            exp.DataType.Type.LOWCARDINALITY: "STRING",
-            exp.DataType.Type.AGGREGATEFUNCTION: "STRING",
-            exp.DataType.Type.SIMPLEAGGREGATEFUNCTION: "STRING",
             exp.DataType.Type.TIMETZ: "STRING",
             exp.DataType.Type.INTERVAL: "STRING",
             exp.DataType.Type.UUID: "STRING",
@@ -441,14 +437,19 @@ class Doris(MySQL):
             "datetime64": "DATETIME",
             "float32": "FLOAT",
             "float64": "DOUBLE",
-            "fixedstring": "STRING",
-            "lowcardinality": "STRING",
             "enum": "STRING",
             "enum8": "STRING",
             "enum16": "STRING",
             "ipv4": "STRING",
             "ipv6": "STRING",
         }
+
+        CLICKHOUSE_NOT_SUPPORT_TYPE = [
+            exp.DataType.Type.AGGREGATEFUNCTION,
+            exp.DataType.Type.SIMPLEAGGREGATEFUNCTION,
+            exp.DataType.Type.LOWCARDINALITY,
+            exp.DataType.Type.FIXEDSTRING,
+        ]
 
         TIMESTAMP_FUNC_TYPES = set()
 
@@ -692,6 +693,9 @@ class Doris(MySQL):
             return generator.Generator.datatype_sql(self, expression)
 
         def clickhouse_type_to_doris(self, expression: exp.DataType) -> str:
+            if expression.this in self.CLICKHOUSE_NOT_SUPPORT_TYPE:
+                raise TypeError(f"UNSUPPORTED_TYPE: {expression.this.name}")
+
             if expression.this in self.STRING_TYPE_MAPPING:
                 return "STRING"
             elif expression.this in (
