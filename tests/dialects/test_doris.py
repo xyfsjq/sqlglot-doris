@@ -1004,3 +1004,98 @@ class TestDoris(Validator):
                 "clickhouse": "CREATE TABLE kdwuser.km_tbl_active_user_event_comp_bitmap (`p_ds` Date COMMENT '快照日期', `event_id` String COMMENT '事件id', `company_code` String COMMENT '商家编码', `openid_bit` AggregateFunction(groupBitmap, UInt64) COMMENT '位图数据', `crossopenid_bit` AggregateFunction(groupBitmap, UInt64) COMMENT 'crosspenid位图数据') ENGINE = Distributed('ktvme_ck_cluster', 'kdwuser', 'km_tbl_active_user_event_comp_bitmap_local', rand())"
             },
         )
+
+
+    def test_hive2doris_create(self):
+        self.maxDiff = None
+
+        self.validate_all(
+            "CREATE TABLE all_data_types_table (id INT, tinyint_column TINYINT) DUPLICATE KEY(`id`) DISTRIBUTED BY HASH(`id`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\")",
+            read={
+                "hive": "CREATE TABLE all_data_types_table (id INT, tinyint_column TINYINT)",
+            },
+        )
+
+        self.validate_all(
+            "CREATE TABLE all_data_types_table (id INT, tinyint_column TINYINT, smallint_column SMALLINT, bigint_column BIGINT, boolean_column BOOLEAN, float_column FLOAT, double_column DOUBLE, decimal_column DECIMAL(10, 2), string_column STRING, char_column CHAR(30), varchar_column VARCHAR(150), binary_column STRING, timestamp_column DATETIME, date_column DATE, array_column ARRAY<STRING>, map_column MAP<STRING, STRING>, struct_column STRUCT<name:STRING, age:INT>) DUPLICATE KEY(`id`) DISTRIBUTED BY HASH(`id`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\")",
+            read={
+                "hive": "CREATE TABLE all_data_types_table (id INT, tinyint_column TINYINT, smallint_column SMALLINT, bigint_column BIGINT, boolean_column BOOLEAN, float_column FLOAT, double_column DOUBLE, decimal_column DECIMAL(10, 2), string_column STRING, char_column CHAR(10), varchar_column VARCHAR(50), binary_column BINARY, timestamp_column TIMESTAMP, date_column DATE, array_column ARRAY<STRING>, map_column MAP<STRING, STRING>, struct_column STRUCT<name:STRING, age:INT>)",
+            },
+        )
+
+        self.validate_all(
+            "CREATE TABLE all_data_types_table (id INT, tinyint_column TINYINT, smallint_column SMALLINT, bigint_column BIGINT, boolean_column BOOLEAN, float_column FLOAT, double_column DOUBLE, decimal_column DECIMAL(10, 2), string_column STRING, char_column CHAR(30), varchar_column VARCHAR(150), binary_column STRING, timestamp_column DATETIME, date_column DATE, array_column ARRAY<STRING>, map_column MAP<STRING, STRING>, struct_column STRUCT<name:STRING, age:INT>) DUPLICATE KEY(`id`) DISTRIBUTED BY HASH(`id`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\")",
+            read={
+                "hive": "CREATE TABLE all_data_types_table (id INT, tinyint_column TINYINT, smallint_column SMALLINT, bigint_column BIGINT, boolean_column BOOLEAN, float_column FLOAT, double_column DOUBLE, decimal_column DECIMAL(10, 2), string_column STRING, char_column CHAR(10), varchar_column VARCHAR(50), binary_column BINARY, timestamp_column TIMESTAMP, date_column DATE, array_column ARRAY<STRING>, map_column MAP<STRING, STRING>, struct_column STRUCT<name:STRING, age:INT>) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' STORED AS TEXTFILE",
+            },
+        )
+
+        self.validate_all(
+            "CREATE TABLE all_data_types_table (id INT NOT NULL, day DATE) DUPLICATE KEY(`id`) AUTO PARTITION BY RANGE date_trunc(`day`, 'year') () DISTRIBUTED BY HASH(`id`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\", \"dynamic_partition.enable\" = \"true\", \"dynamic_partition.time_unit\" = \"year\", \"dynamic_partition.prefix\" = \"p\", \"dynamic_partition.end\" = \"3\")",
+            read={
+                "hive": "CREATE TABLE all_data_types_table (id INT NOT NULL) PARTITIONED BY (day DATE) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' STORED AS TEXTFILE",
+            },
+        )
+
+        self.validate_all(
+            "CREATE TABLE all_data_types_table (id INT NOT NULL, tinyint_column TINYINT, smallint_column SMALLINT, bigint_column BIGINT, boolean_column BOOLEAN, float_column FLOAT, double_column DOUBLE, decimal_column DECIMAL(10, 2), string_column STRING, char_column CHAR(30), varchar_column VARCHAR(150), binary_column STRING, timestamp_column DATETIME, date_column DATE, array_column ARRAY<STRING>, map_column MAP<STRING, STRING>, struct_column STRUCT<name:STRING, age:INT>, date STRING, day DATE) DUPLICATE KEY(`id`) AUTO PARTITION BY RANGE date_trunc(`day`, 'year') () DISTRIBUTED BY HASH(`id`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\", \"dynamic_partition.enable\" = \"true\", \"dynamic_partition.time_unit\" = \"year\", \"dynamic_partition.prefix\" = \"p\", \"dynamic_partition.end\" = \"3\")",
+            read={
+                "hive": "CREATE TABLE all_data_types_table (id INT NOT NULL, tinyint_column TINYINT, smallint_column SMALLINT, bigint_column BIGINT, boolean_column BOOLEAN, float_column FLOAT, double_column DOUBLE, decimal_column DECIMAL(10, 2), string_column STRING, char_column CHAR(10), varchar_column VARCHAR(50), binary_column BINARY, timestamp_column TIMESTAMP, date_column DATE, array_column ARRAY<STRING>, map_column MAP<STRING, STRING>, struct_column STRUCT<name:STRING, age:INT>) PARTITIONED BY (date STRING, day DATE) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' STORED AS TEXTFILE",
+            },
+        )
+
+        self.validate_all(
+            "CREATE TABLE all_data_types_table (id INT NOT NULL, tinyint_column TINYINT, smallint_column SMALLINT, bigint_column BIGINT, boolean_column BOOLEAN, float_column FLOAT, double_column DOUBLE, decimal_column DECIMAL(10, 2), string_column STRING, char_column CHAR(30), varchar_column VARCHAR(150), binary_column STRING, timestamp_column DATETIME, date_column DATE, array_column ARRAY<STRING>, map_column MAP<STRING, STRING>, struct_column STRUCT<name:STRING, age:INT>) DUPLICATE KEY(`id`) DISTRIBUTED BY HASH(`id`, `tinyint_column`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\")",
+            read={
+                "hive": "CREATE TABLE all_data_types_table (id INT NOT NULL, tinyint_column TINYINT, smallint_column SMALLINT, bigint_column BIGINT, boolean_column BOOLEAN, float_column FLOAT, double_column DOUBLE, decimal_column DECIMAL(10, 2), string_column STRING, char_column CHAR(10), varchar_column VARCHAR(50), binary_column BINARY, timestamp_column TIMESTAMP, date_column DATE, array_column ARRAY<STRING>, map_column MAP<STRING, STRING>, struct_column STRUCT<name:STRING, age:INT>) CLUSTERED BY (id, tinyint_column) SORTED BY (id DESC) INTO 32 BUCKETS ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' STORED AS TEXTFILE",
+            },
+        )
+
+        self.validate_all(
+            "CREATE TABLE all_data_types_table (id INT NOT NULL, tinyint_column TINYINT, smallint_column SMALLINT, bigint_column BIGINT, boolean_column BOOLEAN, float_column FLOAT, double_column DOUBLE, decimal_column DECIMAL(10, 2), string_column STRING, char_column CHAR(30), varchar_column VARCHAR(150), binary_column STRING, timestamp_column DATETIME, date_column DATE, array_column ARRAY<STRING>, map_column MAP<STRING, STRING>, struct_column STRUCT<name:STRING, age:INT>, date STRING, day DATE) DUPLICATE KEY(`id`) AUTO PARTITION BY RANGE date_trunc(`day`, 'year') () DISTRIBUTED BY HASH(`id`, `tinyint_column`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\", \"dynamic_partition.enable\" = \"true\", \"dynamic_partition.time_unit\" = \"year\", \"dynamic_partition.prefix\" = \"p\", \"dynamic_partition.end\" = \"3\")",
+            read={
+                "hive": "CREATE TABLE all_data_types_table (id INT NOT NULL, tinyint_column TINYINT, smallint_column SMALLINT, bigint_column BIGINT, boolean_column BOOLEAN, float_column FLOAT, double_column DOUBLE, decimal_column DECIMAL(10, 2), string_column STRING, char_column CHAR(10), varchar_column VARCHAR(50), binary_column BINARY, timestamp_column TIMESTAMP, date_column DATE, array_column ARRAY<STRING>, map_column MAP<STRING, STRING>, struct_column STRUCT<name:STRING, age:INT>) PARTITIONED BY (date STRING, day DATE) CLUSTERED BY (id, tinyint_column) SORTED BY (id DESC) INTO 32 BUCKETS ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' STORED AS TEXTFILE",
+            },
+        )
+
+    def test_presto2doris_create(self):
+        self.maxDiff = None
+        self.validate_all(
+            "CREATE TABLE example_table (id INT, name BOOLEAN, col_tinyint TINYINT, col_date DATE) DUPLICATE KEY(`id`) AUTO PARTITION BY RANGE date_trunc(`col_date`, 'year') () DISTRIBUTED BY HASH(`id`, `name`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\", \"dynamic_partition.enable\" = \"true\", \"dynamic_partition.time_unit\" = \"year\", \"dynamic_partition.prefix\" = \"p\", \"dynamic_partition.end\" = \"3\")",
+            read={
+                "presto": "CREATE TABLE example_table (id INTEGER, name BOOLEAN, col_tinyint TINYINT, col_date DATE) WITH (format = 'ORC', partitioned_by = ARRAY['col_date'], bucketed_by = ARRAY['id','name'], bucket_count = 16, sorted_by = ARRAY['col_tinyint'])",
+            },
+        )
+
+        self.validate_all(
+            "CREATE TABLE example_table (id INT, name BOOLEAN, col_tinyint TINYINT, col_smallint SMALLINT, col_bigint BIGINT, col_real FLOAT, col_double DOUBLE, col_decimal DECIMAL(10, 5), col_varchar VARCHAR, col_varchar_fixed VARCHAR(300), col_char CHAR(30), col_text STRING, col_binary STRING, col_date DATE, col_time STRING, col_time_with_timezone STRING, col_timestamp DATETIME, col_timestamp_with_timezone DATETIME, col_interval_day_to_second STRING, col_array ARRAY<INT>, col_map MAP<VARCHAR, INT>, col_row STRUCT<nested_col_integer:INT, nested_col_double:DOUBLE>, col_json JSON, col_ipaddress STRING, col_uuid STRING, col_geometry STRING) DUPLICATE KEY(`id`) AUTO PARTITION BY RANGE date_trunc(`col_date`, 'year') () DISTRIBUTED BY HASH(`id`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\", \"dynamic_partition.enable\" = \"true\", \"dynamic_partition.time_unit\" = \"year\", \"dynamic_partition.prefix\" = \"p\", \"dynamic_partition.end\" = \"3\")",
+            read={
+                "presto": "CREATE TABLE example_table (id INTEGER, name BOOLEAN, col_tinyint TINYINT, col_smallint SMALLINT, col_bigint BIGINT, col_real REAL, col_double DOUBLE, col_decimal DECIMAL(10,5), col_varchar VARCHAR, col_varchar_fixed VARCHAR(100), col_char CHAR(10), col_text TEXT, col_binary VARBINARY, col_date DATE, col_time TIME, col_time_with_timezone TIME WITH TIME ZONE, col_timestamp TIMESTAMP, col_timestamp_with_timezone TIMESTAMP WITH TIME ZONE, col_interval_day_to_second INTERVAL DAY TO SECOND, col_array ARRAY<INTEGER>, col_map MAP<VARCHAR, INTEGER>, col_row STRUCT(nested_col_integer INTEGER, nested_col_double DOUBLE), col_json JSON, col_ipaddress IPADDRESS, col_uuid UUID, col_geometry GEOMETRY) WITH (format = 'ORC', partitioned_by = ARRAY['col_date'], sorted_by = ARRAY['col_tinyint'])",
+            },
+        )
+
+        self.validate_all(
+            "CREATE TABLE example_table (id INT, name BOOLEAN, col_tinyint TINYINT, col_smallint SMALLINT, col_bigint BIGINT, col_real FLOAT, col_double DOUBLE, col_decimal DECIMAL(10, 5), col_varchar VARCHAR, col_varchar_fixed VARCHAR(300), col_char CHAR(30), col_text STRING, col_binary STRING, col_date DATE, col_time STRING, col_time_with_timezone STRING, col_timestamp DATETIME, col_timestamp_with_timezone DATETIME, col_interval_day_to_second STRING, col_array ARRAY<INT>, col_map MAP<VARCHAR, INT>, col_row STRUCT<nested_col_integer:INT, nested_col_double:DOUBLE>, col_json JSON, col_ipaddress STRING, col_uuid STRING, col_geometry STRING) DUPLICATE KEY(`id`) DISTRIBUTED BY HASH(`id`, `name`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\")",
+            read={
+                "presto": "CREATE TABLE example_table (id INTEGER, name BOOLEAN, col_tinyint TINYINT, col_smallint SMALLINT, col_bigint BIGINT, col_real REAL, col_double DOUBLE, col_decimal DECIMAL(10,5), col_varchar VARCHAR, col_varchar_fixed VARCHAR(100), col_char CHAR(10), col_text TEXT, col_binary VARBINARY, col_date DATE, col_time TIME, col_time_with_timezone TIME WITH TIME ZONE, col_timestamp TIMESTAMP, col_timestamp_with_timezone TIMESTAMP WITH TIME ZONE, col_interval_day_to_second INTERVAL DAY TO SECOND, col_array ARRAY<INTEGER>, col_map MAP<VARCHAR, INTEGER>, col_row STRUCT(nested_col_integer INTEGER, nested_col_double DOUBLE), col_json JSON, col_ipaddress IPADDRESS, col_uuid UUID, col_geometry GEOMETRY) WITH (format = 'ORC', bucketed_by = ARRAY['id','name'], bucket_count = 16, sorted_by = ARRAY['col_tinyint'])",
+            },
+        )
+
+        self.validate_all(
+            "CREATE TABLE example_table (id INT, col_boolean BOOLEAN, col_tinyint TINYINT, col_smallint SMALLINT, col_bigint BIGINT, col_real FLOAT, col_double DOUBLE, col_decimal DECIMAL(10, 5), col_varchar VARCHAR, col_varchar_fixed VARCHAR(300), col_char CHAR(30), col_text STRING, col_binary STRING, col_date DATE, col_time STRING, col_time_with_timezone STRING, col_timestamp DATETIME, col_timestamp_with_timezone DATETIME, col_interval_day_to_second STRING, col_array ARRAY<INT>, col_map MAP<VARCHAR, INT>, col_row STRUCT<nested_col_integer:INT, nested_col_double:DOUBLE>, col_json JSON, col_ipaddress STRING, col_uuid STRING, col_geometry STRING) DUPLICATE KEY(`id`) DISTRIBUTED BY HASH(`id`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\")",
+            read={
+                "presto": "CREATE TABLE example_table (id INTEGER, col_boolean BOOLEAN, col_tinyint TINYINT, col_smallint SMALLINT, col_bigint BIGINT, col_real REAL, col_double DOUBLE, col_decimal DECIMAL(10, 5), col_varchar VARCHAR, col_varchar_fixed VARCHAR(100), col_char CHAR(10), col_text TEXT, col_binary VARBINARY, col_date DATE, col_time TIME, col_time_with_timezone TIME WITH TIME ZONE, col_timestamp TIMESTAMP, col_timestamp_with_timezone TIMESTAMP WITH TIME ZONE, col_interval_day_to_second INTERVAL DAY TO SECOND, col_array ARRAY<INTEGER>, col_map MAP<VARCHAR, INTEGER>, col_row STRUCT(nested_col_integer INTEGER, nested_col_double DOUBLE), col_json JSON, col_ipaddress IPADDRESS, col_uuid UUID, col_geometry GEOMETRY) WITH (format = 'ORC', comment = 'Example table', read_repair_chance = 0.2, compaction = JSON {\"class\": \"LeveledCompactionStrategy\"})",
+            },
+        )
+
+        self.validate_all(
+            "CREATE TABLE example_table (id INT, col_time_with_timezone STRING) DUPLICATE KEY(`id`) DISTRIBUTED BY HASH(`id`) BUCKETS AUTO PROPERTIES (\"replication_allocation\" = \"tag.location.default: 1\")",
+            read={
+                "presto": "CREATE TABLE example_table (id INTEGER, col_time_with_timezone TIME WITH TIME ZONE) WITH (kafka_topic = 'your_kafka_topic', kafka_broker_list = 'broker1:port,broker2:port', kafka_value_format = 'json')",
+            },
+        )
+
+
+
+
+

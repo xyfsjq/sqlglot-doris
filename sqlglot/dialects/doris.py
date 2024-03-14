@@ -389,6 +389,11 @@ class Doris(MySQL):
             exp.DataType.Type.LOWCARDINALITY: "STRING",
             exp.DataType.Type.AGGREGATEFUNCTION: "STRING",
             exp.DataType.Type.SIMPLEAGGREGATEFUNCTION: "STRING",
+            exp.DataType.Type.TIMETZ: "STRING",
+            exp.DataType.Type.INTERVAL: "STRING",
+            exp.DataType.Type.UUID: "STRING",
+            exp.DataType.Type.IPADDRESS: "STRING",
+            exp.DataType.Type.GEOMETRY: "STRING",
         }
 
         TYPE_MAPPING = {
@@ -406,7 +411,17 @@ class Doris(MySQL):
             exp.DataType.Type.YEAR: "SMALLINT",
             exp.DataType.Type.DATE32: "DATE",
             exp.DataType.Type.INT128: "LARGEINT",
+            exp.DataType.Type.DATE: "DATE",
+            exp.DataType.Type.UNKNOWN: "STRING",
+            exp.DataType.Type.TINYINT: "TINYINT",
+            exp.DataType.Type.SMALLINT: "SMALLINT",
+            exp.DataType.Type.INT: "INT",
+            exp.DataType.Type.BIGINT: "BIGINT",
+            exp.DataType.Type.JSON: "JSON",
+            exp.DataType.Type.BOOLEAN: "BOOLEAN",
+            exp.DataType.Type.FLOAT: "FLOAT",
         }
+
 
         # clickhouse和doris的type对应, 用于STRUCT类型适配
         CLICKHOUSE_TYPE_MAPPING = {
@@ -449,6 +464,10 @@ class Doris(MySQL):
             exp.Order: exp.Properties.Location.UNSUPPORTED,
             exp.MergeTreeTTL: exp.Properties.Location.UNSUPPORTED,
             exp.SettingsProperty: exp.Properties.Location.UNSUPPORTED,
+            exp.FileFormatProperty: exp.Properties.Location.UNSUPPORTED,
+            exp.RowFormatDelimitedProperty: exp.Properties.Location.UNSUPPORTED,
+            exp.ClusteredByProperty: exp.Properties.Location.UNSUPPORTED,
+            exp.Property: exp.Properties.Location.UNSUPPORTED,
         }
 
         TRANSFORMS = {
@@ -588,96 +607,34 @@ class Doris(MySQL):
             if dialect == "MYSQL":
                 return self.mysql_type_to_doris(expression)
             elif dialect == "HIVE":
-                pass
+                return  self.hive_type_to_doris(expression)
             elif dialect == "CLICKHOUSE":
                 return self.clickhouse_type_to_doris(expression)
             elif dialect == "PRESTO":
-                pass
+                return self.presto_type_to_doris(expression)
 
             return generator.Generator.datatype_sql(self, expression)
 
         def create_sql(self, expression: exp.Create) -> str:
-            # dialect = expression.args.get("dialect")
-            pk_list = []
-            col_def_list = []
-            for e in expression.this.expressions:
-                if isinstance(e, exp.ColumnDef):
-                    col_def_list.append(e)
 
-            # first column could not be float, double, string or array, struct, map, please use decimal or varchar instead.
-            first_data_type = expression.find(exp.DataType)
-            # 如果是clickhouse的NULLABLE类型，去掉NULLABLE关键字
-            if first_data_type and first_data_type.is_type(exp.DataType.Type.NULLABLE):
-                first_data_type = first_data_type.expressions[0]
-            if first_data_type and first_data_type.this in (
-                exp.DataType.Type.FLOAT,
-                exp.DataType.Type.DOUBLE,
-            ):
-                col_def = expression.find(exp.ColumnDef)
-                if col_def:
-                    col_def.set("kind", exp.DataType.build("decimal"))
-            if first_data_type and first_data_type.this in (
-                exp.DataType.Type.TEXT,
-                exp.DataType.Type.ARRAY,
-                exp.DataType.Type.STRUCT,
-                exp.DataType.Type.MAP,
-            ):
-                col_def = expression.find(exp.ColumnDef)
-                if col_def:
-                    col_def.set("kind", exp.DataType.build("varchar"))
+            # 判断是否为 table
+            if not expression.args["kind"] == "TABLE":
+                return generator.Generator.create_sql(self, expression)
 
-            # 移除primary_key、auto_increment、unique等关键字信息
-            for column in col_def_list:
-                primary_key = None
-                auto_increment = None
-                unique = None
-                for constraint in column.constraints:
-                    if isinstance(constraint.kind, exp.PrimaryKeyColumnConstraint):
-                        primary_key = constraint
-                    if isinstance(constraint.kind, exp.AutoIncrementColumnConstraint):
-                        auto_increment = constraint
-                    if isinstance(constraint.kind, exp.UniqueColumnConstraint):
-                        unique = constraint
-                if primary_key and primary_key.parent:
-                    pk_list.append(f"`{primary_key.parent.name}`")
-                    column.constraints.remove(primary_key)
-                if auto_increment:
-                    column.constraints.remove(auto_increment)
-                if unique:
-                    column.constraints.remove(unique)
-
-            expression_sql = super().create_sql(expression)
-
-            if len(pk_list) == 0:
-                for pk in expression.find_all(exp.PrimaryKey):
-                    for e in pk:
-                        pk_list.append(f"`{e.name}`")
-
-            if pk_list:  # UNIQUE模型
-                pk_name = ", ".join(pk_list)
-                return (
-                    f"{expression_sql} "
-                    f"UNIQUE KEY({pk_name}) "
-                    f"DISTRIBUTED BY HASH({pk_name}) BUCKETS AUTO "
-                    f"PROPERTIES ("
-                    f'"replication_allocation" = "tag.location.default: 1"'
-                    f")"
-                )
-            else:  # DUPLICATE模型
-                first_field_name = ""
-                col_def = expression.find(exp.ColumnDef)
-                if col_def:
-                    first_field_name = col_def.name
-                return (
-                    f"{expression_sql} "
-                    f"DUPLICATE KEY(`{first_field_name}`) "
-                    f"DISTRIBUTED BY HASH(`{first_field_name}`) BUCKETS AUTO "
-                    f"PROPERTIES ("
-                    f'"replication_allocation" = "tag.location.default: 1"'
-                    f")"
-                )
+            #拿到 dialect 标签判断源方言
+            dialect = expression.args["dialect"]
+            if dialect == "MYSQL":
+                return self.create_mysql_sql(expression)
+            elif dialect == "HIVE":
+                return self.create_hive_sql(expression)
+            elif dialect == "CLICKHOUSE":
+                return self.create_clickhouse_sql(expression)
+            elif dialect == "PRESTO":
+                return self.create_presto_sql(expression)
+            return generator.Generator.create_sql(self, expression)
 
         def createable_sql(self, expression: exp.Create, locations: t.DefaultDict) -> str:
+
             # 移除pk和index信息，并在生成createable_sql后重新加上，防止后续的create_sql()执行错误
             remove_list = []
             expressions = expression.this.expressions
@@ -761,3 +718,401 @@ class Doris(MySQL):
                 return f"STRUCT<{cols}>"
 
             return generator.Generator.datatype_sql(self, expression)
+
+        def hive_type_to_doris(self, expression: exp.DataType) -> str:
+            if expression.this in self.STRING_TYPE_MAPPING:
+                return "STRING"
+            elif expression.is_type(exp.DataType.Type.CHAR):
+                size_expression = expression.find(exp.DataTypeParam)
+                if size_expression:
+                    size = int(size_expression.name)
+                    return "STRING" if size * 3 > 255 else f"CHAR({size * 3})"
+            elif expression.is_type(exp.DataType.Type.VARCHAR):
+                size_expression = expression.find(exp.DataTypeParam)
+                if size_expression:
+                    size = int(size_expression.name)
+                    return "STRING" if size * 3 > 65533 else f"VARCHAR({size * 3})"
+            elif expression.this in (exp.DataType.Type.DATETIME, exp.DataType.Type.TIMESTAMP):
+                size_expression = expression.find(exp.DataTypeParam)
+                if size_expression:
+                    size = int(size_expression.name)
+                    precision = size if 0 <= size <= 6 else 0
+                    return f"DATETIME({precision})"
+            elif expression.is_type(expression.Type.STRUCT):
+                # hive的STRUCT类型为STRUCT<tet1:STRING, test2:INT>，而doris这边读出的为STRUCT<tet1 STRING, test2 INT>，需要加上:
+                col_list = []
+                for col in expression.expressions:
+                    st_type = self.datatype_sql(col.args["kind"])
+                    col_list.append(f"{col.name}:{st_type}")
+                cols = ", ".join(col_list)
+                return f"STRUCT<{cols}>"
+
+            return generator.Generator.datatype_sql(self, expression)
+
+        def presto_type_to_doris(self, expression: exp.DataType) -> str:
+            if expression.this in self.STRING_TYPE_MAPPING:
+                return "STRING"
+            elif expression.is_type(exp.DataType.Type.CHAR):
+                size_expression = expression.find(exp.DataTypeParam)
+                if size_expression:
+                    size = int(size_expression.name)
+                    return "STRING" if size * 3 > 255 else f"CHAR({size * 3})"
+            elif expression.is_type(exp.DataType.Type.VARCHAR):
+                size_expression = expression.find(exp.DataTypeParam)
+                if size_expression:
+                    size = int(size_expression.name)
+                    return "STRING" if size * 3 > 65533 else f"VARCHAR({size * 3})"
+            elif expression.this in (exp.DataType.Type.DATETIME, exp.DataType.Type.TIMESTAMP):
+                size_expression = expression.find(exp.DataTypeParam)
+                if size_expression:
+                    size = int(size_expression.name)
+                    precision = size if 0 <= size <= 6 else 0
+                    return f"DATETIME({precision})"
+            elif expression.is_type(expression.Type.STRUCT):
+                # presto的STRUCT类型为STRUCT(tet1 STRING, test2 INT)，而doris这边的为STRUCT<tet1:STRING, test2:INT>，根据语法规则需要转变一下
+                col_list = []
+                for col in expression.expressions:
+                    st_type = self.datatype_sql(col.args["kind"])
+                    col_list.append(f"{col.name}:{st_type}")
+                cols = ", ".join(col_list)
+                return f"STRUCT<{cols}>"
+
+            return generator.Generator.datatype_sql(self, expression)
+
+        def create_mysql_sql(self, expression: exp.Create) -> str:
+            pk_list = []
+            col_def_list = []
+            for e in expression.this.expressions:
+                if isinstance(e, exp.ColumnDef):
+                    col_def_list.append(e)
+
+            for column in col_def_list:
+                primary_key = None
+                auto_increment = None
+                unique = None
+                for constraint in column.constraints:
+                    if isinstance(constraint.kind, exp.PrimaryKeyColumnConstraint):
+                        primary_key = constraint
+                    if isinstance(constraint.kind, exp.AutoIncrementColumnConstraint):
+                        auto_increment = constraint
+                    if isinstance(constraint.kind, exp.UniqueColumnConstraint):
+                        unique = constraint
+                if primary_key and primary_key.parent:
+                    pk_list.append(f"`{primary_key.parent.name}`")
+                    column.constraints.remove(primary_key)
+                if auto_increment:
+                    column.constraints.remove(auto_increment)
+                if unique:
+                    column.constraints.remove(unique)
+
+            first_data_type = expression.find(exp.DataType)
+            if first_data_type and first_data_type.this in (
+                    exp.DataType.Type.FLOAT,
+                    exp.DataType.Type.DOUBLE,
+            ):
+                col_def = expression.find(exp.ColumnDef)
+                if col_def:
+                    col_def.set("kind", exp.DataType.build("decimal"))
+            if first_data_type and first_data_type.this in (
+                    exp.DataType.Type.TEXT,
+                    exp.DataType.Type.ARRAY,
+                    exp.DataType.Type.STRUCT,
+                    exp.DataType.Type.MAP,
+            ):
+                col_def = expression.find(exp.ColumnDef)
+                if col_def:
+                    col_def.set("kind", exp.DataType.build("varchar"))
+
+            expression_sql = super().create_sql(expression)
+
+            if len(pk_list) == 0:
+                for pk in expression.find_all(exp.PrimaryKey):
+                    for e in pk:
+                        pk_list.append(f"`{e.name}`")
+
+            if pk_list:  # UNIQUE模型
+                pk_name = ", ".join(pk_list)
+                return (
+                    f"{expression_sql} "
+                    f"UNIQUE KEY({pk_name}) "
+                    f"DISTRIBUTED BY HASH({pk_name}) BUCKETS AUTO "
+                    f"PROPERTIES ("
+                    f'"replication_allocation" = "tag.location.default: 1"'
+                    f")"
+                )
+            else:  # DUPLICATE模型
+                first_field_name = ""
+                col_def = expression.find(exp.ColumnDef)
+                if col_def:
+                    first_field_name = col_def.name
+                return (
+                    f"{expression_sql} "
+                    f"DUPLICATE KEY(`{first_field_name}`) "
+                    f"DISTRIBUTED BY HASH(`{first_field_name}`) BUCKETS AUTO "
+                    f"PROPERTIES ("
+                    f'"replication_allocation" = "tag.location.default: 1"'
+                    f")"
+                )
+
+        def create_clickhouse_sql(self, expression: exp.Create) -> str:
+            first_data_type = expression.find(exp.DataType)
+            # 如果是clickhouse的NULLABLE类型，去掉NULLABLE关键字
+            if first_data_type and first_data_type.is_type(exp.DataType.Type.NULLABLE):
+                first_data_type = first_data_type.expressions[0]
+            if first_data_type and first_data_type.this in (
+                    exp.DataType.Type.FLOAT,
+                    exp.DataType.Type.DOUBLE,
+            ):
+                col_def = expression.find(exp.ColumnDef)
+                if col_def:
+                    col_def.set("kind", exp.DataType.build("decimal"))
+            if first_data_type and first_data_type.this in (
+                    exp.DataType.Type.TEXT,
+                    exp.DataType.Type.ARRAY,
+                    exp.DataType.Type.STRUCT,
+                    exp.DataType.Type.MAP,
+            ):
+                col_def = expression.find(exp.ColumnDef)
+                if col_def:
+                    col_def.set("kind", exp.DataType.build("varchar"))
+
+            expression_sql = super().create_sql(expression)
+
+            first_field_name = ""
+            col_def = expression.find(exp.ColumnDef)
+            if col_def:
+                first_field_name = col_def.name
+            return (
+                f"{expression_sql} "
+                f"DUPLICATE KEY(`{first_field_name}`) "
+                f"DISTRIBUTED BY HASH(`{first_field_name}`) BUCKETS AUTO "
+                f"PROPERTIES ("
+                f'"replication_allocation" = "tag.location.default: 1"'
+                f")"
+            )
+
+        def create_hive_sql(self, expression: exp.Create) -> str:
+            # 将hive分区中的列添加到对应schema中
+            has_schema = isinstance(expression.this, exp.Schema)
+            is_partitionable = expression.args.get("kind") in ("TABLE", "VIEW")
+            parti_range_column = None
+            disted_by_hash = None
+            if has_schema and is_partitionable:
+                # 提前寻找 PartitionedByProperty 和 ClusteredByProperty
+                partition_by_property = expression.find(exp.PartitionedByProperty)
+                cluster_by_property = expression.find(exp.ClusteredByProperty)
+                # 如果找到了 PartitionedByProperty，则处理对应逻辑
+                if partition_by_property is not None:
+                    # 直接进行访问而不是再次调用 find 方法
+                    for col in partition_by_property.this.expressions:
+                        # 通过 args 获取 kind 的值，并在 TYPE_MAPPING 中查询一次
+                        col_kind = col.args["kind"].this
+                        col_type = self.TYPE_MAPPING.get(col_kind, col_kind)
+                        # 如果列类型是 DATE 或 DATETIME，设置 parti_range_column
+                        if col_type in ("DATE", "DATETIME"):
+                            parti_range_column = col.name
+                        # 将列加入到 expressions
+                        expression.this.expressions.append(col)
+
+                # 如果找到了 ClusteredByProperty，则处理对应逻辑
+                if cluster_by_property is not None:
+                    # 使用列表推导简化对列名格式的处理，并直接生成字符串
+                    clust_bukets = [f"`{col_bukets.name}`" for col_bukets in cluster_by_property.expressions]
+                    # 通过 join 方法将列名连接成字符串
+                    disted_by_hash = ", ".join(clust_bukets)
+
+            #判断第一列字段类型,如果为不符合doris建表规范，则替换别的数据类型
+            first_data_type = expression.find(exp.DataType)
+            if first_data_type and first_data_type.this in (
+                    exp.DataType.Type.FLOAT,
+                    exp.DataType.Type.DOUBLE,
+            ):
+                col_def = expression.find(exp.ColumnDef)
+                if col_def:
+                    col_def.set("kind", exp.DataType.build("decimal"))
+            if first_data_type and first_data_type.this in (
+                    exp.DataType.Type.TEXT,
+                    exp.DataType.Type.ARRAY,
+                    exp.DataType.Type.STRUCT,
+                    exp.DataType.Type.MAP,
+            ):
+                col_def = expression.find(exp.ColumnDef)
+                if col_def:
+                    col_def.set("kind", exp.DataType.build("varchar"))
+
+            expression_sql = super().create_sql(expression)
+
+            # hive表模型，四种表模型转换
+            first_field_name = ""
+            col_def = expression.find(exp.ColumnDef)
+            if col_def:
+                first_field_name = col_def.name
+            # 定义SQL语句的基本结构
+            base_sql = f"{expression_sql} DUPLICATE KEY(`{first_field_name}`) "
+
+            # 定义分布式哈希的常用语句
+            # 注意这里进行条件判断，如果有disted_by_hash，根据传递的字段名来构造，确保反引号的正确使用
+            distributed_by_hash = f"DISTRIBUTED BY HASH(`{first_field_name}`) BUCKETS AUTO" if disted_by_hash is None else f"DISTRIBUTED BY HASH({disted_by_hash}) BUCKETS AUTO"
+            # 初始化通用属性
+            common_properties = "\"replication_allocation\" = \"tag.location.default: 1\""
+            # 如果存在parti_range_column，则创建分区相关的SQL片段
+            auto_partition_by_range = ""
+            dynamic_partition_properties = ""
+            if parti_range_column is not None:
+                auto_partition_by_range = f"AUTO PARTITION BY RANGE date_trunc(`{parti_range_column}`, 'year') () "
+                dynamic_partition_properties = (
+                    "\"dynamic_partition.enable\" = \"true\", "
+                    "\"dynamic_partition.time_unit\" = \"year\", "
+                    "\"dynamic_partition.prefix\" = \"p\", "
+                    "\"dynamic_partition.end\" = \"3\""
+                )
+            # 拼接创建表的SQL语句
+            # 注意这里动态合并common_properties和dynamic_partition_properties，
+            # 如果dynamic_partition_properties不为空，则在它们之间加上逗号和空格
+            properties_part = f"{common_properties}"
+            if dynamic_partition_properties:
+                properties_part += f", {dynamic_partition_properties}"
+            return (
+                f"{base_sql}"
+                f"{auto_partition_by_range}"
+                f"{distributed_by_hash} "
+                f"PROPERTIES ({properties_part})"
+            )
+
+            # if parti_range_column is not None and disted_by_hash is None:
+            #     return (f"{expression_sql} "
+            #             f"DUPLICATE KEY(`{first_field_name}`) "
+            #             f"AUTO PARTITION BY RANGE date_trunc(`{parti_range_column}`, 'year') () "
+            #             f"DISTRIBUTED BY HASH(`{first_field_name}`) BUCKETS AUTO "
+            #             f"PROPERTIES ("
+            #             f"\"replication_allocation\" = \"tag.location.default: 1\", "
+            #             f"\"dynamic_partition.enable\" = \"true\", "
+            #             f"\"dynamic_partition.time_unit\" = \"year\", "
+            #             f"\"dynamic_partition.prefix\" = \"p\", "
+            #             f"\"dynamic_partition.end\" = \"3\""
+            #             f")")
+            # # hive分桶表
+            # elif disted_by_hash is not None and parti_range_column is None:
+            #     return (f"{expression_sql} "
+            #             f"DUPLICATE KEY(`{first_field_name}`) "
+            #             f"DISTRIBUTED BY HASH({disted_by_hash}) BUCKETS AUTO "
+            #             f"PROPERTIES ("
+            #             f"\"replication_allocation\" = \"tag.location.default: 1\""
+            #             f")")
+            # # hive同时含有分区分桶表模型
+            # elif disted_by_hash is not None and parti_range_column is not None:
+            #     return (f"{expression_sql} "
+            #             f"DUPLICATE KEY(`{first_field_name}`) "
+            #             f"AUTO PARTITION BY RANGE date_trunc(`{parti_range_column}`, 'year') () "
+            #             f"DISTRIBUTED BY HASH({disted_by_hash}) BUCKETS AUTO "
+            #             f"PROPERTIES ("
+            #             f"\"replication_allocation\" = \"tag.location.default: 1\", "
+            #             f"\"dynamic_partition.enable\" = \"true\", "
+            #             f"\"dynamic_partition.time_unit\" = \"year\", "
+            #             f"\"dynamic_partition.prefix\" = \"p\", "
+            #             f"\"dynamic_partition.end\" = \"3\""
+            #             f")")
+            # # hive普通表及指定存储介质的表
+            # else:
+            #     return (
+            #         f"{expression_sql} "
+            #         f"DUPLICATE KEY(`{first_field_name}`) "
+            #         f"DISTRIBUTED BY HASH(`{first_field_name}`) BUCKETS AUTO "
+            #         f"PROPERTIES ("
+            #         f"\"replication_allocation\" = \"tag.location.default: 1\""
+            #         f")"
+            #     )
+
+        def create_presto_sql(self, expression: exp.Create) -> str:
+            # presto中也存在分区和分桶表，需要根据情况拿到对应分区和分桶列
+            presto_schema = isinstance(expression.this, exp.Schema)
+            prestois_partitionable = expression.args.get("kind") in ("TABLE", "VIEW")
+            parti_range_column = None
+            disted_by_hash = None
+            if presto_schema and prestois_partitionable:
+                # 寻找'PartitionedByProperty'的结果只需要计算一次
+                partitioned_by_property_result = expression.find(exp.PartitionedByProperty)
+                # 判断是否成功找到'PartitionedByProperty'
+                if partitioned_by_property_result is not None:
+                    # 获取表达式列表，避免在循环中重复计算
+                    partitioned_expressions = partitioned_by_property_result.this.expressions
+                    expression_expressions = expression.this.expressions
+                    # 对于每个分区列，检查是否有匹配且类型为'DATE'或'DATETIME'的列
+                    for col in partitioned_expressions:
+                        for col_test in expression_expressions:
+                            # 避免在循环中重复使用col.this
+                            col_this = col.this
+                            # 确认类型并检查列名是否在col_test.name内
+                            if col_this in col_test.name:
+                                col_test_kind = col_test.args["kind"].this
+                                # 直接使用映射转换，而不是两次调用get函数
+                                col_test_type = self.TYPE_MAPPING.get(col_test_kind, col_test_kind)
+                                if col_test_type in ("DATE", "DATETIME"):
+                                    parti_range_column = col_this
+                                    # 找到符合要求的列后，可以退出内层循环
+                                    break
+
+                # 在Properties中找到所有Property，根据关键词bucketed_by找到分桶列名
+                for porc in expression.find_all(exp.Property):
+                    if porc.name.lower() == "bucketed_by":
+                        clust_bukets = []
+                        for bukec_inr in porc.args["value"].expressions:
+                            formatted_name = "`%s`" % bukec_inr.this
+                            clust_bukets.append(formatted_name)
+                        disted_by_hash = ", ".join(clust_bukets)
+            # 判断第一列字段类型,如果为不符合doris建表规范，则替换别的数据类型
+            first_data_type = expression.find(exp.DataType)
+            if first_data_type and first_data_type.this in (
+                    exp.DataType.Type.FLOAT,
+                    exp.DataType.Type.DOUBLE,
+            ):
+                col_def = expression.find(exp.ColumnDef)
+                if col_def:
+                    col_def.set("kind", exp.DataType.build("decimal"))
+            if first_data_type and first_data_type.this in (
+                    exp.DataType.Type.TEXT,
+                    exp.DataType.Type.ARRAY,
+                    exp.DataType.Type.STRUCT,
+                    exp.DataType.Type.MAP,
+            ):
+                col_def = expression.find(exp.ColumnDef)
+                if col_def:
+                    col_def.set("kind", exp.DataType.build("varchar"))
+
+            expression_sql = super().create_sql(expression)
+            # 取第一列字段
+            first_field_name = ""
+            col_def = expression.find(exp.ColumnDef)
+            if col_def:
+                first_field_name = col_def.name
+
+            # presto表，四种表模型转换
+            base_sql = f"{expression_sql} DUPLICATE KEY(`{first_field_name}`) "
+            # 定义分布式哈希的常用语句
+            # 注意这里进行条件判断，如果有disted_by_hash，根据传递的字段名来构造，确保反引号的正确使用
+            distributed_by_hash = f"DISTRIBUTED BY HASH(`{first_field_name}`) BUCKETS AUTO" if disted_by_hash is None else f"DISTRIBUTED BY HASH({disted_by_hash}) BUCKETS AUTO"
+            # 初始化通用属性
+            common_properties = "\"replication_allocation\" = \"tag.location.default: 1\""
+            # 如果存在parti_range_column，则创建分区相关的SQL片段
+            auto_partition_by_range = ""
+            dynamic_partition_properties = ""
+            if parti_range_column is not None:
+                auto_partition_by_range = f"AUTO PARTITION BY RANGE date_trunc(`{parti_range_column}`, 'year') () "
+                dynamic_partition_properties = (
+                    "\"dynamic_partition.enable\" = \"true\", "
+                    "\"dynamic_partition.time_unit\" = \"year\", "
+                    "\"dynamic_partition.prefix\" = \"p\", "
+                    "\"dynamic_partition.end\" = \"3\""
+                )
+            # 拼接创建表的SQL语句
+            # 注意这里动态合并common_properties和dynamic_partition_properties，
+            # 如果dynamic_partition_properties不为空，则在它们之间加上逗号和空格
+            properties_part = f"{common_properties}"
+            if dynamic_partition_properties:
+                properties_part += f", {dynamic_partition_properties}"
+            return (
+                f"{base_sql}"
+                f"{auto_partition_by_range}"
+                f"{distributed_by_hash} "
+                f"PROPERTIES ({properties_part})"
+            )
